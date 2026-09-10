@@ -112,8 +112,8 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
   };
 
   const pollSubmissionStatus = async (id: string) => {
-    for (let i = 0; i < 10; i++) {
-      await new Promise((r) => setTimeout(r, 1500));
+    for (let i = 0; i < 20; i++) {
+      await new Promise((r) => setTimeout(r, 2000));
       try {
         const latest = await submissionApi.getSubmissionById(id);
         if (latest?.data) {
@@ -124,10 +124,10 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
           }
         }
       } catch {
-        return;
+        // continue polling
       }
     }
-    setSubmissionError("Evaluation pending — ensure EvaluationService (3006) & Redis are running.");
+    setSubmissionError("Evaluation is taking longer than expected. Check Submissions tab for status.");
   };
 
   useEffect(() => {
