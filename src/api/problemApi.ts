@@ -18,8 +18,9 @@ problemClient.interceptors.request.use((config) => {
 });
 
 export interface Testcase {
-  input: string;
-  output: string;
+  input?: any;
+  output?: string;
+  expectedOutput?: string;
   isHidden?: boolean;
 }
 
@@ -27,6 +28,13 @@ export interface CodeStub {
   language: "python" | "javascript" | "cpp" | "java";
   startSnippet: string;
   userTemplate: string;
+}
+
+export interface ProblemResource {
+  type: "youtube" | "article" | "editorial" | "docs" | "practice";
+  url: string;
+  label?: string;
+  isPremium?: boolean;
 }
 
 export interface Problem {
@@ -39,8 +47,28 @@ export interface Problem {
   category: string;
   tags: string[];
   editorial?: string;
+  examples?: Testcase[];
+  constraints?: string;
+  starterCode?: Partial<Record<"python" | "javascript" | "cpp" | "java", string>>;
+  functionName?: string;
   codeStubs?: CodeStub[];
   testcases?: Testcase[];
+  resources?: ProblemResource[];
+  videoUrl?: string;
+  articleUrl?: string;
+  practiceUrl?: string;
+  /** Public-only list length (same as filtered testcases). */
+  publicTestcaseCount?: number;
+  /** Hidden suite size — count only; content never sent on public APIs. */
+  hiddenTestcaseCount?: number;
+  /** public + hidden */
+  totalTestcaseCount?: number;
+  likeCount?: number;
+  dislikeCount?: number;
+  bookmarkCount?: number;
+  isBookmarked?: boolean;
+  timeLimitMs?: number;
+  memoryLimitMb?: number;
   createdAt?: string;
   updatedAt?: string;
 }

@@ -1,13 +1,24 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { AuthModal } from "./components/AuthModal";
 import { Dashboard } from "./components/Dashboard";
 import { AdminDashboard } from "./components/AdminDashboard";
+import {
+  readProblemSlugFromLocation,
+  rememberPendingProblemSlug,
+} from "./utils/problemShare";
 import "./index.css";
 
 function AppContent() {
   const { user } = useAuth();
   const [view, setView] = useState<"dashboard" | "admin">("dashboard");
+
+  // If a shared ?problem= link is opened while logged out, remember it for after login
+  useEffect(() => {
+    if (user) return;
+    const slug = readProblemSlugFromLocation();
+    if (slug) rememberPendingProblemSlug(slug);
+  }, [user]);
 
   if (user) {
     if (view === "admin") {

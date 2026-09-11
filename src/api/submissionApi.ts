@@ -4,6 +4,7 @@ export const SUBMISSION_API_URL = "http://localhost:3004/api/v1";
 
 export const submissionClient = axios.create({
   baseURL: SUBMISSION_API_URL,
+  timeout: 20000,
   headers: {
     "Content-Type": "application/json",
   },
