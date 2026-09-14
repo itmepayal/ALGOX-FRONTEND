@@ -1,10 +1,9 @@
-import { useState, useEffect, useRef, useMemo, type FC } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback, type FC, type MouseEvent as ReactMouseEvent, type CSSProperties } from "react";
 import {
   ArrowLeft,
   ChevronLeft,
   ChevronRight,
   Play,
-  Send,
   Loader2,
   CheckCircle,
   AlertCircle,
@@ -18,15 +17,23 @@ import {
   Bookmark,
   RotateCcw,
   Maximize2,
+  Minimize2,
   Settings,
   Terminal,
   Check,
   Minus,
   Plus,
   XCircle,
+  Code,
+  CheckSquare,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { TimeTracker } from "./TimeTracker";
 import { ProblemShare } from "./ProblemShare";
+import { ConfirmDialog } from "./ConfirmDialog";
+import { BrandMark } from "./BrandLogo";
+import { EditorShortcutBar, shortcutModLabel } from "./EditorShortcutBar";
 import type { Problem, Testcase } from "../api/problemApi";
 import type { Submission } from "../api/submissionApi";
 import type { RunResult } from "../types/judge";
@@ -42,6 +49,7 @@ import {
   formatJudgeValue,
   normalizeDifficulty,
   isSolved,
+  hasAttempted,
 } from "../utils/problemUtils";
 import {
   extractHints,
@@ -90,6 +98,7 @@ interface ProblemWorkspaceProps {
 }
 
 type LeftTab = "description" | "editorial" | "hints" | "notes" | "submissions";
+type EditorTab = "code" | "testcase" | "result";
 
 const FormattedDescription: FC<{ text: string }> = ({ text }) => {
   if (!text) return null;
@@ -213,6 +222,29 @@ function caseStatusClass(
   return "failed";
 }
 
+/** Semantic badge tone for run/submit verdicts. */
+function resultStatusTone(status: string | undefined): string {
+  if (!status) return "pending";
+  const s = status.toUpperCase();
+  if (s === "ACCEPTED" || s === "PASSED") return "acc";
+  if (
+    s.includes("TIME_LIMIT") ||
+    s.includes("TLE") ||
+    s.includes("MEMORY_LIMIT") ||
+    s.includes("MLE")
+  ) {
+    return "warn";
+  }
+  if (
+    s.includes("PENDING") ||
+    s.includes("RUNNING") ||
+    s.includes("COMPILING")
+  ) {
+    return "pending";
+  }
+  return "error";
+}
+
 /** Safe: only show I/O blocks that were stored for public failures. */
 function isPublicFailureDetail(output?: string): boolean {
   if (!output) return false;
@@ -284,10 +316,16 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
 }) => {
   const problemId = getProblemId(problem);
   const [leftTab, setLeftTab] = useState<LeftTab>("description");
+  const [activeEditorTab, setActiveEditorTab] = useState<EditorTab>("code");
   const [revealedHints, setRevealedHints] = useState(0);
   const [notes, setNotes] = useState("");
   const [fontSize, setFontSize] = useState(() => loadEditorFontSize());
   const notesTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [leftPct, setLeftPct] = useState(42);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [compilerOpen, setCompilerOpen] = useState(false);
+  const resizingRef = useRef(false);
+  const bodyRef = useRef<HTMLDivElement>(null);
 
   const [likeCount, setLikeCount] = useState(problem.likeCount ?? 0);
   const [dislikeCount, setDislikeCount] = useState(problem.dislikeCount ?? 0);
@@ -296,15 +334,109 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
   const [engagementBusy, setEngagementBusy] = useState(false);
   const [engagementError, setEngagementError] = useState("");
   const engagementReqRef = useRef(0);
+  const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
+  const [resetConfirming, setResetConfirming] = useState(false);
+  const resetLockRef = useRef(false);
+
+  // Auto-open Test Result when Run / Submit starts
+  useEffect(() => {
+    if (isRunning || isSubmitting) {
+      setActiveEditorTab("result");
+    }
+  }, [isRunning, isSubmitting]);
+
+  useEffect(() => {
+    setCompilerOpen(false);
+  }, [runResult, submissionResult, runError, submissionError]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && isFullscreen) {
+        setIsFullscreen(false);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isFullscreen]);
+
+  const onResizeStart = useCallback((e: ReactMouseEvent) => {
+    e.preventDefault();
+    resizingRef.current = true;
+    document.body.style.cursor = "col-resize";
+    const root = e.currentTarget.closest(".lc-workspace");
+    root?.classList.add("lc-resizing");
+
+    const onMove = (ev: MouseEvent) => {
+      if (!resizingRef.current || !bodyRef.current) return;
+      const rect = bodyRef.current.getBoundingClientRect();
+      const pct = ((ev.clientX - rect.left) / rect.width) * 100;
+      setLeftPct(Math.min(60, Math.max(30, pct)));
+    };
+    const onUp = () => {
+      resizingRef.current = false;
+      document.body.style.cursor = "";
+      root?.classList.remove("lc-resizing");
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }, []);
+
+  const topicTags = useMemo(() => {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const t of [problem.category, ...(problem.tags || [])]) {
+      if (!t) continue;
+      const key = t.trim().toLowerCase();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      out.push(t.trim());
+    }
+    return out;
+  }, [problem.category, problem.tags]);
 
   const busy = isRunning || isSubmitting;
   const viewingHistory = selectedSubmission !== null;
+  const modKey = useMemo(() => shortcutModLabel(), []);
+
+  const handleRunClick = () => {
+    setActiveEditorTab("result");
+    (onRun || onSubmit)();
+  };
+
+  const openResetConfirm = () => {
+    if (busy || viewingHistory || resetConfirming) return;
+    setResetConfirmOpen(true);
+  };
+
+  const closeResetConfirm = () => {
+    if (resetConfirming) return;
+    setResetConfirmOpen(false);
+  };
+
+  const confirmResetCode = () => {
+    if (resetLockRef.current || resetConfirming) return;
+    resetLockRef.current = true;
+    setResetConfirming(true);
+    try {
+      onResetCode();
+      setResetConfirmOpen(false);
+    } finally {
+      setResetConfirming(false);
+      resetLockRef.current = false;
+    }
+  };
+
+  const handleSubmitClick = () => {
+    setActiveEditorTab("result");
+    onSubmit();
+  };
 
   const diff = normalizeDifficulty(problem.difficulty);
   const hints = useMemo(() => extractHints(problem), [problem]);
-  const solved =
-    isSolved(problemId, problemSubmissions) ||
-    problemSubmissions.some((s) => s.status === "ACCEPTED");
+  const solved = isSolved(problemId, problemSubmissions);
+  const attempted = !solved && hasAttempted(problemId, problemSubmissions);
 
   const officialCases = useMemo(
     () => (problem.testcases || []).filter((tc) => !tc.isHidden),
@@ -345,6 +477,7 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
   // Reset local UI state when problem changes + load engagement from backend
   useEffect(() => {
     setLeftTab("description");
+    setActiveEditorTab("code");
     setRevealedHints(0);
     setNotes(loadNotes(userId, problemId));
     setLikeCount(problem.likeCount ?? 0);
@@ -352,6 +485,9 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
     setUserReaction(null);
     setBookmarked(Boolean(problem.isBookmarked));
     setEngagementError("");
+    setResetConfirmOpen(false);
+    setResetConfirming(false);
+    resetLockRef.current = false;
 
     let cancelled = false;
     const load = async () => {
@@ -417,6 +553,7 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
     setDislikeCount(data.dislikeCount);
     setUserReaction(data.currentUserReaction);
     setBookmarked(data.isBookmarked);
+    // Bookmark only — never notify parent about revision from workspace actions.
     onBookmarkChange?.(problemId, data.isBookmarked);
   };
 
@@ -603,35 +740,48 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
   const historyShowOutput = isPublicFailureDetail(selectedSubmission?.output);
 
   return (
-    <div className="lc-workspace">
+    <div className={`lc-workspace${isFullscreen ? " lc-workspace-fs" : ""}`}>
       <header className="lc-topbar">
         <div className="lc-topbar-left">
-          <button type="button" className="lc-icon-btn" onClick={onBack} title="Back to Problems">
-            <ArrowLeft size={16} />
+          <button type="button" className="lc-icon-btn" onClick={onBack} title="Back to Problems" aria-label="Back to Problems">
+            <ArrowLeft size={16} strokeWidth={1.75} />
           </button>
-          <div className="lc-brand">
-            <span className="lc-logo-icon">LeetCode</span>
+          <div className="lc-brand-mark" aria-label="AlgoPath">
+            <BrandMark size={22} />
+            <span className="lc-brand-word">
+              Algo<span>Path</span>
+            </span>
           </div>
           <div className="lc-nav-divider" />
+          <nav className="lc-breadcrumb" aria-label="Breadcrumb">
+            <button type="button" onClick={onBack}>
+              Problems
+            </button>
+            <span className="lc-breadcrumb-sep">/</span>
+            <span className="lc-breadcrumb-title" title={problem.title}>
+              {problem.title}
+            </span>
+          </nav>
           <div className="lc-problem-selector">
             <button
               type="button"
               className="lc-nav-arrow"
               title="Previous problem"
+              aria-label="Previous problem"
               onClick={onPrevProblem}
               disabled={!hasPrev}
             >
-              <ChevronLeft size={16} />
+              <ChevronLeft size={16} strokeWidth={1.75} />
             </button>
-            <span className="lc-topbar-problem-title">{problem.title}</span>
             <button
               type="button"
               className="lc-nav-arrow"
               title="Next problem"
+              aria-label="Next problem"
               onClick={onNextProblem}
               disabled={!hasNext}
             >
-              <ChevronRight size={16} />
+              <ChevronRight size={16} strokeWidth={1.75} />
             </button>
           </div>
         </div>
@@ -640,26 +790,28 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
           <button
             type="button"
             className="lc-action-btn lc-run-btn"
-            onClick={onRun || onSubmit}
+            onClick={handleRunClick}
             disabled={busy || viewingHistory}
+            title={`Run (${modKey}+Enter)`}
           >
             {isRunning ? (
-              <Loader2 size={14} className="animate-spin" />
+              <Loader2 size={14} className="animate-spin" strokeWidth={1.75} />
             ) : (
-              <Play size={14} fill="currentColor" />
+              <Play size={14} fill="currentColor" strokeWidth={1.75} />
             )}
             <span>{isRunning ? "Running..." : "Run"}</span>
           </button>
           <button
             type="button"
             className="lc-action-btn lc-submit-btn"
-            onClick={onSubmit}
+            onClick={handleSubmitClick}
             disabled={busy || viewingHistory}
+            title={`Submit (${modKey}+Shift+Enter)`}
           >
             {isSubmitting ? (
-              <Loader2 size={14} className="animate-spin" />
+              <Loader2 size={14} className="animate-spin" strokeWidth={1.75} />
             ) : (
-              <Send size={14} />
+              <Check size={14} strokeWidth={2} />
             )}
             <span>{isSubmitting ? "Submitting..." : "Submit"}</span>
           </button>
@@ -667,16 +819,44 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
 
         <div className="lc-topbar-right">
           <TimeTracker userId={userId} problemId={problemId} />
-          <button type="button" className="lc-icon-btn" title="Settings">
-            <Settings size={16} />
+          <button
+            type="button"
+            className="lc-icon-btn"
+            title="Reset Code"
+            aria-label="Reset Code"
+            onClick={openResetConfirm}
+            disabled={busy || viewingHistory}
+          >
+            <RotateCcw size={15} strokeWidth={1.75} />
           </button>
-          <button type="button" className="lc-icon-btn" title="Full Screen">
-            <Maximize2 size={16} />
+          <button type="button" className="lc-icon-btn" title="Settings" aria-label="Settings">
+            <Settings size={15} strokeWidth={1.75} />
+          </button>
+          <button
+            type="button"
+            className="lc-icon-btn"
+            title={isFullscreen ? "Exit fullscreen" : "Fullscreen editor"}
+            aria-label={isFullscreen ? "Exit fullscreen" : "Fullscreen editor"}
+            onClick={() => setIsFullscreen((v) => !v)}
+          >
+            {isFullscreen ? (
+              <Minimize2 size={15} strokeWidth={1.75} />
+            ) : (
+              <Maximize2 size={15} strokeWidth={1.75} />
+            )}
           </button>
         </div>
       </header>
 
-      <div className="lc-body">
+      <div
+        ref={bodyRef}
+        className={`lc-body${isFullscreen ? " lc-body-fullscreen" : ""}`}
+        style={
+          isFullscreen
+            ? undefined
+            : ({ ["--lc-left" as string]: `${leftPct}%` } as CSSProperties)
+        }
+      >
         <section className="lc-panel lc-left-panel">
           <div className="lc-tabs-header">
             <button
@@ -716,8 +896,9 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
               className={`lc-tab-btn ${leftTab === "submissions" ? "active" : ""}`}
               onClick={() => setLeftTab("submissions")}
             >
-              <History size={14} />
-              <span>Submissions ({problemSubmissions.length})</span>
+              <History size={14} strokeWidth={1.75} />
+              <span>Submissions</span>
+              <span className="lc-tab-count">{problemSubmissions.length}</span>
             </button>
           </div>
 
@@ -828,23 +1009,31 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
               <>
                 {leftTab === "description" && (
                   <div className="lc-description-wrapper">
-                    <h1 className="lc-problem-title">
-                      {problem.slug
-                        ? problem.slug
-                            .replace(/-/g, " ")
-                            .replace(/\b\w/g, (l) => l.toUpperCase())
-                        : problem.title}
-                    </h1>
+                    <div className="lc-title-row">
+                      <h1 className="lc-problem-title">{problem.title}</h1>
+                      {solved ? (
+                        <span className="lc-status-tag solved" aria-label="Solved">
+                          <span>Solved</span>
+                          <CheckCircle size={16} strokeWidth={2} aria-hidden />
+                        </span>
+                      ) : attempted ? (
+                        <span className="lc-status-tag attempted" aria-label="Attempted">
+                          <span>Attempted</span>
+                          <AlertCircle size={16} strokeWidth={2} aria-hidden />
+                        </span>
+                      ) : null}
+                    </div>
 
                     <div className="lc-meta-row">
                       <span className={`lc-diff-badge ${diff}`}>{diff}</span>
-                      {solved && <span className="lc-solved-pill">Solved</span>}
-                      <span className="lc-tag-chip">{problem.category || "Array"}</span>
-                      {(problem.tags || []).map((t) => (
-                        <span key={t} className="lc-tag-chip muted">
+                      {topicTags.map((t) => (
+                        <span key={t} className="lc-tag-chip">
                           {t}
                         </span>
                       ))}
+                    </div>
+
+                    <div className="lc-action-row">
                       <div className="lc-social-actions">
                         <button
                           type="button"
@@ -856,7 +1045,8 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
                           onClick={() => void handleReaction("like")}
                         >
                           <ThumbsUp
-                            size={13}
+                            size={14}
+                            strokeWidth={1.75}
                             fill={userReaction === "like" ? "currentColor" : "none"}
                           />
                           <span>{formatEngagementCount(likeCount)}</span>
@@ -871,7 +1061,8 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
                           onClick={() => void handleReaction("dislike")}
                         >
                           <ThumbsDown
-                            size={13}
+                            size={14}
+                            strokeWidth={1.75}
                             fill={userReaction === "dislike" ? "currentColor" : "none"}
                           />
                           {dislikeCount > 0 && (
@@ -887,7 +1078,7 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
                           disabled={engagementBusy}
                           onClick={() => void handleBookmark()}
                         >
-                          <Bookmark size={13} fill={bookmarked ? "currentColor" : "none"} />
+                          <Bookmark size={14} strokeWidth={1.75} fill={bookmarked ? "currentColor" : "none"} />
                         </button>
                         <ProblemShare problem={problem} variant="icon" className="lc-share-inline" />
                       </div>
@@ -906,16 +1097,16 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
                       <div className="lc-examples-container">
                         {exampleCases.map((tc: Testcase, idx: number) => (
                           <div key={idx} className="lc-example-box">
-                            <div className="lc-example-title">Example {idx + 1}:</div>
+                            <div className="lc-example-title">Example {idx + 1}</div>
                             <div className="lc-example-body">
                               <div className="lc-example-row">
-                                <span className="lc-label">Input:</span>{" "}
+                                <span className="lc-label">Input</span>{" "}
                                 <code className="lc-code-val">
                                   {formatTestCaseInputSummary(tc.input)}
                                 </code>
                               </div>
                               <div className="lc-example-row">
-                                <span className="lc-label">Output:</span>{" "}
+                                <span className="lc-label">Output</span>{" "}
                                 <code className="lc-code-val">
                                   {getTestCaseExpectedOutput(tc)}
                                 </code>
@@ -928,7 +1119,7 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
 
                     {constraintsText && (
                       <div className="lc-constraints-section">
-                        <div className="lc-section-title">Constraints:</div>
+                        <div className="lc-section-title">Constraints</div>
                         <FormattedDescription text={constraintsText} />
                       </div>
                     )}
@@ -941,7 +1132,10 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
                     {editorialText ? (
                       <FormattedDescription text={editorialText} />
                     ) : (
-                      <div className="lc-empty-sub">No editorial available yet.</div>
+                      <div className="lc-empty-state">
+                        <h4>No editorial yet</h4>
+                        <p>An editorial has not been published for this problem.</p>
+                      </div>
                     )}
                   </div>
                 )}
@@ -950,7 +1144,10 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
                   <div className="lc-description-wrapper">
                     <h3 className="lc-sub-title">Hints</h3>
                     {hints.length === 0 ? (
-                      <div className="lc-empty-sub">No hints available for this problem.</div>
+                      <div className="lc-empty-state">
+                        <h4>No hints available</h4>
+                        <p>No hints available for this problem.</p>
+                      </div>
                     ) : (
                       <>
                         <p
@@ -998,13 +1195,16 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
                 {leftTab === "submissions" && (
                   <div className="lc-submissions-wrapper">
                     <h3 className="lc-sub-title">Your Recent Submissions</h3>
-                    {problemSubmissions.length === 0 ? (
-                      <div className="lc-empty-sub">
-                        No submissions yet. Submit your solution to see history!
+                    {problemSubmissions.filter((s) => s.source !== "run").length === 0 ? (
+                      <div className="lc-empty-state">
+                        <h4>No submissions yet</h4>
+                        <p>Submit your solution to see your submission history.</p>
                       </div>
                     ) : (
                       <div className="lc-submissions-list">
-                        {problemSubmissions.map((sub, idx) => (
+                        {problemSubmissions
+                          .filter((s) => s.source !== "run")
+                          .map((sub, idx) => (
                           <button
                             key={sub._id || sub.id || idx}
                             type="button"
@@ -1049,515 +1249,678 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
           </div>
         </section>
 
+        <div
+          className="lc-resize-handle"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize panels"
+          onMouseDown={onResizeStart}
+        />
+
         <section
           className={`lc-panel lc-right-panel${viewingHistory ? " lc-right-panel-history" : ""}`}
         >
-          <div className="lc-editor-header">
-            <div className="lc-editor-header-left">
-              <span className="lc-editor-title">
-                {viewingHistory ? "Submission Code" : "Code"}
+          {!viewingHistory && (
+            <div className="lc-editor-tabs" role="tablist" aria-label="Editor panels">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeEditorTab === "code"}
+                className={`lc-editor-tab ${activeEditorTab === "code" ? "active" : ""}`}
+                onClick={() => setActiveEditorTab("code")}
+              >
+                <Code size={14} strokeWidth={1.75} />
+                <span>Code</span>
+              </button>
+              <span className="lc-editor-tab-sep" aria-hidden>
+                |
               </span>
-              {viewingHistory ? (
-                <span className="lc-lang-dropdown" style={{ cursor: "default" }}>
-                  {formatJudgeValue(selectedSubmission!.language)}
-                </span>
-              ) : (
-                <select
-                  className="lc-lang-dropdown"
-                  value={selectedLanguage}
-                  onChange={(e) => onLanguageChange(e.target.value)}
-                >
-                  <option value="javascript">JavaScript</option>
-                  <option value="python">Python</option>
-                  <option value="cpp">C++</option>
-                  <option value="java">Java</option>
-                </select>
-              )}
-              {!viewingHistory && (
-                <span className="lc-shortcut-hint">
-                  Ctrl+Enter Run · Ctrl+Shift+Enter Submit · Ctrl+S Save
-                </span>
-              )}
-            </div>
-            <div className="lc-editor-header-right">
               <button
                 type="button"
-                className="lc-icon-btn"
-                title="Decrease font size"
-                onClick={() => changeFontSize(-1)}
+                role="tab"
+                aria-selected={activeEditorTab === "testcase"}
+                className={`lc-editor-tab ${activeEditorTab === "testcase" ? "active" : ""}`}
+                onClick={() => setActiveEditorTab("testcase")}
               >
-                <Minus size={14} />
+                <CheckSquare size={14} strokeWidth={1.75} />
+                <span>Testcase</span>
               </button>
+              <span className="lc-editor-tab-sep" aria-hidden>
+                |
+              </span>
               <button
                 type="button"
-                className="lc-icon-btn"
-                title="Increase font size"
-                onClick={() => changeFontSize(1)}
+                role="tab"
+                aria-selected={activeEditorTab === "result"}
+                className={`lc-editor-tab ${activeEditorTab === "result" ? "active" : ""}`}
+                onClick={() => setActiveEditorTab("result")}
               >
-                <Plus size={14} />
+                <Terminal size={14} strokeWidth={1.75} />
+                <span>Test Result</span>
+                {(isRunning || isSubmitting) && (
+                  <Loader2 size={12} className="animate-spin" />
+                )}
               </button>
-              {!viewingHistory && (
-                <button
-                  type="button"
-                  className="lc-icon-btn"
-                  title="Reset Code"
-                  onClick={onResetCode}
-                  disabled={busy}
-                >
-                  <RotateCcw size={14} />
-                </button>
-              )}
             </div>
-          </div>
+          )}
 
-          <div className="lc-editor-container">
-            <div className="lc-editor-gutter" style={{ fontSize }}>
-              {lineNumbers.map((num) => (
-                <div key={num} className="lc-line-num">
-                  {num}
+          <div
+            className="lc-code-pane"
+            role="tabpanel"
+            hidden={!viewingHistory && activeEditorTab !== "code"}
+          >
+              <div className="lc-editor-header">
+                <div className="lc-editor-header-left">
+                  <span className="lc-editor-title">
+                    {viewingHistory ? "Submission Code" : "Code"}
+                  </span>
+                  {viewingHistory ? (
+                    <span className="lc-lang-dropdown" style={{ cursor: "default" }}>
+                      {formatJudgeValue(selectedSubmission!.language)}
+                    </span>
+                  ) : (
+                    <select
+                      className="lc-lang-dropdown"
+                      value={selectedLanguage}
+                      onChange={(e) => onLanguageChange(e.target.value)}
+                    >
+                      <option value="javascript">JavaScript</option>
+                      <option value="python">Python</option>
+                      <option value="cpp">C++</option>
+                      <option value="java">Java</option>
+                    </select>
+                  )}
                 </div>
-              ))}
-            </div>
-            <textarea
-              className={`lc-code-textarea${viewingHistory ? " lc-readonly-code" : ""}`}
-              value={editorCode}
-              onChange={(e) => {
-                if (!viewingHistory) onCodeChange(e.target.value);
-              }}
-              readOnly={viewingHistory}
-              spellCheck={false}
-              wrap="off"
-              style={{ fontSize }}
-            />
+                <div className="lc-editor-header-right">
+                  <button
+                    type="button"
+                    className="lc-icon-btn"
+                    title="Decrease font size"
+                    aria-label="Decrease font size"
+                    onClick={() => changeFontSize(-1)}
+                  >
+                    <Minus size={14} strokeWidth={2} aria-hidden />
+                  </button>
+                  <button
+                    type="button"
+                    className="lc-icon-btn"
+                    title="Increase font size"
+                    aria-label="Increase font size"
+                    onClick={() => changeFontSize(1)}
+                  >
+                    <Plus size={14} strokeWidth={2} aria-hidden />
+                  </button>
+                  {!viewingHistory && (
+                    <button
+                      type="button"
+                      className="lc-icon-btn"
+                      title="Reset Code"
+                      aria-label="Reset Code"
+                      onClick={openResetConfirm}
+                      disabled={busy}
+                    >
+                      <RotateCcw size={14} strokeWidth={2} aria-hidden />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="lc-editor-container">
+                <div className="lc-editor-gutter" style={{ fontSize }}>
+                  {lineNumbers.map((num) => (
+                    <div key={num} className="lc-line-num">
+                      {num}
+                    </div>
+                  ))}
+                </div>
+                <textarea
+                  className={`lc-code-textarea${viewingHistory ? " lc-readonly-code" : ""}`}
+                  value={editorCode}
+                  onChange={(e) => {
+                    if (!viewingHistory) onCodeChange(e.target.value);
+                  }}
+                  readOnly={viewingHistory}
+                  spellCheck={false}
+                  wrap="off"
+                  style={{ fontSize }}
+                />
+              </div>
+              {!viewingHistory && <EditorShortcutBar />}
           </div>
 
           {!viewingHistory && (
-            <div className="lc-console-drawer">
-              <div className="lc-console-stacked">
-                <div className="lc-console-section">
-                  <h5>
-                    <Check size={12} style={{ marginRight: 6, verticalAlign: -1 }} />
-                    Test Cases
-                  </h5>
-
-                  <div className="lc-run-mode">
-                    <button
-                      type="button"
-                      className={runMode === "all" ? "active" : ""}
-                      onClick={() => onRunModeChange("all")}
-                      disabled={busy}
-                    >
-                      All visible
-                    </button>
-                    <button
-                      type="button"
-                      className={runMode === "selected" ? "active" : ""}
-                      onClick={() => onRunModeChange("selected")}
-                      disabled={busy}
-                    >
-                      Selected case
-                    </button>
-                  </div>
-
-                  <div className="lc-case-selector">
-                    {allCases.map((_, idx) => {
-                      const pill = getPillResult(idx);
-                      const statusCls = caseStatusClass(pill?.status);
-                      return (
-                        <button
-                          key={idx}
-                          type="button"
-                          className={`lc-case-btn ${
-                            selectedCaseIndex === idx ? "active" : ""
-                          } ${statusCls}`}
-                          onClick={() => onSelectedCaseIndexChange(idx)}
-                        >
-                          {pill?.status === "PASSED" ? (
-                            <CheckCircle size={12} style={{ marginRight: 4 }} />
-                          ) : pill ? (
-                            <XCircle size={12} style={{ marginRight: 4 }} />
-                          ) : null}
+            <div
+              className="lc-tab-pane lc-testcase-pane"
+              role="tabpanel"
+              hidden={activeEditorTab !== "testcase"}
+            >
+              <div className="lc-tc">
+                <div className="lc-tc-cases" role="tablist" aria-label="Test cases">
+                  {allCases.map((_, idx) => {
+                    const pill = getPillResult(idx);
+                    const statusCls = caseStatusClass(pill?.status);
+                    const isActive = selectedCaseIndex === idx;
+                    return (
+                      <button
+                        key={idx}
+                        type="button"
+                        role="tab"
+                        aria-selected={isActive}
+                        className={`lc-tc-case ${isActive ? "active" : ""} ${statusCls}`}
+                        onClick={() => onSelectedCaseIndexChange(idx)}
+                      >
+                        {pill?.status === "PASSED" ? (
+                          <CheckCircle size={12} strokeWidth={2} />
+                        ) : pill ? (
+                          <XCircle size={12} strokeWidth={2} />
+                        ) : null}
+                        <span>
                           Case {idx + 1}
                           {idx >= officialCases.length ? " *" : ""}
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  <div className="lc-case-actions">
-                    <button type="button" onClick={handleAddCase} disabled={busy}>
-                      Add Case
-                    </button>
+                        </span>
+                      </button>
+                    );
+                  })}
+                  <button
+                    type="button"
+                    className="lc-tc-add"
+                    onClick={handleAddCase}
+                    disabled={busy}
+                    title="Add testcase"
+                    aria-label="Add testcase"
+                  >
+                    <Plus size={16} strokeWidth={2} />
+                  </button>
+                  {isCustomSelected && (
                     <button
                       type="button"
+                      className="lc-tc-delete"
                       onClick={handleDeleteCase}
-                      disabled={!isCustomSelected || busy}
+                      disabled={busy}
+                      title="Delete custom testcase"
                     >
                       Delete
                     </button>
-                    <button type="button" onClick={handleResetCases} disabled={busy}>
-                      Reset Cases
+                  )}
+                  <button
+                    type="button"
+                    className="lc-tc-reset"
+                    onClick={handleResetCases}
+                    disabled={busy}
+                    title="Reset cases"
+                  >
+                    Reset
+                  </button>
+                </div>
+
+                <div className="lc-tc-mode">
+                  <button
+                    type="button"
+                    className={runMode === "all" ? "active" : ""}
+                    onClick={() => onRunModeChange("all")}
+                    disabled={busy}
+                  >
+                    Run all
+                  </button>
+                  <button
+                    type="button"
+                    className={runMode === "selected" ? "active" : ""}
+                    onClick={() => onRunModeChange("selected")}
+                    disabled={busy}
+                  >
+                    Run selected
+                  </button>
+                </div>
+
+                {selectedCase && (
+                  <div className="lc-tc-body">
+                    {isCustomSelected ? (
+                      <>
+                        <div className="lc-tc-field">
+                          <div className="lc-tc-label">input =</div>
+                          <textarea
+                            className="lc-tc-value lc-tc-value-edit"
+                            value={customInputText}
+                            onChange={(e) => handleCustomInputEdit(e.target.value)}
+                            spellCheck={false}
+                            rows={4}
+                          />
+                        </div>
+                        <div className="lc-tc-field">
+                          <div className="lc-tc-label">expected =</div>
+                          <input
+                            className="lc-tc-value lc-tc-value-edit"
+                            value={getTestCaseExpectedOutput(selectedCase)}
+                            onChange={(e) =>
+                              updateCustomCase({
+                                output: e.target.value,
+                                expectedOutput: e.target.value,
+                              })
+                            }
+                          />
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        {getTestCaseInputEntries(selectedCase.input).map((entry) => (
+                          <div key={entry.name} className="lc-tc-field">
+                            <div className="lc-tc-label">{entry.name} =</div>
+                            <div className="lc-tc-value">{entry.value}</div>
+                          </div>
+                        ))}
+                        <div className="lc-tc-field">
+                          <div className="lc-tc-label">expected =</div>
+                          <div className="lc-tc-value">
+                            {getTestCaseExpectedOutput(selectedCase) || "[]"}
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {allCases.length === 0 && (
+                  <div className="lc-empty-state">
+                    <h4>No test cases</h4>
+                    <p>Add a custom case to run against.</p>
+                    <button
+                      type="button"
+                      className="lc-action-btn lc-run-btn"
+                      onClick={handleAddCase}
+                    >
+                      <Plus size={14} /> Add Testcase
                     </button>
                   </div>
+                )}
+              </div>
+            </div>
+          )}
 
-                  {selectedCase && (
-                    <div className="lc-case-details">
-                      {activeRunCase ? (
-                        <>
-                          <div className="lc-input-group">
-                            <label>Input =</label>
-                            <div className="lc-input-box">
-                              {formatJudgeValue(activeRunCase.input)}
-                            </div>
-                          </div>
-                          <div className="lc-input-group">
-                            <label>Output =</label>
-                            <div className="lc-input-box">
-                              {formatJudgeValue(activeRunCase.actual)}
-                            </div>
-                          </div>
-                          <div className="lc-input-group">
-                            <label>Expected =</label>
-                            <div className="lc-input-box">
-                              {formatJudgeValue(activeRunCase.expected)}
-                            </div>
-                          </div>
-                        </>
-                      ) : isCustomSelected ? (
-                        <>
-                          <div className="lc-input-group">
-                            <label>Input (JSON) =</label>
-                            <textarea
-                              className="lc-editable-input"
-                              value={customInputText}
-                              onChange={(e) => handleCustomInputEdit(e.target.value)}
-                              spellCheck={false}
-                              rows={4}
-                            />
-                          </div>
-                          <div className="lc-input-group">
-                            <label>Expected Output =</label>
-                            <input
-                              className="lc-editable-input"
-                              value={getTestCaseExpectedOutput(selectedCase)}
-                              onChange={(e) =>
-                                updateCustomCase({
-                                  output: e.target.value,
-                                  expectedOutput: e.target.value,
-                                })
-                              }
-                            />
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          {getTestCaseInputEntries(selectedCase.input).map((entry) => (
-                            <div key={entry.name} className="lc-input-group">
-                              <label>{entry.name} =</label>
-                              <div className="lc-input-box">{entry.value}</div>
-                            </div>
-                          ))}
-                          <div className="lc-input-group">
-                            <label>Expected Output =</label>
-                            <div className="lc-input-box">
-                              {getTestCaseExpectedOutput(selectedCase) || "[]"}
-                            </div>
-                          </div>
-                        </>
+          {!viewingHistory && (
+            <div
+              className="lc-tab-pane lc-result-pane"
+              role="tabpanel"
+              hidden={activeEditorTab !== "result"}
+            >
+              <div className="lc-result-container">
+                {runError && (
+                  <div className="lc-result-alert error">
+                    <AlertCircle size={16} />
+                    <div className="lc-result-alert-body">
+                      <strong>{runError}</strong>
+                      {(runError.toLowerCase().includes("network") ||
+                        runError.toLowerCase().includes("timeout")) && (
+                        <span className="lc-result-alert-hint">
+                          Evaluation service may be offline. Ensure it is running on
+                          port 3006, then try Run again.
+                        </span>
                       )}
                     </div>
-                  )}
-
-                  {allCases.length === 0 && (
-                    <div className="lc-console-placeholder">
-                      No visible test cases. Add a custom case to run against.
-                    </div>
-                  )}
-                </div>
-
-                <div className="lc-console-section" style={{ flex: 1, minHeight: 0 }}>
-                  <h5>
-                    <Terminal size={12} style={{ marginRight: 6, verticalAlign: -1 }} />
-                    Test Result
-                  </h5>
-
-                  <div className="lc-result-container">
-                    {runError && (
-                      <div className="lc-result-alert error">
-                        <AlertCircle size={16} />
-                        <span>{runError}</span>
-                      </div>
-                    )}
-
-                    {submissionError && (
-                      <div className="lc-result-alert error">
-                        <AlertCircle size={16} />
-                        <span>{submissionError}</span>
-                      </div>
-                    )}
-
-                    {isRunning && !runResult && (
-                      <div className="lc-result-card">
-                        <div className="lc-result-header">
-                          <Loader2 size={20} className="animate-spin lc-pending-icon" />
-                          <div className="lc-result-status-text">
-                            <h4>Running test cases...</h4>
-                            <div className="lc-result-stats">
-                              <span>Public cases only — no submission created</span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {(isSubmitting || submissionResult) && (
-                      <div
-                        className={`lc-submit-banner ${
-                          submitAccepted ? "acc" : submitPending ? "" : "err"
-                        }`}
-                      >
-                        <div className="lc-result-header">
-                          {submitAccepted ? (
-                            <CheckCircle size={20} className="lc-acc-icon" />
-                          ) : submitPending ? (
-                            <Loader2 size={20} className="animate-spin lc-pending-icon" />
-                          ) : (
-                            <AlertCircle size={20} className="lc-acc-icon" />
-                          )}
-                          <div className="lc-result-status-text">
-                            <h4>
-                              {submitPending
-                                ? "Judging all test cases..."
-                                : formatJudgeValue(submissionResult?.status || "SUBMIT")}
-                            </h4>
-                            <div className="lc-result-stats">
-                              <span>
-                                {submitPassed} / {submitTotal || "?"} test cases
-                                {submitPending ? " passed so far" : " passed"}
-                              </span>
-                              {!submitPending && submissionResult && (
-                                <>
-                                  <span>
-                                    Runtime: {submissionResult.executionTime ?? 0} ms
-                                  </span>
-                                  <span>
-                                    Memory: {submissionResult.memory ?? 0} MB
-                                  </span>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-
-                        {submitTotal > 0 && (
-                          <div className="lc-submit-progress">
-                            <div className="lc-progress-meta">
-                              <span>
-                                Progress: {submitPassed} / {submitTotal}
-                              </span>
-                              {hiddenCount > 0 && (
-                                <span className="lc-hidden-hint">
-                                  {publicCount} public · {hiddenCount} hidden
-                                </span>
-                              )}
-                            </div>
-                            <div className="lc-case-selector lc-submit-pills">
-                              {submitPills.map((st, idx) => (
-                                <span
-                                  key={idx}
-                                  className={`lc-case-btn lc-pill-static ${caseStatusClass(st)}`}
-                                  title={
-                                    idx < publicCount
-                                      ? `Case ${idx + 1} (public)`
-                                      : `Case ${idx + 1} (hidden)`
-                                  }
-                                >
-                                  {st === "PASSED" ? (
-                                    <CheckCircle size={11} />
-                                  ) : st === "FAILED" ? (
-                                    <XCircle size={11} />
-                                  ) : st === "RUNNING" ? (
-                                    <Loader2 size={11} className="animate-spin" />
-                                  ) : (
-                                    <span className="lc-pending-dot" />
-                                  )}
-                                  <span>
-                                    {idx < publicCount
-                                      ? `Case ${idx + 1}`
-                                      : `#${idx + 1}`}
-                                  </span>
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {!submitPending &&
-                          submissionResult?.output != null &&
-                          submissionResult.output !== "" &&
-                          isPublicFailureDetail(submissionResult.output) && (
-                            <div className="lc-result-output" style={{ marginTop: 10 }}>
-                              <div
-                                style={{
-                                  fontSize: "0.75rem",
-                                  color: "var(--text-muted)",
-                                  marginBottom: 4,
-                                }}
-                              >
-                                Failed public testcase:
-                              </div>
-                              <pre
-                                style={{
-                                  margin: 0,
-                                  fontFamily: "var(--font-mono)",
-                                  fontSize: "0.78rem",
-                                  whiteSpace: "pre-wrap",
-                                  background: "rgba(0,0,0,0.2)",
-                                  padding: 8,
-                                  borderRadius: 4,
-                                }}
-                              >
-                                {formatJudgeValue(submissionResult.output)}
-                              </pre>
-                            </div>
-                          )}
-
-                        {!submitPending &&
-                          submissionResult?.status === "WRONG_ANSWER" &&
-                          !isPublicFailureDetail(submissionResult.output) && (
-                            <p className="lc-hidden-fail-note">
-                              One or more hidden test cases failed. Hidden
-                              inputs and outputs are not shown.
-                            </p>
-                          )}
-
-                        {!submitPending && submissionResult?.error && (
-                          <div className="lc-result-alert error" style={{ marginTop: 10 }}>
-                            <AlertCircle size={16} />
-                            <pre
-                              style={{
-                                margin: 0,
-                                fontFamily: "var(--font-mono)",
-                                fontSize: "0.78rem",
-                                whiteSpace: "pre-wrap",
-                              }}
-                            >
-                              {formatJudgeValue(submissionResult.error)}
-                            </pre>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {runResult && (
-                      <div
-                        className={`lc-result-card ${
-                          runResult.status === "ACCEPTED" ? "acc" : "error"
-                        }`}
-                      >
-                        <div className="lc-result-header">
-                          {runResult.status === "ACCEPTED" ? (
-                            <CheckCircle size={20} className="lc-acc-icon" />
-                          ) : (
-                            <AlertCircle size={20} className="lc-acc-icon" />
-                          )}
-                          <div className="lc-result-status-text">
-                            <h4>{formatJudgeValue(runResult.status)}</h4>
-                            <div className="lc-result-stats">
-                              <span>
-                                {runResult.passed} / {runResult.total} test cases
-                                passed
-                              </span>
-                              {runResult.executionTime != null && (
-                                <span>Runtime: {runResult.executionTime} ms</span>
-                              )}
-                              {runResult.memory != null && (
-                                <span>Memory: {runResult.memory} MB</span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-
-                        {activeRunCase && (
-                          <div style={{ marginTop: 10 }}>
-                            <div className="lc-input-group">
-                              <label>Input</label>
-                              <div className="lc-input-box">
-                                {formatJudgeValue(activeRunCase.input)}
-                              </div>
-                            </div>
-                            <div className="lc-input-group">
-                              <label>Output</label>
-                              <div className="lc-input-box">
-                                {formatJudgeValue(activeRunCase.actual)}
-                              </div>
-                            </div>
-                            <div className="lc-input-group">
-                              <label>Expected</label>
-                              <div className="lc-input-box">
-                                {formatJudgeValue(activeRunCase.expected)}
-                              </div>
-                            </div>
-                            {activeRunCase.error && (
-                              <div className="lc-result-alert error" style={{ marginTop: 8 }}>
-                                <AlertCircle size={16} />
-                                <pre
-                                  style={{
-                                    margin: 0,
-                                    fontFamily: "var(--font-mono)",
-                                    fontSize: "0.78rem",
-                                    whiteSpace: "pre-wrap",
-                                  }}
-                                >
-                                  {formatJudgeValue(activeRunCase.error)}
-                                </pre>
-                              </div>
-                            )}
-                          </div>
-                        )}
-
-                        {runResult.error && !activeRunCase?.error && (
-                          <div className="lc-result-alert error" style={{ marginTop: 10 }}>
-                            <AlertCircle size={16} />
-                            <pre
-                              style={{
-                                margin: 0,
-                                fontFamily: "var(--font-mono)",
-                                fontSize: "0.78rem",
-                                whiteSpace: "pre-wrap",
-                              }}
-                            >
-                              {formatJudgeValue(runResult.error)}
-                            </pre>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {!isRunning &&
-                      !isSubmitting &&
-                      !runResult &&
-                      !submissionResult &&
-                      !runError &&
-                      !submissionError && (
-                        <div className="lc-console-placeholder">
-                          <p>
-                            <strong>Run</strong> executes public test cases only
-                            (no submission).
-                          </p>
-                          <p>
-                            <strong>Submit</strong> judges the full official
-                            suite, including hidden cases.
-                          </p>
-                        </div>
-                      )}
                   </div>
-                </div>
+                )}
+
+                {submissionError && (
+                  <div className="lc-result-alert error">
+                    <AlertCircle size={16} />
+                    <div className="lc-result-alert-body">
+                      <strong>{submissionError}</strong>
+                      {(submissionError.toLowerCase().includes("network") ||
+                        submissionError.toLowerCase().includes("timeout")) && (
+                        <span className="lc-result-alert-hint">
+                          Submission or judge service unreachable. Check Submission
+                          (3004) and Evaluation (3006), then retry Submit.
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Single loading card — only when no result object yet */}
+                {((isRunning && !runResult) || (isSubmitting && !submissionResult)) &&
+                  !runError &&
+                  !submissionError && (
+                  <div className="lc-result-card pending">
+                    <div className="lc-result-header">
+                      <Loader2 size={20} className="animate-spin lc-pending-icon" />
+                      <div className="lc-result-status-text">
+                        <h4>{isSubmitting ? "Submitting..." : "Running..."}</h4>
+                        <div className="lc-result-stats">
+                          <span>Compiling</span>
+                          <span>Executing test cases</span>
+                          <span>Evaluating output</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Submit result — never together with Run result or the generic loader */}
+                {submissionResult && !isRunning && !runResult && (
+                  <div
+                    className={`lc-submit-banner ${
+                      submitAccepted
+                        ? "acc"
+                        : submitPending
+                          ? "pending"
+                          : resultStatusTone(submissionResult?.status)
+                    }`}
+                  >
+                    <div className="lc-result-header">
+                      {submitAccepted ? (
+                        <CheckCircle size={20} className="lc-acc-icon" />
+                      ) : submitPending ? (
+                        <Loader2 size={20} className="animate-spin lc-pending-icon" />
+                      ) : (
+                        <AlertCircle size={20} className="lc-acc-icon" />
+                      )}
+                      <div className="lc-result-status-text">
+                        <h4>
+                          {submitPending
+                            ? "Judging all test cases..."
+                            : formatJudgeValue(submissionResult?.status || "SUBMIT")}
+                        </h4>
+                        <div className="lc-result-stats">
+                          <span>
+                            {submitPassed} / {submitTotal || "?"} test cases
+                            {submitPending ? " passed so far" : " passed"}
+                          </span>
+                          {!submitPending && submissionResult && (
+                            <>
+                              <span>
+                                Runtime: {submissionResult.executionTime ?? 0} ms
+                              </span>
+                              <span>
+                                Memory: {submissionResult.memory ?? 0} MB
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {submitTotal > 0 && (
+                      <div className="lc-submit-progress">
+                        <div className="lc-progress-meta">
+                          <span>
+                            Progress: {submitPassed} / {submitTotal}
+                          </span>
+                          {hiddenCount > 0 && (
+                            <span className="lc-hidden-hint">
+                              {publicCount} public · {hiddenCount} hidden
+                            </span>
+                          )}
+                        </div>
+                        <div className="lc-case-selector lc-submit-pills">
+                          {submitPills.map((st, idx) => (
+                            <span
+                              key={idx}
+                              className={`lc-case-btn lc-pill-static ${caseStatusClass(st)}`}
+                              title={
+                                idx < publicCount
+                                  ? `Case ${idx + 1} (public)`
+                                  : `Case ${idx + 1} (hidden)`
+                              }
+                            >
+                              {st === "PASSED" ? (
+                                <CheckCircle size={11} />
+                              ) : st === "FAILED" ? (
+                                <XCircle size={11} />
+                              ) : st === "RUNNING" ? (
+                                <Loader2 size={11} className="animate-spin" />
+                              ) : (
+                                <span className="lc-pending-dot" />
+                              )}
+                              <span>
+                                {idx < publicCount
+                                  ? `Case ${idx + 1}`
+                                  : `#${idx + 1}`}
+                              </span>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {!submitPending &&
+                      submissionResult?.output != null &&
+                      submissionResult.output !== "" &&
+                      isPublicFailureDetail(submissionResult.output) && (
+                        <div className="lc-result-output" style={{ marginTop: 10 }}>
+                          <div
+                            style={{
+                              fontSize: "0.75rem",
+                              color: "var(--text-muted)",
+                              marginBottom: 4,
+                            }}
+                          >
+                            Failed public testcase:
+                          </div>
+                          <pre
+                            style={{
+                              margin: 0,
+                              fontFamily: "var(--font-mono)",
+                              fontSize: "0.78rem",
+                              whiteSpace: "pre-wrap",
+                              background: "rgba(0,0,0,0.2)",
+                              padding: 8,
+                              borderRadius: 4,
+                            }}
+                          >
+                            {formatJudgeValue(submissionResult.output)}
+                          </pre>
+                        </div>
+                      )}
+
+                    {!submitPending &&
+                      submissionResult?.status === "WRONG_ANSWER" &&
+                      !isPublicFailureDetail(submissionResult.output) && (
+                        <p className="lc-hidden-fail-note">
+                          One or more hidden test cases failed. Hidden
+                          inputs and outputs are not shown.
+                        </p>
+                      )}
+
+                    {!submitPending && submissionResult?.error && (
+                      <div className="lc-result-alert error" style={{ marginTop: 10 }}>
+                        <AlertCircle size={16} />
+                        <pre
+                          style={{
+                            margin: 0,
+                            fontFamily: "var(--font-mono)",
+                            fontSize: "0.78rem",
+                            whiteSpace: "pre-wrap",
+                          }}
+                        >
+                          {formatJudgeValue(submissionResult.error)}
+                        </pre>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {runResult && !isSubmitting && !submissionResult && (
+                  <div
+                    className={`lc-result-card ${resultStatusTone(runResult.status)}`}
+                  >
+                    <div className="lc-result-header">
+                      {runResult.status === "ACCEPTED" ? (
+                        <CheckCircle size={20} className="lc-acc-icon" />
+                      ) : (
+                        <AlertCircle size={20} className="lc-acc-icon" />
+                      )}
+                      <div className="lc-result-status-text">
+                        <h4>{formatJudgeValue(runResult.status)}</h4>
+                      </div>
+                    </div>
+
+                    <div className="lc-result-stats-row">
+                      <div className="lc-stat">
+                        <span className="lc-stat-label">Test Cases</span>
+                        <span className="lc-stat-value">
+                          {runResult.passed} / {runResult.total} Passed
+                        </span>
+                      </div>
+                      {runResult.executionTime != null && (
+                        <div className="lc-stat">
+                          <span className="lc-stat-label">Runtime</span>
+                          <span className="lc-stat-value">{runResult.executionTime} ms</span>
+                        </div>
+                      )}
+                      {runResult.memory != null && (
+                        <div className="lc-stat">
+                          <span className="lc-stat-label">Memory</span>
+                          <span className="lc-stat-value">{runResult.memory} MB</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {runResult.status === "COMPILATION_ERROR" && (runResult.error || runError) && (
+                      <div style={{ marginTop: 12 }}>
+                        <button
+                          type="button"
+                          className="lc-compiler-toggle"
+                          onClick={() => setCompilerOpen((v) => !v)}
+                        >
+                          Compiler Output{" "}
+                          {compilerOpen ? (
+                            <ChevronUp size={14} strokeWidth={1.75} />
+                          ) : (
+                            <ChevronDown size={14} strokeWidth={1.75} />
+                          )}
+                        </button>
+                        {compilerOpen && (
+                          <pre className="lc-compiler-body">
+                            {formatJudgeValue(runResult.error || runError)}
+                          </pre>
+                        )}
+                      </div>
+                    )}
+
+                    {activeRunCase && (
+                      <div style={{ marginTop: 14 }}>
+                        <div className="lc-input-group">
+                          <label>Input</label>
+                          <div className="lc-input-box">
+                            {formatJudgeValue(activeRunCase.input)}
+                          </div>
+                        </div>
+                        <div className="lc-input-group">
+                          <label>Expected</label>
+                          <div className="lc-input-box">
+                            {formatJudgeValue(activeRunCase.expected)}
+                          </div>
+                        </div>
+                        <div className="lc-input-group">
+                          <label>Output</label>
+                          <div className="lc-input-box">
+                            {formatJudgeValue(activeRunCase.actual)}
+                          </div>
+                        </div>
+                        {activeRunCase.error && (
+                          <div className="lc-result-alert error" style={{ marginTop: 8 }}>
+                            <AlertCircle size={16} />
+                            <pre
+                              style={{
+                                margin: 0,
+                                fontFamily: "var(--font-mono)",
+                                fontSize: "0.78rem",
+                                whiteSpace: "pre-wrap",
+                              }}
+                            >
+                              {formatJudgeValue(activeRunCase.error)}
+                            </pre>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {runResult.error &&
+                      runResult.status !== "COMPILATION_ERROR" &&
+                      !activeRunCase?.error && (
+                      <div className="lc-result-alert error" style={{ marginTop: 10 }}>
+                        <AlertCircle size={16} />
+                        <pre
+                          style={{
+                            margin: 0,
+                            fontFamily: "var(--font-mono)",
+                            fontSize: "0.78rem",
+                            whiteSpace: "pre-wrap",
+                          }}
+                        >
+                          {formatJudgeValue(runResult.error)}
+                        </pre>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {!isRunning &&
+                  !isSubmitting &&
+                  !runResult &&
+                  !submissionResult &&
+                  !runError &&
+                  !submissionError && (
+                    <div className="lc-empty-state">
+                      <h4>Test Result</h4>
+                      <p>Run your code to see the execution result.</p>
+                      <button
+                        type="button"
+                        className="lc-action-btn lc-run-btn"
+                        onClick={handleRunClick}
+                        disabled={busy || viewingHistory}
+                      >
+                        <Play size={14} fill="currentColor" strokeWidth={1.75} />
+                        <span>Run Code</span>
+                      </button>
+                    </div>
+                  )}
               </div>
             </div>
           )}
         </section>
+
       </div>
+
+      <div className="lc-mobile-actions">
+        <button
+          type="button"
+          className="lc-action-btn lc-run-btn"
+          onClick={handleRunClick}
+          disabled={busy || viewingHistory}
+        >
+          {isRunning ? (
+            <Loader2 size={14} className="animate-spin" />
+          ) : (
+            <Play size={14} fill="currentColor" />
+          )}
+          <span>{isRunning ? "Running..." : "Run"}</span>
+        </button>
+        <button
+          type="button"
+          className="lc-action-btn lc-submit-btn"
+          onClick={handleSubmitClick}
+          disabled={busy || viewingHistory}
+        >
+          {isSubmitting ? (
+            <Loader2 size={14} className="animate-spin" />
+          ) : (
+            <Check size={14} />
+          )}
+          <span>{isSubmitting ? "Submitting..." : "Submit"}</span>
+        </button>
+      </div>
+
+      <ConfirmDialog
+        open={resetConfirmOpen}
+        title="Reset code?"
+        description="Are you sure you want to reset your code to the default starter template? Your current changes will be lost."
+        cancelLabel="Cancel"
+        confirmLabel="Reset Code"
+        confirmVariant="danger"
+        confirming={resetConfirming}
+        onCancel={closeResetConfirm}
+        onConfirm={confirmResetCode}
+      />
     </div>
   );
 };

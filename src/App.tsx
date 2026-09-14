@@ -2,11 +2,13 @@ import { useState, useEffect } from "react";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { AuthModal } from "./components/AuthModal";
 import { Dashboard } from "./components/Dashboard";
-import { AdminDashboard } from "./components/AdminDashboard";
+import { AdminApp } from "./components/admin/AdminApp";
+import { canAccessAdmin } from "./rbac/permissions";
 import {
   readProblemSlugFromLocation,
   rememberPendingProblemSlug,
 } from "./utils/problemShare";
+import { BrandMark } from "./components/BrandLogo";
 import "./index.css";
 
 function AppContent() {
@@ -20,11 +22,54 @@ function AppContent() {
     if (slug) rememberPendingProblemSlug(slug);
   }, [user]);
 
-  if (user) {
-    if (view === "admin") {
-      return <AdminDashboard onBackToUserView={() => setView("dashboard")} />;
+  // Sync /admin path when entering admin; restore / when leaving
+  useEffect(() => {
+    if (view === "admin" && canAccessAdmin(user?.role)) {
+      if (!window.location.pathname.startsWith("/admin")) {
+        window.history.replaceState({}, "", "/admin?admin=dashboard");
+      }
+    } else if (view === "dashboard" && window.location.pathname.startsWith("/admin")) {
+      window.history.replaceState({}, "", "/");
     }
-    return <Dashboard onOpenAdmin={() => setView("admin")} />;
+  }, [view, user?.role]);
+
+  // Drop admin view if role cannot access
+  useEffect(() => {
+    if (view === "admin" && user && !canAccessAdmin(user.role)) {
+      setView("dashboard");
+    }
+  }, [view, user]);
+
+  // Deep-link: land on admin if URL is /admin
+  useEffect(() => {
+    if (user && canAccessAdmin(user.role) && window.location.pathname.startsWith("/admin")) {
+      setView("admin");
+    }
+  }, [user]);
+
+  if (user) {
+    if (view === "admin" && canAccessAdmin(user.role)) {
+      return (
+        <AdminApp
+          onBackToUserView={() => {
+            window.history.replaceState({}, "", "/");
+            setView("dashboard");
+          }}
+        />
+      );
+    }
+    return (
+      <Dashboard
+        onOpenAdmin={
+          canAccessAdmin(user.role)
+            ? () => {
+                window.history.replaceState({}, "", "/admin?admin=dashboard");
+                setView("admin");
+              }
+            : undefined
+        }
+      />
+    );
   }
 
   return (
@@ -59,24 +104,7 @@ function AppContent() {
             boxShadow: "0 4px 20px rgba(0, 0, 0, 0.4), 0 0 15px var(--primary-glow)",
           }}
         >
-          <div
-            style={{
-              width: "22px",
-              height: "22px",
-              borderRadius: "6px",
-              background: "linear-gradient(135deg, var(--primary) 0%, var(--primary-hover) 100%)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontWeight: 800,
-              color: "var(--text-main)",
-              fontSize: "0.7rem",
-              letterSpacing: "-0.05em",
-              boxShadow: "0 2px 8px var(--primary-glow)",
-            }}
-          >
-            aX
-          </div>
+          <BrandMark size={22} />
 
           <span
             style={{
@@ -89,7 +117,7 @@ function AppContent() {
           />
 
           <span style={{ color: "var(--text-main)", fontWeight: 600 }}>
-            algo<span style={{ color: "var(--primary)" }}>X</span> Platform
+            Algo<span style={{ color: "var(--primary)" }}>Path</span> Platform
           </span>
           <span style={{ color: "var(--text-muted)" }}>|</span>
           <span style={{ color: "var(--primary-hover)", fontFamily: "var(--font-sans)" }}>
@@ -115,7 +143,7 @@ function AppContent() {
               textShadow: "0 0 25px var(--primary-glow)",
             }}
           >
-            algo<span style={{ color: "var(--primary-hover)" }}>X</span>
+            Algo<span style={{ color: "var(--primary-hover)" }}>Path</span>
           </span>
         </h1>
         <p

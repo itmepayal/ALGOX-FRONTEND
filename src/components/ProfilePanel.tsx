@@ -3,6 +3,7 @@ import { Camera, Loader2, LogOut, Trash2 } from "lucide-react";
 import { authApi, type User } from "../api/authApi";
 import type { Submission, SubmissionStatus } from "../api/submissionApi";
 import { isAcceptedStatus } from "../utils/submissionUtils";
+import { ImportProgressSection } from "./ImportProgressSection";
 
 const SUBMISSION_STATUSES: SubmissionStatus[] = [
   "PENDING", "RUNNING", "ACCEPTED", "WRONG_ANSWER", "TIME_LIMIT_EXCEEDED",
@@ -41,6 +42,8 @@ interface ProfilePanelProps {
   onToggle2FA?: (enable: boolean) => void;
   onChangePassword?: (curr: string, next: string) => void;
   onSignout: () => void;
+  /** Refresh dashboard submissions / streak after progress import. */
+  onProgressImported?: () => void | Promise<void>;
 }
 
 export const ProfilePanel: FC<ProfilePanelProps> = ({
@@ -75,6 +78,7 @@ export const ProfilePanel: FC<ProfilePanelProps> = ({
   onToggle2FA,
   onChangePassword,
   onSignout,
+  onProgressImported,
 }) => {
   const [currPass, setCurrPass] = useState("");
   const [newPass, setNewPass] = useState("");
@@ -224,6 +228,10 @@ export const ProfilePanel: FC<ProfilePanelProps> = ({
                 </form>
               )}
             </div>
+
+            <hr style={{ margin: "24px 0", borderColor: "var(--border-subtle)", opacity: 0.4 }} />
+
+            <ImportProgressSection onImported={onProgressImported} />
 
             <hr style={{ margin: "24px 0", borderColor: "var(--border-subtle)", opacity: 0.4 }} />
 

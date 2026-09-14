@@ -110,7 +110,7 @@ export const ProblemShare: FC<ProblemShareProps> = ({
       try {
         await navigator.share({
           title: shareTitle,
-          text: `Solve ${shareTitle} on algoX`,
+          text: `Solve ${shareTitle} on AlgoPath`,
           url: shareUrl,
         });
         onShared?.("native");
@@ -136,7 +136,10 @@ export const ProblemShare: FC<ProblemShareProps> = ({
   };
 
   return (
-    <div className={`ps-share ${className}`.trim()} ref={rootRef}>
+    <div
+      className={`ps-share ${open ? "is-open" : ""} ${className}`.trim()}
+      ref={rootRef}
+    >
       <button
         type="button"
         className={
@@ -239,7 +242,15 @@ export const ProblemShare: FC<ProblemShareProps> = ({
           )}
 
           <div className="ps-share-url" title={shareUrl}>
-            {shareUrl}
+            <span className="ps-share-url-text">{shareUrl}</span>
+            <button
+              type="button"
+              className="ps-share-url-copy"
+              aria-label="Copy link"
+              onClick={(e) => void handleCopy(e)}
+            >
+              {copied ? <Check size={13} /> : <Link2 size={13} />}
+            </button>
           </div>
         </div>
       )}

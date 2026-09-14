@@ -13,6 +13,20 @@ export interface EngagementState {
   isRevision?: boolean;
 }
 
+/** Bookmark mutations must never be used to update revision UI state. */
+export interface BookmarkMutationResult {
+  isBookmarked: boolean;
+  bookmarkCount?: number;
+  likeCount?: number;
+  dislikeCount?: number;
+  currentUserReaction?: UserReaction;
+}
+
+/** Revision mutations must never be used to update bookmark UI state. */
+export interface RevisionMutationResult {
+  isRevision: boolean;
+}
+
 export interface ApiResponse<T> {
   success: boolean;
   message: string;
@@ -56,21 +70,21 @@ export const engagementApi = {
   },
 
   addBookmark: async (problemId: string) => {
-    const res = await engagementClient.post<ApiResponse<EngagementState>>(
+    const res = await engagementClient.post<ApiResponse<BookmarkMutationResult>>(
       `/problems/${problemId}/bookmark`
     );
     return res.data;
   },
 
   removeBookmark: async (problemId: string) => {
-    const res = await engagementClient.delete<ApiResponse<EngagementState>>(
+    const res = await engagementClient.delete<ApiResponse<BookmarkMutationResult>>(
       `/problems/${problemId}/bookmark`
     );
     return res.data;
   },
 
   toggleBookmark: async (problemId: string) => {
-    const res = await engagementClient.post<ApiResponse<EngagementState>>(
+    const res = await engagementClient.post<ApiResponse<BookmarkMutationResult>>(
       `/problems/${problemId}/bookmark/toggle`
     );
     return res.data;
@@ -84,8 +98,15 @@ export const engagementApi = {
   },
 
   toggleRevision: async (problemId: string) => {
-    const res = await engagementClient.post<ApiResponse<EngagementState>>(
+    const res = await engagementClient.post<ApiResponse<RevisionMutationResult>>(
       `/problems/${problemId}/revision/toggle`
+    );
+    return res.data;
+  },
+
+  removeRevision: async (problemId: string) => {
+    const res = await engagementClient.delete<ApiResponse<RevisionMutationResult>>(
+      `/problems/${problemId}/revision`
     );
     return res.data;
   },

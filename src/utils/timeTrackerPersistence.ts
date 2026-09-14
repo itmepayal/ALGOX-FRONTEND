@@ -64,7 +64,6 @@ export function loadTimeTracker(
     const raw = localStorage.getItem(storageKey(userId, problemId));
     if (!raw) return defaultTimeTrackerState();
     const parsed = JSON.parse(raw) as Partial<TimeTrackerPersisted>;
-    const base = defaultTimeTrackerState();
     return {
       mode: parsed.mode === "timer" ? "timer" : "stopwatch",
       stopwatch: {

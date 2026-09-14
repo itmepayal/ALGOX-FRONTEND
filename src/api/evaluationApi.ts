@@ -16,6 +16,11 @@ export interface RunCodePayload {
   input: string | Record<string, unknown> | unknown[] | number | boolean;
   timeLimitMs?: number;
   memoryLimitMb?: number;
+  functionName?: string;
+  className?: string;
+  returnType?: string;
+  parameters?: Array<{ name: string; type: string }>;
+  problemId?: string;
 }
 
 export interface RunCodeResponseData {

@@ -28,39 +28,48 @@ export interface RoadmapTopic {
 }
 
 const CANONICAL_ROADMAP = [
-  "Basics",
-  "Arrays",
-  "Strings",
-  "Sorting",
-  "Binary Search",
+  "Array",
   "Two Pointers",
   "Sliding Window",
-  "Linked List",
+  "Binary Search",
+  "Strings",
   "Stack",
+  "Linked List",
+  "HashMap / HashSet",
+  "Trees (Binary Tree / BST)",
+  "Trie",
+  "Heap / Priority Queue",
+  "Backtracking",
+  "Graphs",
+  "Advanced Graphs",
+  "1-D Dynamic Programming",
+  "2-D Dynamic Programming",
+  "Greedy",
+  "Intervals",
+  "Math & Geometry",
+  "Bit Manipulation",
+  "Basics",
+  "Sorting",
   "Queue",
   "Recursion",
-  "Backtracking",
-  "Trees",
-  "BST",
-  "Heap",
-  "Greedy",
-  "Graph",
-  "Dynamic Programming",
-  "Trie",
   "Advanced Topics",
 ];
 
 const CATEGORY_ALIASES: Record<string, string> = {
-  Array: "Arrays",
-  Arrays: "Arrays",
+  Array: "Array",
+  Arrays: "Array",
   String: "Strings",
   Strings: "Strings",
-  Tree: "Trees",
-  Trees: "Trees",
-  Graphs: "Graph",
-  Graph: "Graph",
-  DP: "Dynamic Programming",
-  "Dynamic Programming": "Dynamic Programming",
+  Tree: "Trees (Binary Tree / BST)",
+  Trees: "Trees (Binary Tree / BST)",
+  "Trees (Binary Tree / BST)": "Trees (Binary Tree / BST)",
+  Graphs: "Graphs",
+  Graph: "Graphs",
+  DP: "1-D Dynamic Programming",
+  "Dynamic Programming": "1-D Dynamic Programming",
+  HashMap: "HashMap / HashSet",
+  HashSet: "HashMap / HashSet",
+  Heap: "Heap / Priority Queue",
 };
 
 function canonicalizeCategory(raw: string): string {
@@ -109,7 +118,7 @@ export function buildDayActivityMap(
     if (!key) continue;
     const row = ensure(key);
     row.attemptedCount += 1;
-    if (s.status === "ACCEPTED") {
+    if (s.status === "ACCEPTED" && s.source !== "run") {
       row.acceptedCount += 1;
       const pid = s.problemId?.toString();
       if (pid && !row.solvedProblemIds.includes(pid)) {
@@ -268,7 +277,7 @@ export function acceptedProblemIdsOnDate(
 ): Set<string> {
   const set = new Set<string>();
   for (const s of submissions) {
-    if (s.status !== "ACCEPTED") continue;
+    if (s.status !== "ACCEPTED" || s.source === "run") continue;
     if (submissionDayKey(s) !== dateKey) continue;
     const pid = s.problemId?.toString();
     if (pid) set.add(pid);
@@ -279,7 +288,8 @@ export function acceptedProblemIdsOnDate(
 export function everAcceptedProblemIds(submissions: Submission[]): Set<string> {
   const set = new Set<string>();
   for (const s of submissions) {
-    if (s.status !== "ACCEPTED") continue;
+    // Run ACCEPTED must not count toward solved / planner sync
+    if (s.status !== "ACCEPTED" || s.source === "run") continue;
     const pid = s.problemId?.toString();
     if (pid) set.add(pid);
   }

@@ -1,8 +1,13 @@
-import { useState, useEffect, useCallback, useMemo, type FC } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, type FC } from "react";
 import { useAuth } from "../context/AuthContext";
 import { authApi } from "../api/authApi";
 import { problemApi, type Problem, type Testcase } from "../api/problemApi";
-import { submissionApi, type ProgrammingLanguage, type Submission } from "../api/submissionApi";
+import {
+  submissionApi,
+  type ProgrammingLanguage,
+  type Submission,
+  type SubmissionStatus,
+} from "../api/submissionApi";
 import { evaluationApi } from "../api/evaluationApi";
 import { engagementApi } from "../api/engagementApi";
 import { ProblemsSheet } from "./ProblemsSheet";
@@ -12,9 +17,11 @@ import { LearningCalendarRoadmap } from "./LearningCalendarRoadmap";
 import { StudySessionsPanel } from "./StudySessionsPanel";
 import { DailyPlannerPanel } from "./DailyPlannerPanel";
 import { ActiveStudySessionBar } from "./ActiveStudySessionBar";
+import { BrandMark } from "./BrandLogo";
 import {
   formatJudgeInput,
   getTestCaseExpectedOutput,
+  outputsMatch,
 } from "../utils/problemUtils";
 import {
   clearSavedCode,
@@ -26,7 +33,6 @@ import {
 import {
   consumePendingProblemSlug,
   readProblemSlugFromLocation,
-  rememberPendingProblemSlug,
   setProblemInLocation,
 } from "../utils/problemShare";
 import {
@@ -41,6 +47,7 @@ import {
   computeStreaks,
   everAcceptedProblemIds,
 } from "../utils/learningStats";
+import { normalizeProblemId, updateIdSet } from "../utils/engagementIds";
 import type { RunCaseResult, RunResult } from "../types/judge";
 import {
   CalendarDays,
@@ -48,6 +55,7 @@ import {
   Home,
   ListTodo,
   MessageSquare,
+  Search,
   ShieldCheck,
   Timer,
   Trophy,
@@ -94,6 +102,9 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
   const [runError, setRunError] = useState("");
   const [submissionError, setSubmissionError] = useState("");
   const busy = isRunning || isSubmitting;
+  /** Sync locks — React busy state alone can miss rapid double-clicks. */
+  const runLockRef = useRef(false);
+  const submitLockRef = useRef(false);
 
   const [dashTab, setDashTab] = useState<"overview" | "submissions" | "sessions" | "security">("overview");
   const [sessions, setSessions] = useState<any[]>([]);
@@ -116,7 +127,7 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
   const fetchProblems = async () => {
     try {
       setLoadingProblems(true);
-      const res = await problemApi.getProblems({ limit: 50 });
+      const res = await problemApi.getProblems({ limit: 500 });
       if (res?.data) setProblems(res.data);
     } catch (err) {
       console.warn("Fetch problems failed:", err);
@@ -145,27 +156,29 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
     try {
       const res = await engagementApi.listMyBookmarks();
       const ids = new Set(
-        (res?.data || []).map((p) => (p.id || p._id || "").toString()).filter(Boolean)
+        (res?.data || [])
+          .map((p) => normalizeProblemId(p.id || p._id))
+          .filter(Boolean)
       );
       setBookmarkedIds(ids);
-      if (res?.data?.length) {
-        setProblems((prev) =>
-          prev.map((p) => {
-            const pid = (p.id || p._id || "").toString();
-            const bm = res.data.find(
-              (b) => (b.id || b._id || "").toString() === pid
-            );
-            return bm
-              ? {
-                  ...p,
-                  isBookmarked: true,
-                  likeCount: bm.likeCount ?? p.likeCount,
-                  dislikeCount: bm.dislikeCount ?? p.dislikeCount,
-                }
-              : { ...p, isBookmarked: ids.has(pid) };
-          })
-        );
-      }
+      // Always sync bookmark flags — including when the list is empty.
+      // Never touch revisionIds here.
+      setProblems((prev) =>
+        prev.map((p) => {
+          const pid = normalizeProblemId(p.id || p._id);
+          const bm = res?.data?.find(
+            (b) => normalizeProblemId(b.id || b._id) === pid
+          );
+          return bm
+            ? {
+                ...p,
+                isBookmarked: true,
+                likeCount: bm.likeCount ?? p.likeCount,
+                dislikeCount: bm.dislikeCount ?? p.dislikeCount,
+              }
+            : { ...p, isBookmarked: ids.has(pid) };
+        })
+      );
     } catch (err) {
       console.warn("Fetch bookmarks failed:", err);
     }
@@ -178,41 +191,45 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
     }
     try {
       const res = await engagementApi.listMyRevisions();
-      setRevisionIds(new Set(res?.data?.problemIds || []));
+      // Never touch bookmarkedIds here.
+      setRevisionIds(
+        new Set(
+          (res?.data?.problemIds || [])
+            .map((id) => normalizeProblemId(id))
+            .filter(Boolean)
+        )
+      );
     } catch (err) {
       console.warn("Fetch revisions failed:", err);
     }
   };
 
+  /** Bookmark-only state update — must never modify revisionIds. */
   const handleBookmarkChange = (problemId: string, isBookmarked: boolean) => {
-    setBookmarkedIds((prev) => {
-      const next = new Set(prev);
-      if (isBookmarked) next.add(problemId);
-      else next.delete(problemId);
-      return next;
-    });
+    const id = normalizeProblemId(problemId);
+    if (!id) return;
+    setBookmarkedIds((prev) => updateIdSet(prev, id, isBookmarked));
     setProblems((prev) =>
       prev.map((p) =>
-        (p.id || p._id || "").toString() === problemId
-          ? { ...p, isBookmarked }
-          : p
+        normalizeProblemId(p.id || p._id) === id ? { ...p, isBookmarked } : p
       )
     );
   };
 
+  /** Revision-only state update — must never modify bookmarkedIds. */
   const handleRevisionChange = (problemId: string, isRevision: boolean) => {
-    setRevisionIds((prev) => {
-      const next = new Set(prev);
-      if (isRevision) next.add(problemId);
-      else next.delete(problemId);
-      return next;
-    });
+    const id = normalizeProblemId(problemId);
+    if (!id) return;
+    setRevisionIds((prev) => updateIdSet(prev, id, isRevision));
   };
 
   const handleRemoveBookmark = async (problemId: string) => {
+    const id = normalizeProblemId(problemId);
+    if (!id) return;
     try {
-      await engagementApi.removeBookmark(problemId);
-      handleBookmarkChange(problemId, false);
+      await engagementApi.removeBookmark(id);
+      handleBookmarkChange(id, false);
+      // Do not call fetchRevisions / handleRevisionChange.
     } catch (err) {
       console.warn("Remove bookmark failed:", err);
       window.alert("Failed to remove bookmark. Please try again.");
@@ -411,7 +428,6 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
 
   const handleResetCode = () => {
     if (!selectedProblem) return;
-    if (!window.confirm("Reset code to the default starter template?")) return;
     const pid = getProblemId(selectedProblem);
     clearSavedCode(userId, pid, selectedLanguage);
     setUserCode(getStarterTemplate(selectedProblem, selectedLanguage));
@@ -443,23 +459,18 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
     setIsRunning(true);
     setRunResult(null);
     setRunError("");
-    // Keep submissionResult; Run must not wipe Submit history panel state
+    // Run and Submit results are mutually exclusive in the Test Result tab
+    setSubmissionResult(null);
+    setSubmissionError("");
+
+    let overall: RunResult["status"] = "ACCEPTED";
+    let totalTime = 0;
+    let maxMemory = 0;
+    let passed = 0;
+    let caseResults: RunCaseResult[] = [];
+    let persistError = "";
 
     try {
-      const caseResults: RunCaseResult[] = [];
-      let overall: RunResult["status"] = "ACCEPTED";
-      let totalTime = 0;
-      let maxMemory = 0;
-      let passed = 0;
-
-      const normalize = (s: string) =>
-        s
-          .replace(/\r\n/g, "\n")
-          .trim()
-          .split("\n")
-          .map((l) => l.trimEnd())
-          .join("\n");
-
       for (let i = 0; i < casesToRun.length; i++) {
         const tc = casesToRun[i];
         const stdin = formatJudgeInput(tc.input);
@@ -471,6 +482,9 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
           input: stdin,
           timeLimitMs: selectedProblem.timeLimitMs,
           memoryLimitMb: selectedProblem.memoryLimitMb,
+          functionName: selectedProblem.functionName,
+          className: selectedProblem.className || "Solution",
+          problemId: selectedProblem._id || (selectedProblem as { id?: string }).id,
         });
 
         if (!res?.data) {
@@ -522,7 +536,7 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
           break;
         }
 
-        if (expected && normalize(stdout) !== normalize(expected)) {
+        if (expected && !outputsMatch(stdout, expected)) {
           overall = "WRONG_ANSWER";
           caseResults.push({
             index: i,
@@ -571,9 +585,62 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
             .filter(Boolean)
             .join("; ")
         : "";
-      setRunError(fieldErrors || data?.message || err.message || "Code execution failed.");
+      persistError =
+        fieldErrors ||
+        (typeof data?.message === "string" ? data.message : "") ||
+        (typeof err?.message === "string" ? err.message : "") ||
+        "Code execution failed.";
+      setRunError(persistError);
+      overall = "RUNTIME_ERROR";
     } finally {
+      // Persist Run as Attempted (never Solved) — even on compile/runtime/WA/TLE/API error
+      await persistRunAttempt({
+        status: overall as SubmissionStatus,
+        passed,
+        total: casesToRun.length,
+        executionTime: totalTime,
+        memory: maxMemory,
+        error: persistError || caseResults.find((c) => c.status !== "PASSED")?.error,
+      });
       setIsRunning(false);
+    }
+  };
+
+  const persistRunAttempt = async (meta: {
+    status: SubmissionStatus;
+    passed: number;
+    total: number;
+    executionTime: number;
+    memory: number;
+    error?: string;
+  }) => {
+    if (!selectedProblem || !user) return;
+    const uid = user.id || (user as { _id?: string })._id;
+    const problemId = selectedProblem.id || selectedProblem._id;
+    if (!uid || !problemId) return;
+
+    try {
+      const res = await submissionApi.createSubmission({
+        userId: uid,
+        problemId,
+        code: userCode,
+        language: selectedLanguage as ProgrammingLanguage,
+        source: "run",
+        status: meta.status,
+        error: meta.error,
+        executionTime: meta.executionTime,
+        memory: meta.memory,
+        testCasesPassed: meta.passed,
+        totalTestCases: meta.total,
+      });
+      if (res?.data) {
+        setProblemSubmissions((prev) => [res.data, ...prev]);
+        setUserSubmissions((prev) => [res.data, ...prev]);
+        recordSessionProblemActivity(userId, problemId.toString(), false);
+        setLearningRefreshKey((k) => k + 1);
+      }
+    } catch (err) {
+      console.warn("Failed to persist run attempt", err);
     }
   };
 
@@ -582,61 +649,87 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
   };
 
   const handleRunCode = async () => {
-    if (!selectedProblem || busy) return;
+    if (!selectedProblem || busy || runLockRef.current || submitLockRef.current) return;
+    runLockRef.current = true;
     setSelectedSubmission(null);
-    const official = selectedProblem.testcases?.filter((tc) => !tc.isHidden) || [];
-    const allVisible = [...official, ...customTestCases];
-    if (allVisible.length === 0) {
-      setRunError("No test cases available to run.");
-      return;
+    try {
+      const official = selectedProblem.testcases?.filter((tc) => !tc.isHidden) || [];
+      const allVisible = [...official, ...customTestCases];
+      if (allVisible.length === 0) {
+        setRunError("No test cases available to run.");
+        return;
+      }
+      const casesToRun =
+        runMode === "selected"
+          ? [allVisible[Math.min(selectedCaseIndex, allVisible.length - 1)]]
+          : allVisible;
+      await executeCases(casesToRun);
+    } finally {
+      runLockRef.current = false;
     }
-    const casesToRun =
-      runMode === "selected"
-        ? [allVisible[Math.min(selectedCaseIndex, allVisible.length - 1)]]
-        : allVisible;
-    await executeCases(casesToRun);
   };
 
   const handleSubmitCode = async () => {
-    if (!selectedProblem || !user || busy) return;
+    if (!selectedProblem || !user || busy || submitLockRef.current || runLockRef.current) return;
+    submitLockRef.current = true;
     setSelectedSubmission(null);
     setIsSubmitting(true);
-    // Keep runResult intact — Run and Submit use separate state
-    setSubmissionResult(null);
+    // Clear previous Run so Test Result shows only Submit
+    setRunResult(null);
+    setRunError("");
     setSubmissionError("");
+
+    const totalHint =
+      selectedProblem.totalTestcaseCount ??
+      (selectedProblem.publicTestcaseCount ?? 0) +
+        (selectedProblem.hiddenTestcaseCount ?? 0);
+
+    // Optimistic pending card — avoids stacking "Submitting..." + "Judging..."
+    setSubmissionResult({
+      status: "PENDING",
+      language: selectedLanguage as ProgrammingLanguage,
+      code: userCode,
+      source: "submit",
+      testCasesPassed: 0,
+      totalTestCases: totalHint > 0 ? totalHint : undefined,
+    } as Submission);
+
     try {
       const uid = user.id || (user as any)._id;
       const problemId = selectedProblem.id || selectedProblem._id;
       if (!uid || !problemId) {
         setSubmissionError("Missing user or problem id.");
+        setSubmissionResult(null);
         return;
       }
 
-      // Submit sends ONLY problemId + code + language.
+      // Submit sends ONLY problemId + code + language (+ source=submit).
       // Hidden/public suite is loaded server-side from ProblemService.
       const res = await submissionApi.createSubmission({
         userId: uid,
         problemId,
         code: userCode,
         language: selectedLanguage as ProgrammingLanguage,
+        source: "submit",
       });
 
       if (res?.data) {
-        const totalHint =
-          selectedProblem.totalTestcaseCount ??
-          (selectedProblem.publicTestcaseCount ?? 0) +
-            (selectedProblem.hiddenTestcaseCount ?? 0);
         setSubmissionResult({
           ...res.data,
-          totalTestCases: res.data.totalTestCases ?? (totalHint > 0 ? totalHint : undefined),
+          totalTestCases:
+            res.data.totalTestCases ?? (totalHint > 0 ? totalHint : undefined),
           testCasesPassed: res.data.testCasesPassed ?? 0,
         });
+        // Optimistic: failed/pending submit still counts as Attempted in UI
+        setProblemSubmissions((prev) => [res.data, ...prev]);
+        setUserSubmissions((prev) => [res.data, ...prev]);
         const sid = res.data.id || res.data._id;
         if (sid) await pollSubmissionStatus(sid);
         const pid = selectedProblem.id || selectedProblem._id;
         if (pid) fetchProblemSubmissions(pid);
       } else {
         setSubmissionError("Empty response from submission service.");
+        setSubmissionResult(null);
       }
     } catch (err: any) {
       const offline =
@@ -648,8 +741,10 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
           ? "Submission service is unreachable or timed out. Ensure it is running on port 3004."
           : err.response?.data?.message || err.message || "Submission failed."
       );
+      setSubmissionResult(null);
     } finally {
       setIsSubmitting(false);
+      submitLockRef.current = false;
     }
   };
 
@@ -748,223 +843,301 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
     [bumpLearning]
   );
 
-  const navItems = [
+  const topNavItems = [
+    { id: "problems" as const, label: "Sheets" },
+    { id: "calendar" as const, label: "Roadmap" },
+    { id: "sessions" as const, label: "Sessions" },
+    { id: "planner" as const, label: "Planner" },
+    { id: "contests" as const, label: "Contest" },
+    { id: "discuss" as const, label: "Discuss" },
+  ];
+
+  const railItems = [
     { id: "problems" as const, icon: Home, label: "Sheet" },
     { id: "calendar" as const, icon: CalendarDays, label: "Calendar" },
     { id: "sessions" as const, icon: Timer, label: "Sessions" },
     { id: "planner" as const, icon: ListTodo, label: "Planner" },
-    { id: "contests" as const, icon: Trophy, label: "Contest" },
-    { id: "discuss" as const, icon: MessageSquare, label: "Discuss" },
     { id: "profile" as const, icon: UserIcon, label: "Profile" },
   ];
 
   return (
     <div className="platform-root">
-      <aside className="platform-sidebar platform-sidebar-labeled">
-        <div className="platform-sidebar-logo">aX</div>
-        <nav className="platform-sidebar-nav">
-          {navItems.map(({ id, icon: Icon, label }) => (
+      <header className="platform-navbar">
+        <button
+          type="button"
+          className="platform-brand"
+          onClick={() => setActiveTab("problems")}
+          aria-label="AlgoPath home"
+        >
+          <BrandMark size={30} className="platform-brand-mark" />
+          <span className="platform-brand-name">AlgoPath</span>
+        </button>
+
+        <nav className="platform-navbar-nav" aria-label="Primary">
+          {topNavItems.map(({ id, label }) => (
             <button
               key={id}
               type="button"
-              className={`platform-nav-item ${activeTab === id ? "active" : ""}`}
+              className={`platform-navbar-link ${activeTab === id ? "active" : ""}`}
               onClick={() => setActiveTab(id)}
             >
-              <span className="platform-nav-icon"><Icon size={20} /></span>
-              <span className="platform-nav-label">{label}</span>
+              {label}
             </button>
           ))}
         </nav>
-        <div className="platform-sidebar-bottom">
+
+        <div className="platform-navbar-right">
+          <div className="platform-navbar-search" aria-hidden>
+            <Search size={14} />
+            <span>Search problems…</span>
+            <kbd>⌘K</kbd>
+          </div>
+          <span className="platform-chip platform-chip-streak" title="Current streak">
+            <Flame size={14} fill="currentColor" /> {streakInfo.current}d
+          </span>
           {onOpenAdmin && (
-            <button type="button" className="platform-nav-item" onClick={onOpenAdmin}>
-              <span className="platform-nav-icon"><ShieldCheck size={20} /></span>
-              <span className="platform-nav-label">Admin</span>
+            <button
+              type="button"
+              className="platform-icon-btn"
+              title="Admin"
+              aria-label="Admin"
+              onClick={onOpenAdmin}
+            >
+              <ShieldCheck size={18} />
             </button>
           )}
-          <button type="button" className="platform-nav-item" onClick={() => setActiveTab("profile")}>
-            <span className="platform-nav-icon platform-nav-avatar">
-              {user?.avatar ? (
-                <img src={user.avatar} alt="" />
-              ) : (
-                user?.name?.charAt(0) || "U"
-              )}
-            </span>
-            <span className="platform-nav-label">{user?.name?.split(" ")[0] || "You"}</span>
+          <button
+            type="button"
+            className="platform-avatar-btn"
+            title="Profile"
+            aria-label="Open profile"
+            onClick={() => setActiveTab("profile")}
+          >
+            {user?.avatar ? (
+              <img src={user.avatar} alt="" />
+            ) : (
+              user?.name?.charAt(0) || "U"
+            )}
           </button>
         </div>
-      </aside>
+      </header>
 
-      <div className="platform-main">
-        {activeTab !== "problems" && (
-          <header className="platform-topbar">
-            <span className="platform-topbar-title">
-              {activeTab === "calendar" && "Calendar + Roadmap"}
-              {activeTab === "sessions" && "Study Sessions"}
-              {activeTab === "planner" && "Daily Planner"}
-              {activeTab === "contests" && "Contests"}
-              {activeTab === "discuss" && "Discuss"}
-              {activeTab === "profile" && "Profile & Settings"}
-            </span>
-            <div className="platform-topbar-actions">
-              <span className="platform-chip platform-chip-streak">
-                <Flame size={14} fill="currentColor" /> {streakInfo.current} Day Streak
+      <div className="platform-shell">
+        <aside className="platform-sidebar platform-sidebar-labeled" aria-label="Quick navigation">
+          <nav className="platform-sidebar-nav">
+            {railItems.map(({ id, icon: Icon, label }) => (
+              <button
+                key={id}
+                type="button"
+                title={label}
+                aria-label={label}
+                className={`platform-nav-item ${activeTab === id ? "active" : ""}`}
+                onClick={() => setActiveTab(id)}
+              >
+                <span className="platform-nav-icon"><Icon size={18} /></span>
+              </button>
+            ))}
+          </nav>
+          <div className="platform-sidebar-bottom">
+            <button
+              type="button"
+              className="platform-nav-item"
+              title="Profile"
+              aria-label="Profile"
+              onClick={() => setActiveTab("profile")}
+            >
+              <span className="platform-nav-icon platform-nav-avatar">
+                {user?.avatar ? (
+                  <img src={user.avatar} alt="" />
+                ) : (
+                  user?.name?.charAt(0) || "U"
+                )}
               </span>
-            </div>
-          </header>
-        )}
+            </button>
+          </div>
+        </aside>
 
-        <main className={`platform-content ${activeTab === "problems" ? "platform-content-sheet" : ""}`}>
-          {activeTab === "problems" && (
-            <ProblemsSheet
-              problems={problems}
-              loading={loadingProblems}
-              submissions={userSubmissions}
-              searchQuery={searchQuery}
-              selectedDifficulty={selectedDifficulty}
-              statusFilter={statusFilter}
-              bookmarkedIds={bookmarkedIds}
-              revisionIds={revisionIds}
-              userId={userId}
-              learningRefreshKey={learningRefreshKey}
-              onSearchChange={setSearchQuery}
-              onDifficultyChange={setSelectedDifficulty}
-              onStatusFilterChange={setStatusFilter}
-              onSelectProblem={setSelectedProblem}
-              onRemoveBookmark={handleRemoveBookmark}
-              onRevisionChange={handleRevisionChange}
-              onOpenAdmin={onOpenAdmin}
-              onNavigateLearning={(tab) => setActiveTab(tab)}
-            />
+        <div className="platform-main">
+          {activeTab !== "problems" && (
+            <header className="platform-topbar">
+              <span className="platform-topbar-title">
+                {activeTab === "calendar" && "Calendar + Roadmap"}
+                {activeTab === "sessions" && "Study Sessions"}
+                {activeTab === "planner" && "Daily Planner"}
+                {activeTab === "contests" && "Contests"}
+                {activeTab === "discuss" && "Discuss"}
+                {activeTab === "profile" && "Profile & Settings"}
+              </span>
+              <div className="platform-topbar-actions">
+                <span className="platform-chip platform-chip-streak">
+                  <Flame size={14} fill="currentColor" /> {streakInfo.current} Day Streak
+                </span>
+              </div>
+            </header>
           )}
 
-          {activeTab === "calendar" && (
-            <LearningCalendarRoadmap
-              problems={problems}
-              submissions={userSubmissions}
-              userId={userId}
-              refreshKey={learningRefreshKey}
-              onSelectProblem={setSelectedProblem}
-              onStartSession={(topic) => {
-                startStudySession(userId, topic);
-                handleStartSessionNav(topic);
-              }}
-            />
-          )}
+          <main className={`platform-content ${activeTab === "problems" ? "platform-content-sheet" : ""}`}>
+            {activeTab === "problems" && (
+              <ProblemsSheet
+                problems={problems}
+                loading={loadingProblems}
+                submissions={userSubmissions}
+                searchQuery={searchQuery}
+                selectedDifficulty={selectedDifficulty}
+                statusFilter={statusFilter}
+                bookmarkedIds={bookmarkedIds}
+                revisionIds={revisionIds}
+                userId={userId}
+                userName={user?.name}
+                learningRefreshKey={learningRefreshKey}
+                onSearchChange={setSearchQuery}
+                onDifficultyChange={setSelectedDifficulty}
+                onStatusFilterChange={setStatusFilter}
+                onSelectProblem={setSelectedProblem}
+                onRemoveBookmark={handleRemoveBookmark}
+                onBookmarkChange={handleBookmarkChange}
+                onRevisionChange={handleRevisionChange}
+                onOpenAdmin={onOpenAdmin}
+                onNavigateLearning={(tab) => setActiveTab(tab)}
+                onProgressImported={async () => {
+                  await fetchUserSubmissions();
+                  setLearningRefreshKey((k) => k + 1);
+                }}
+              />
+            )}
 
-          {activeTab === "sessions" && (
-            <StudySessionsPanel
-              userId={userId}
-              problems={problems}
-              topics={roadmapTopics}
-              refreshKey={learningRefreshKey}
-              onSessionChange={bumpLearning}
-              onSelectProblem={setSelectedProblem}
-            />
-          )}
+            {activeTab === "calendar" && (
+              <LearningCalendarRoadmap
+                problems={problems}
+                submissions={userSubmissions}
+                userId={userId}
+                refreshKey={learningRefreshKey}
+                onSelectProblem={setSelectedProblem}
+                onStartSession={(topic) => {
+                  startStudySession(userId, topic);
+                  handleStartSessionNav(topic);
+                }}
+              />
+            )}
 
-          {activeTab === "planner" && (
-            <DailyPlannerPanel
-              userId={userId}
-              problems={problems}
-              submissions={userSubmissions}
-              refreshKey={learningRefreshKey}
-              onSelectProblem={setSelectedProblem}
-              onStartSession={handleStartSessionNav}
-              onPlanChange={bumpLearning}
-            />
-          )}
+            {activeTab === "sessions" && (
+              <StudySessionsPanel
+                userId={userId}
+                problems={problems}
+                topics={roadmapTopics}
+                refreshKey={learningRefreshKey}
+                onSessionChange={bumpLearning}
+                onSelectProblem={setSelectedProblem}
+              />
+            )}
 
-          {activeTab === "contests" && (
-            <div className="placeholder-tab">
-              <Trophy size={40} color="var(--primary)" style={{ marginBottom: 12 }} />
-              <h2>Contests Coming Soon</h2>
-              <p>Weekly coding contests will appear here.</p>
-            </div>
-          )}
+            {activeTab === "planner" && (
+              <DailyPlannerPanel
+                userId={userId}
+                problems={problems}
+                submissions={userSubmissions}
+                refreshKey={learningRefreshKey}
+                onSelectProblem={setSelectedProblem}
+                onStartSession={handleStartSessionNav}
+                onPlanChange={bumpLearning}
+              />
+            )}
 
-          {activeTab === "discuss" && (
-            <div className="placeholder-tab">
-              <MessageSquare size={40} color="var(--primary)" style={{ marginBottom: 12 }} />
-              <h2>Discussion Forum</h2>
-              <p>Share solutions and ask questions with the community.</p>
-            </div>
-          )}
+            {activeTab === "contests" && (
+              <div className="placeholder-tab">
+                <Trophy size={40} color="var(--primary)" style={{ marginBottom: 12 }} />
+                <h2>Contests Coming Soon</h2>
+                <p>Weekly coding contests will appear here.</p>
+              </div>
+            )}
 
-          {activeTab === "profile" && (
-            <ProfilePanel
-              user={user}
-              dashTab={dashTab}
-              onTabChange={handleTabChange}
-              editName={editName}
-              avatarPreview={avatarPreview}
-              profileMsg={profileMsg}
-              updatingProfile={updatingProfile}
-              userSubmissions={userSubmissions}
-              loadingSubmissions={loadingSubmissions}
-              submissionSearch={submissionSearch}
-              submissionStatusFilter={submissionStatusFilter}
-              submissionLangFilter={submissionLangFilter}
-              selectedSubmission={profileSelectedSubmission}
-              deletingSubmissionId={deletingSubmissionId}
-              sessions={sessions}
-              securityLogs={securityLogs}
-              onNameChange={setEditName}
-              onAvatarChange={(e) => {
-                const file = e.target.files?.[0];
-                if (!file) return;
-                const reader = new FileReader();
-                reader.onloadend = () => {
-                  const result = reader.result as string;
-                  setAvatarPreview(result);
-                  setAvatarBase64(result);
-                };
-                reader.readAsDataURL(file);
-              }}
-              onUpdateProfile={handleUpdateProfile}
-              onLoadSubmissions={loadSubmissionsList}
-              onSubmissionSearchChange={setSubmissionSearch}
-              onStatusFilterChange={setSubmissionStatusFilter}
-              onLangFilterChange={setSubmissionLangFilter}
-              onViewSubmission={async (id) => {
-                if (!id) return;
-                try {
-                  const res = await submissionApi.getSubmissionById(id);
-                  if (res?.data) setProfileSelectedSubmission(res.data);
-                } catch { /* ignore */ }
-              }}
-              onDeleteSubmission={async (id) => {
-                if (!id || !window.confirm("Delete submission?")) return;
-                setDeletingSubmissionId(id);
-                try {
-                  await submissionApi.deleteSubmission(id);
-                  setUserSubmissions((p) => p.filter((s) => (s.id || s._id) !== id));
-                } finally {
-                  setDeletingSubmissionId(null);
-                }
-              }}
-              onClearSelectedSubmission={() => setProfileSelectedSubmission(null)}
-              onRevokeSession={async (id) => {
-                await authApi.revokeSession(id);
-                setSessions((p) => p.filter((s) => s.id !== id));
-              }}
-              onLogoutAllSessions={async () => {
-                await authApi.logoutAllSessions();
-                setSessions([]);
-                signout();
-              }}
-              onToggle2FA={async (enable) => {
-                const res = await authApi.toggle2FA(enable);
-                if (user) setUser({ ...user, twoFactorEnabled: enable });
-                setProfileMsg(res.message);
-              }}
-              onChangePassword={async (curr, next) => {
-                await authApi.changePassword({ currentPassword: curr, newPassword: next });
-              }}
-              onSignout={signout}
-            />
-          )}
-        </main>
+            {activeTab === "discuss" && (
+              <div className="placeholder-tab">
+                <MessageSquare size={40} color="var(--primary)" style={{ marginBottom: 12 }} />
+                <h2>Discussion Forum</h2>
+                <p>Share solutions and ask questions with the community.</p>
+              </div>
+            )}
+
+            {activeTab === "profile" && (
+              <ProfilePanel
+                user={user}
+                dashTab={dashTab}
+                onTabChange={handleTabChange}
+                editName={editName}
+                avatarPreview={avatarPreview}
+                profileMsg={profileMsg}
+                updatingProfile={updatingProfile}
+                userSubmissions={userSubmissions}
+                loadingSubmissions={loadingSubmissions}
+                submissionSearch={submissionSearch}
+                submissionStatusFilter={submissionStatusFilter}
+                submissionLangFilter={submissionLangFilter}
+                selectedSubmission={profileSelectedSubmission}
+                deletingSubmissionId={deletingSubmissionId}
+                sessions={sessions}
+                securityLogs={securityLogs}
+                onNameChange={setEditName}
+                onAvatarChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const reader = new FileReader();
+                  reader.onloadend = () => {
+                    const result = reader.result as string;
+                    setAvatarPreview(result);
+                    setAvatarBase64(result);
+                  };
+                  reader.readAsDataURL(file);
+                }}
+                onUpdateProfile={handleUpdateProfile}
+                onLoadSubmissions={loadSubmissionsList}
+                onSubmissionSearchChange={setSubmissionSearch}
+                onStatusFilterChange={setSubmissionStatusFilter}
+                onLangFilterChange={setSubmissionLangFilter}
+                onViewSubmission={async (id) => {
+                  if (!id) return;
+                  try {
+                    const res = await submissionApi.getSubmissionById(id);
+                    if (res?.data) setProfileSelectedSubmission(res.data);
+                  } catch { /* ignore */ }
+                }}
+                onDeleteSubmission={async (id) => {
+                  if (!id || !window.confirm("Delete submission?")) return;
+                  setDeletingSubmissionId(id);
+                  try {
+                    await submissionApi.deleteSubmission(id);
+                    setUserSubmissions((p) => p.filter((s) => (s.id || s._id) !== id));
+                  } finally {
+                    setDeletingSubmissionId(null);
+                  }
+                }}
+                onClearSelectedSubmission={() => setProfileSelectedSubmission(null)}
+                onRevokeSession={async (id) => {
+                  await authApi.revokeSession(id);
+                  setSessions((p) => p.filter((s) => s.id !== id));
+                }}
+                onLogoutAllSessions={async () => {
+                  await authApi.logoutAllSessions();
+                  setSessions([]);
+                  signout();
+                }}
+                onToggle2FA={async (enable) => {
+                  const res = await authApi.toggle2FA(enable);
+                  if (user) setUser({ ...user, twoFactorEnabled: enable });
+                  setProfileMsg(res.message);
+                }}
+                onChangePassword={async (curr, next) => {
+                  await authApi.changePassword({ currentPassword: curr, newPassword: next });
+                }}
+                onSignout={signout}
+                onProgressImported={async () => {
+                  await fetchUserSubmissions();
+                  setLearningRefreshKey((k) => k + 1);
+                }}
+              />
+            )}
+          </main>
+        </div>
       </div>
 
       <ActiveStudySessionBar

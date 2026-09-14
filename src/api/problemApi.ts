@@ -22,6 +22,10 @@ export interface Testcase {
   output?: string;
   expectedOutput?: string;
   isHidden?: boolean;
+  explanation?: string;
+  weight?: number;
+  order?: number;
+  _id?: string;
 }
 
 export interface CodeStub {
@@ -44,13 +48,16 @@ export interface Problem {
   slug: string;
   description: string;
   difficulty: "easy" | "medium" | "hard" | "Easy" | "Medium" | "Hard";
+  status?: "draft" | "published" | "archived";
   category: string;
   tags: string[];
   editorial?: string;
+  hints?: string[];
   examples?: Testcase[];
   constraints?: string;
   starterCode?: Partial<Record<"python" | "javascript" | "cpp" | "java", string>>;
   functionName?: string;
+  className?: string;
   codeStubs?: CodeStub[];
   testcases?: Testcase[];
   resources?: ProblemResource[];

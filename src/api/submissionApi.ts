@@ -30,6 +30,9 @@ export type SubmissionStatus =
 
 export type ProgrammingLanguage = "python" | "javascript" | "cpp" | "java";
 
+/** Run attempts mark Attempted only; submit ACCEPTED marks Solved. */
+export type SubmissionSource = "run" | "submit";
+
 export interface Submission {
   id?: string;
   _id?: string;
@@ -38,6 +41,8 @@ export interface Submission {
   code: string;
   language: ProgrammingLanguage | string;
   status: SubmissionStatus | string;
+  /** Absent/legacy rows are treated as submit. */
+  source?: SubmissionSource | string;
   output?: string;
   error?: string;
   executionTime?: number;
@@ -53,6 +58,14 @@ export interface CreateSubmissionPayload {
   problemId: string;
   code: string;
   language: ProgrammingLanguage | string;
+  source?: SubmissionSource;
+  status?: SubmissionStatus;
+  output?: string;
+  error?: string;
+  executionTime?: number;
+  memory?: number;
+  testCasesPassed?: number;
+  totalTestCases?: number;
 }
 
 export interface UpdateSubmissionPayload {

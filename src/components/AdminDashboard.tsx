@@ -260,12 +260,12 @@ export const AdminDashboard: FC<AdminDashboardProps> = ({ onBackToUserView }) =>
                 boxShadow: "0 2px 10px rgba(99, 102, 241, 0.5)",
               }}
             >
-              aX
+              AP
             </div>
             <div>
               <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
                 <span style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--text-main)", fontFamily: "'Poppins', sans-serif" }}>
-                  algo<span style={{ color: "var(--primary)" }}>X</span> <span style={{ color: "var(--primary-hover)", fontSize: "0.95rem" }}>Admin</span>
+                  Algo<span style={{ color: "var(--primary)" }}>Path</span> <span style={{ color: "var(--primary-hover)", fontSize: "0.95rem" }}>Admin</span>
                 </span>
               </div>
               <div style={{ fontSize: "0.6rem", backgroundColor: "rgba(99, 102, 241, 0.15)", color: "var(--primary-hover)", border: "1px solid rgba(99, 102, 241, 0.3)", borderRadius: "4px", padding: "1px 6px", fontWeight: 500, width: "fit-content", marginTop: "1px" }}>

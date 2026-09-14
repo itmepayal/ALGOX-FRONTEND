@@ -170,11 +170,11 @@ export const TimeTracker: FC<TimeTrackerProps> = memo(function TimeTracker({
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setOpen(false);
     };
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey);
+    document.addEventListener("mousedown", onDown as unknown as EventListener);
+    document.addEventListener("keydown", onKey as unknown as EventListener);
     return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("mousedown", onDown as unknown as EventListener);
+      document.removeEventListener("keydown", onKey as unknown as EventListener);
     };
   }, [open]);
 
@@ -467,7 +467,6 @@ export const TimeTracker: FC<TimeTrackerProps> = memo(function TimeTracker({
                       min={0}
                       max={99}
                       value={timerInputs.hours}
-                      disabled={state.timer.status === "running"}
                       onChange={(e) =>
                         setTimerInputs((p) => ({
                           ...p,
@@ -486,7 +485,6 @@ export const TimeTracker: FC<TimeTrackerProps> = memo(function TimeTracker({
                       min={0}
                       max={59}
                       value={timerInputs.minutes}
-                      disabled={state.timer.status === "running"}
                       onChange={(e) =>
                         setTimerInputs((p) => ({
                           ...p,
@@ -505,7 +503,6 @@ export const TimeTracker: FC<TimeTrackerProps> = memo(function TimeTracker({
                       min={0}
                       max={59}
                       value={timerInputs.seconds}
-                      disabled={state.timer.status === "running"}
                       onChange={(e) =>
                         setTimerInputs((p) => ({
                           ...p,

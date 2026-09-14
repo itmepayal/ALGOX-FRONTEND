@@ -1,0 +1,118 @@
+import { useEffect, useState, type FC } from "react";
+import { adminAuthApi, type AdminUser } from "../../../api/adminAuthApi";
+import { DataTable } from "../shared/DataTable";
+import { StatusBadge } from "../shared/StatusBadge";
+import { PermissionGuard } from "../shared/PermissionGuard";
+
+interface Props {
+  onOpen: (id: string) => void;
+}
+
+export const UserListPage: FC<Props> = ({ onOpen }) => {
+  const [rows, setRows] = useState<AdminUser[]>([]);
+  const [page, setPage] = useState(1);
+  const [meta, setMeta] = useState({ total: 0, totalPages: 1 });
+  const [search, setSearch] = useState("");
+  const [role, setRole] = useState("all");
+  const [status, setStatus] = useState("all");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const load = async () => {
+    try {
+      setLoading(true);
+      setError("");
+      const res = await adminAuthApi.listUsers({
+        page,
+        limit: 20,
+        search: search || undefined,
+        role,
+        status,
+      });
+      setRows(res.data || []);
+      setMeta({
+        total: res.meta?.total || 0,
+        totalPages: res.meta?.totalPages || 1,
+      });
+    } catch (err: any) {
+      setError(err?.response?.data?.message || err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, role, status]);
+
+  return (
+    <PermissionGuard
+      permission="users:view"
+      fallback={<div className="admin-denied">No users permission.</div>}
+    >
+      <p className="admin-page-lead">
+        Review accounts, roles, and account status. Actions respect RBAC.
+      </p>
+      <div className="admin-toolbar">
+        <input
+          placeholder="Search name or email"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && (setPage(1), load())}
+        />
+        <select value={role} onChange={(e) => { setPage(1); setRole(e.target.value); }}>
+          <option value="all">All roles</option>
+          <option value="user">user</option>
+          <option value="moderator">moderator</option>
+          <option value="content_manager">content_manager</option>
+          <option value="admin">admin</option>
+          <option value="super_admin">super_admin</option>
+        </select>
+        <select value={status} onChange={(e) => { setPage(1); setStatus(e.target.value); }}>
+          <option value="all">All statuses</option>
+          <option value="active">active</option>
+          <option value="suspended">suspended</option>
+          <option value="banned">banned</option>
+        </select>
+        <button type="button" className="admin-btn" onClick={() => { setPage(1); load(); }}>
+          Search
+        </button>
+      </div>
+      {error ? <p className="admin-error">{error}</p> : null}
+      <DataTable
+        rows={rows}
+        rowKey={(u) => u.id}
+        loading={loading}
+        page={page}
+        totalPages={meta.totalPages}
+        total={meta.total}
+        onPageChange={setPage}
+        columns={[
+          {
+            key: "name",
+            header: "Name",
+            render: (u) => (
+              <button type="button" className="admin-btn" onClick={() => onOpen(u.id)}>
+                {u.name}
+              </button>
+            ),
+          },
+          { key: "email", header: "Email", render: (u) => u.email },
+          { key: "role", header: "Role", render: (u) => u.role },
+          {
+            key: "status",
+            header: "Status",
+            render: (u) => <StatusBadge status={u.status} />,
+          },
+          {
+            key: "created",
+            header: "Joined",
+            render: (u) =>
+              u.createdAt ? new Date(u.createdAt).toLocaleDateString() : "—",
+          },
+        ]}
+      />
+    </PermissionGuard>
+  );
+};

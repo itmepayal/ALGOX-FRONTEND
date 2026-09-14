@@ -1,5 +1,9 @@
 import { createContext, useContext, useState, useEffect, type ReactNode, type FC } from "react";
 import { authApi, type User } from "../api/authApi";
+import {
+  connectRealtimeSocket,
+  disconnectRealtimeSocket,
+} from "../realtime/socket";
 
 interface AuthContextType {
   user: User | null;
@@ -27,10 +31,12 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
           if (res.data) {
             setUser(res.data as any);
             localStorage.setItem("user", JSON.stringify(res.data));
+            connectRealtimeSocket();
           }
         }
       } catch {
         setUser(null);
+        disconnectRealtimeSocket();
       } finally {
         setLoading(false);
       }
@@ -38,10 +44,19 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
     checkAuthStatus();
   }, []);
 
+  useEffect(() => {
+    if (user && localStorage.getItem("accessToken")) {
+      connectRealtimeSocket();
+    } else {
+      disconnectRealtimeSocket();
+    }
+  }, [user]);
+
   const signin = async (credentials: { email: string; password: string }) => {
     const res = await authApi.signin(credentials);
     if (res.data?.user) {
       setUser(res.data.user);
+      connectRealtimeSocket();
     }
     return res;
   };
@@ -50,12 +65,14 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
     const res = await authApi.signup(userData);
     if (res.data?.user) {
       setUser(res.data.user);
+      connectRealtimeSocket();
     }
     return res;
   };
 
   const signout = async () => {
     await authApi.signout();
+    disconnectRealtimeSocket();
     setUser(null);
   };
 

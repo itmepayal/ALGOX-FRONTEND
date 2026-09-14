@@ -1,0 +1,227 @@
+/* Announcement Center — Admin */
+
+.ann-page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.ann-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 380px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.ann-composer {
+  border: 1px solid var(--admin-border, #1a2332);
+  border-radius: 12px;
+  background: var(--admin-surface, #0c1118);
+  padding: 16px 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  position: sticky;
+  top: 72px;
+}
+
+.ann-composer-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.ann-composer-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  background: rgba(99, 102, 241, 0.14);
+  color: #a5b4fc;
+  border: 1px solid rgba(99, 102, 241, 0.28);
+  flex-shrink: 0;
+}
+
+.ann-composer-head h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 650;
+  color: #f1f5f9;
+  letter-spacing: -0.02em;
+}
+
+.ann-composer-head p {
+  margin: 3px 0 0;
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+.ann-composer .admin-field {
+  margin-bottom: 10px;
+}
+
+.ann-composer .admin-field input,
+.ann-composer .admin-field select,
+.ann-composer .admin-field textarea {
+  background: #0f172a !important;
+  border: 1px solid #1e293b !important;
+  color: #e2e8f0 !important;
+  border-radius: 8px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.ann-composer .admin-field input:focus,
+.ann-composer .admin-field select:focus,
+.ann-composer .admin-field textarea:focus {
+  outline: none;
+  border-color: rgba(99, 102, 241, 0.55) !important;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+}
+
+.ann-composer .admin-field textarea {
+  min-height: 110px;
+  resize: vertical;
+  font-family: inherit;
+  line-height: 1.5;
+}
+
+.ann-composer-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.ann-composer-actions {
+  margin-top: 6px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.ann-list {
+  border: 1px solid var(--admin-border, #1a2332);
+  border-radius: 12px;
+  background: var(--admin-surface, #0c1118);
+  padding: 14px 14px 16px;
+  min-width: 0;
+}
+
+.ann-list-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.ann-list-head h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 650;
+  color: #e2e8f0;
+}
+
+.ann-count {
+  font-size: 0.72rem;
+  color: #64748b;
+  font-variant-numeric: tabular-nums;
+}
+
+.ann-title-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 280px;
+  white-space: normal;
+}
+
+.ann-title-cell strong {
+  font-size: 0.84rem;
+  color: #f1f5f9;
+  font-weight: 600;
+}
+
+.ann-title-cell span {
+  font-size: 0.72rem;
+  color: #64748b;
+  line-height: 1.35;
+}
+
+.ann-type {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  border: 1px solid transparent;
+  background: rgba(148, 163, 184, 0.1);
+  color: #94a3b8;
+}
+
+.ann-type-info {
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.12);
+  border-color: rgba(56, 189, 248, 0.25);
+}
+.ann-type-success {
+  color: #34d399;
+  background: rgba(52, 211, 153, 0.12);
+  border-color: rgba(52, 211, 153, 0.25);
+}
+.ann-type-warning,
+.ann-type-maintenance {
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.12);
+  border-color: rgba(251, 191, 36, 0.25);
+}
+.ann-type-contest {
+  color: #a78bfa;
+  background: rgba(167, 139, 250, 0.12);
+  border-color: rgba(167, 139, 250, 0.25);
+}
+.ann-type-platform_update {
+  color: #a5b4fc;
+  background: rgba(99, 102, 241, 0.14);
+  border-color: rgba(99, 102, 241, 0.3);
+}
+
+.ann-audience {
+  font-size: 0.78rem;
+  color: #94a3b8;
+  text-transform: capitalize;
+}
+
+.ann-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ann-actions .admin-btn {
+  padding: 6px 8px;
+  font-size: 0.75rem;
+}
+
+.ann-list .admin-empty {
+  border: none;
+  background: transparent;
+}
+
+@media (max-width: 960px) {
+  .ann-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .ann-composer {
+    position: static;
+  }
+
+  .ann-composer-row {
+    grid-template-columns: 1fr;
+  }
+}

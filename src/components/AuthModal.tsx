@@ -1,8 +1,8 @@
 import { useState, useEffect, type FC, type FormEvent } from "react";
 import { useAuth } from "../context/AuthContext";
 import { authApi } from "../api/authApi";
+import { BrandMark } from "./BrandLogo";
 import {
-  Code2,
   CheckCircle2,
   AlertCircle,
   Laptop,
@@ -253,15 +253,15 @@ export const AuthModal: FC = () => {
             marginBottom: "16px",
           }}
         >
-          <Code2 size={22} color="var(--primary-hover)" />
+          <BrandMark size={28} />
           <span style={{ fontSize: "1.1rem", fontWeight: 800, color: "var(--text-main)" }}>
-            algo<span style={{ color: "var(--primary)" }}>X</span>
+            Algo<span style={{ color: "var(--primary)" }}>Path</span>
           </span>
         </div>
 
         <h2 style={{ fontSize: "1.35rem", fontWeight: 700, color: "var(--text-main)", letterSpacing: "-0.015em" }}>
           {activeTab === "login" && "Sign In to Your Workspace"}
-          {activeTab === "signup" && "Create algoX Account"}
+          {activeTab === "signup" && "Create AlgoPath Account"}
           {activeTab === "2fa" && "Two-Factor Verification"}
           {activeTab === "forgot_request" && "Reset Password"}
           {activeTab === "forgot_confirm" && "Set New Password"}
@@ -486,7 +486,7 @@ export const AuthModal: FC = () => {
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", marginTop: "18px", color: "var(--text-muted)", fontSize: "0.75rem", fontFamily: "'Poppins', sans-serif" }}>
         <ShieldCheck size={14} color="var(--primary)" />
-        <span>Protected by algoX Security & 256-bit JWT Encryption</span>
+        <span>Protected by AlgoPath Security & 256-bit JWT Encryption</span>
       </div>
     </div>
   );

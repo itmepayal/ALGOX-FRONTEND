@@ -43,7 +43,6 @@ function startOfWeek(d: Date): Date {
 
 function inFilter(session: StudySession, filter: SessionFilter): boolean {
   const t = session.endedAt || session.startedAt;
-  const now = Date.now();
   if (filter === "all") return true;
   if (filter === "today") return toDateKey(new Date(t)) === toDateKey(new Date());
   if (filter === "week") return t >= startOfWeek(new Date()).getTime();

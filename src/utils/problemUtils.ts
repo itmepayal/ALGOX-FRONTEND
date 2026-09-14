@@ -9,10 +9,69 @@ export function normalizeDifficulty(d?: string): Difficulty {
   return "easy";
 }
 
+/** True only for official submit ACCEPTED — Run ACCEPTED never counts as Solved. */
+export function isOfficialAccept(s: Submission): boolean {
+  if (s.status !== "ACCEPTED") return false;
+  return s.source !== "run";
+}
+
+function submissionEffectiveTime(s: Submission): number {
+  const raw = s.updatedAt || s.createdAt;
+  if (!raw) return 0;
+  const t = new Date(raw).getTime();
+  return Number.isFinite(t) ? t : 0;
+}
+
+/**
+ * Submissions that count toward a specific DSA sheet.
+ * When `resetAt` is set, only official accepts at/after that boundary count —
+ * older ACCEPTED submissions still exist globally but do not complete the sheet.
+ */
+export function sheetCountingSubmissions(
+  submissions: Submission[],
+  resetAt?: string | null
+): Submission[] {
+  if (!resetAt) {
+    return submissions.filter(isOfficialAccept);
+  }
+  const boundary = new Date(resetAt).getTime();
+  if (!Number.isFinite(boundary)) {
+    return submissions.filter(isOfficialAccept);
+  }
+  return submissions.filter(
+    (s) => isOfficialAccept(s) && submissionEffectiveTime(s) >= boundary
+  );
+}
+
 export function isSolved(problemId: string | undefined, submissions: Submission[]): boolean {
   if (!problemId) return false;
   return submissions.some(
-    (s) => (s.problemId === problemId || s.problemId?.toString() === problemId) && s.status === "ACCEPTED"
+    (s) =>
+      (s.problemId === problemId || s.problemId?.toString() === problemId) &&
+      isOfficialAccept(s)
+  );
+}
+
+/** Sheet-scoped completion (respects reset boundary). Global solved uses `isSolved`. */
+export function isSheetCompleted(
+  problemId: string | undefined,
+  submissions: Submission[],
+  resetAt?: string | null
+): boolean {
+  if (!problemId) return false;
+  return sheetCountingSubmissions(submissions, resetAt).some(
+    (s) => s.problemId === problemId || s.problemId?.toString() === problemId
+  );
+}
+
+/** Any Run or Submit record for this problem (Attempted). */
+export function hasAttempted(
+  problemId: string | undefined,
+  submissions: Submission[]
+): boolean {
+  if (!problemId) return false;
+  return submissions.some(
+    (s) => s.problemId === problemId || s.problemId?.toString() === problemId
   );
 }
 
@@ -25,12 +84,22 @@ export function groupByCategory(problems: Problem[]): Record<string, Problem[]> 
   }, {});
 }
 
-export function computeProgress(problems: Problem[], submissions: Submission[]) {
+export function computeProgress(
+  problems: Problem[],
+  submissions: Submission[],
+  resetAt?: string | null
+) {
   const solvedIds = new Set(
-    submissions.filter((s) => s.status === "ACCEPTED").map((s) => s.problemId?.toString())
+    sheetCountingSubmissions(submissions, resetAt).map((s) =>
+      s.problemId?.toString()
+    )
   );
 
-  const byDiff = { easy: { total: 0, solved: 0 }, medium: { total: 0, solved: 0 }, hard: { total: 0, solved: 0 } };
+  const byDiff = {
+    easy: { total: 0, solved: 0 },
+    medium: { total: 0, solved: 0 },
+    hard: { total: 0, solved: 0 },
+  };
 
   for (const p of problems) {
     const d = normalizeDifficulty(p.difficulty);
@@ -40,7 +109,9 @@ export function computeProgress(problems: Problem[], submissions: Submission[]) 
   }
 
   const total = problems.length;
-  const solved = [...solvedIds].filter((id) => problems.some((p) => (p.id || p._id)?.toString() === id)).length;
+  const solved = [...solvedIds].filter((id) =>
+    problems.some((p) => (p.id || p._id)?.toString() === id)
+  ).length;
   const pct = total ? Math.round((solved / total) * 100) : 0;
 
   return { total, solved, pct, byDiff };
@@ -149,3 +220,58 @@ export function formatJudgeInput(input: unknown): string {
 
   return String(input);
 }
+
+/** Type/JSON-aware judge comparison (matches EvaluationService). */
+export function outputsMatch(actual: string, expected: string): boolean {
+  const strip = (s: string) =>
+    s
+      .replace(/\r\n/g, "\n")
+      .replace(/\r/g, "\n")
+      .trim()
+      .split("\n")
+      .map((l) => l.trimEnd())
+      .join("\n");
+
+  const a = strip(actual ?? "");
+  const e = strip(expected ?? "");
+  if (a === e) return true;
+  if (a.replace(/\s+/g, "") === e.replace(/\s+/g, "")) return true;
+
+  const tryParse = (s: string): unknown => {
+    const t = s.trim();
+    if (!t) return undefined;
+    try {
+      return JSON.parse(
+        t
+          .replace(/\bTrue\b/g, "true")
+          .replace(/\bFalse\b/g, "false")
+          .replace(/\bNone\b/g, "null")
+      );
+    } catch {
+      if (/^-?\d+(\.\d+)?$/.test(t)) return Number(t);
+      if (t === "true" || t === "True") return true;
+      if (t === "false" || t === "False") return false;
+      return undefined;
+    }
+  };
+
+  const deepEqual = (x: unknown, y: unknown): boolean => {
+    if (Object.is(x, y)) return true;
+    if (typeof x === "number" && typeof y === "number") {
+      return Math.abs(x - y) < 1e-6;
+    }
+    if (Array.isArray(x) && Array.isArray(y)) {
+      return x.length === y.length && x.every((v, i) => deepEqual(v, y[i]));
+    }
+    if (typeof x === "boolean" || typeof y === "boolean") {
+      return String(x).toLowerCase() === String(y).toLowerCase();
+    }
+    return String(x) === String(y);
+  };
+
+  const pa = tryParse(a);
+  const pe = tryParse(e);
+  if (pa !== undefined && pe !== undefined) return deepEqual(pa, pe);
+  return false;
+}
+
