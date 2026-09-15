@@ -1,4 +1,5 @@
 import { useEffect, useState, type FC } from "react";
+import { ScrollText } from "lucide-react";
 import { adminAuthApi, type AuditLog } from "../../../api/adminAuthApi";
 import { DataTable } from "../shared/DataTable";
 import { PermissionGuard } from "../shared/PermissionGuard";
@@ -63,6 +64,9 @@ export const AuditLogPage: FC = () => {
         totalPages={meta.totalPages}
         total={meta.total}
         onPageChange={setPage}
+        emptyTitle="No audit logs found"
+        emptyDescription="Admin actions will appear here as an immutable trail."
+        emptyIcon={<ScrollText size={18} strokeWidth={1.75} />}
         columns={[
           {
             key: "time",

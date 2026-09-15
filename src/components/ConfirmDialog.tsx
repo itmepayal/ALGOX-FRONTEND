@@ -7,6 +7,8 @@ import {
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from "react";
+import { cn } from "../lib/cn";
+import { Button } from "./ui/button";
 
 export interface ConfirmDialogProps {
   open: boolean;
@@ -25,8 +27,7 @@ export interface ConfirmDialogProps {
 }
 
 /**
- * Accessible confirmation dialog matching the platform note-modal pattern
- * (overlay + card, Escape / backdrop dismiss, Cancel as safe default).
+ * Accessible confirmation dialog (overlay + card, Escape / backdrop dismiss).
  */
 export const ConfirmDialog: FC<ConfirmDialogProps> = ({
   open,
@@ -74,7 +75,7 @@ export const ConfirmDialog: FC<ConfirmDialogProps> = ({
   const onPanelKeyDown = (e: ReactKeyboardEvent) => {
     if (e.key !== "Tab" || !panelRef.current) return;
     const focusable = panelRef.current.querySelectorAll<HTMLElement>(
-      'button:not([disabled]), [href], input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      'button:not([disabled]), [href], input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
     );
     if (focusable.length === 0) return;
     const first = focusable[0];
@@ -90,13 +91,16 @@ export const ConfirmDialog: FC<ConfirmDialogProps> = ({
 
   return (
     <div
-      className="lc-confirm-overlay"
+      className="fixed inset-0 z-[200] grid place-items-center bg-black/70 p-4 backdrop-blur-sm"
       role="presentation"
       onClick={onOverlayClick}
     >
       <div
         ref={panelRef}
-        className="lc-confirm-modal"
+        className={cn(
+          "w-full max-w-md rounded-xl border border-danger/20 bg-card p-6 shadow-lg",
+          "font-primary text-foreground",
+        )}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
@@ -104,38 +108,36 @@ export const ConfirmDialog: FC<ConfirmDialogProps> = ({
         onClick={(e) => e.stopPropagation()}
         onKeyDown={onPanelKeyDown}
       >
-        <h3 id={titleId} className="lc-confirm-title">
+        <h3 id={titleId} className="text-lg font-semibold tracking-tight">
           {title}
         </h3>
-        <div id={descId} className="lc-confirm-desc">
+        <div id={descId} className="mt-2 space-y-2 text-sm text-muted-foreground">
           {typeof description === "string" ? <p>{description}</p> : description}
           {warning ? (
-            <p className="lc-confirm-warning" role="note">
+            <p className="font-medium text-danger" role="note">
               {warning}
             </p>
           ) : null}
         </div>
-        <div className="lc-confirm-actions">
-          <button
+        <div className="mt-6 flex justify-end gap-2">
+          <Button
             ref={cancelRef}
             type="button"
-            className="lc-confirm-btn lc-confirm-cancel"
+            variant="secondary"
             onClick={onCancel}
             disabled={confirming}
           >
             {cancelLabel}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
-            className={`lc-confirm-btn lc-confirm-confirm ${
-              confirmVariant === "danger" ? "danger" : "primary"
-            }`}
+            variant={confirmVariant === "danger" ? "destructive" : "primary"}
             onClick={onConfirm}
             disabled={confirming}
             aria-busy={confirming}
           >
             {confirming ? confirmingLabel : confirmLabel}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

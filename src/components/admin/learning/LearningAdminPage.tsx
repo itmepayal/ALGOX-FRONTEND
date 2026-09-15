@@ -1,9 +1,14 @@
 import { useCallback, useMemo, type FC } from "react";
+import { AlertCircle, BookMarked, Layers, RotateCcw, Tags, TrendingUp } from "lucide-react";
 import { PermissionGuard } from "../shared/PermissionGuard";
 import { StatsCard } from "../shared/StatsCard";
-import { ModuleGate } from "../shared/ModuleGate";
 import { adminProblemApi } from "../../../api/adminProblemApi";
 import { adminSheetApi, type AdminSheet } from "../../../api/adminSheetApi";
+import {
+  adminLearningApi,
+  type RevisionSummary,
+  type WeakTopicRow,
+} from "../../../api/adminLearningApi";
 import { useEffect, useState } from "react";
 import { DataTable } from "../shared/DataTable";
 import { StatusBadge } from "../shared/StatusBadge";
@@ -24,22 +29,10 @@ export const LearningAdminPage: FC<{ mode: LearningMode }> = ({ mode }) => {
   }
 
   if (mode === "revision") {
-    return (
-      <ModuleGate
-        title="Revision admin"
-        description="Revision lists are per-user (ProblemRevision). Aggregate weak-topic admin views will query ProblemService engagement aggregates."
-        status="backend"
-      />
-    );
+    return <RevisionAdmin />;
   }
 
-  return (
-    <ModuleGate
-      title="Platform learning progress"
-      description="Cross-user sheet progress analytics will aggregate UserSheetProgress + UserProblemProgress. Sheet reset and import already exist on the product side."
-      status="backend"
-    />
-  );
+  return <LearningProgressAdmin />;
 };
 
 const SheetsCrudAdmin: FC = () => {
@@ -91,7 +84,9 @@ const SheetsCrudAdmin: FC = () => {
       {error ? <p className="admin-error">{error}</p> : null}
       <DataTable
         loading={loading}
-        emptyTitle="No sheets in DB yet — sync from catalog."
+        emptyTitle="No sheets yet"
+        emptyDescription="Sync from catalog to load practice sheets into the database."
+        emptyIcon={<BookMarked size={18} strokeWidth={1.75} />}
         columns={[
           { key: "id", header: "Sheet ID", render: (r) => r.sheetId },
           { key: "title", header: "Title", render: (r) => r.title },
@@ -198,7 +193,9 @@ const TopicsFromProblems: FC = () => {
     <PermissionGuard permission="problems:view">
       <DataTable
         loading={loading}
-        emptyTitle="No topics found on problems."
+        emptyTitle="No topics found"
+        emptyDescription="Topics and tags appear once problems are categorized."
+        emptyIcon={<Tags size={18} strokeWidth={1.75} />}
         columns={[
           { key: "name", header: "Topic / Tag", render: (r) => r.name },
           { key: "count", header: "Problems", render: (r) => r.count },
@@ -240,6 +237,188 @@ const DifficultyInsights: FC = () => {
   return (
     <PermissionGuard permission="analytics:view">
       <div className="admin-stats-grid">{cards}</div>
+    </PermissionGuard>
+  );
+};
+
+const RevisionAdmin: FC = () => {
+  const [summary, setSummary] = useState<RevisionSummary | null>(null);
+  const [weak, setWeak] = useState<WeakTopicRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setLoading(true);
+        const [rev, weakRes] = await Promise.all([
+          adminLearningApi.revisionSummary({ limit: 40 }),
+          adminLearningApi.weakTopics(),
+        ]);
+        if (!cancelled) {
+          setSummary(rev.data ?? null);
+          setWeak(Array.isArray(weakRes.data) ? weakRes.data : []);
+          setError("");
+        }
+      } catch (err: any) {
+        if (!cancelled) {
+          setError(
+            err?.response?.data?.message ||
+              "Learning APIs unavailable — start ProblemService"
+          );
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return (
+    <PermissionGuard permission="problems:view">
+      {error ? <p className="admin-error">{error}</p> : null}
+      <div className="admin-stats-grid" style={{ marginBottom: 16 }}>
+        <StatsCard
+          label="Total revisions"
+          value={summary?.totalRevisions ?? "—"}
+        />
+        <StatsCard
+          label="Users with revision"
+          value={summary?.usersWithRevision ?? "—"}
+        />
+      </div>
+      <h3>Top revision problems</h3>
+      <DataTable
+        loading={loading}
+        emptyTitle="No revision data yet"
+        emptyDescription="Top revision problems will appear as users mark items for review."
+        emptyIcon={<RotateCcw size={18} strokeWidth={1.75} />}
+        columns={[
+          { key: "title", header: "Problem", render: (r) => r.title },
+          { key: "diff", header: "Difficulty", render: (r) => r.difficulty },
+          {
+            key: "count",
+            header: "Revision count",
+            render: (r) => r.revisionCount,
+          },
+        ]}
+        rows={summary?.topProblems || []}
+        rowKey={(r) => r.problemId}
+      />
+      <h3 style={{ marginTop: 20 }}>Weak topics</h3>
+      <DataTable
+        loading={loading}
+        emptyTitle="No weak topics yet"
+        emptyDescription="Topics need at least 5 attempts with under 40% solve rate."
+        emptyIcon={<AlertCircle size={18} strokeWidth={1.75} />}
+        columns={[
+          { key: "topic", header: "Topic", render: (r) => r.topic },
+          { key: "att", header: "Attempted", render: (r) => r.attempted },
+          { key: "sol", header: "Solved", render: (r) => r.solved },
+          { key: "rate", header: "Solve %", render: (r) => r.solveRate },
+          {
+            key: "rev",
+            header: "Revision hints",
+            render: (r) => r.revisionHints,
+          },
+        ]}
+        rows={weak}
+        rowKey={(r) => r.topic}
+      />
+    </PermissionGuard>
+  );
+};
+
+const LearningProgressAdmin: FC = () => {
+  const [sheets, setSheets] = useState<any[]>([]);
+  const [topics, setTopics] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setLoading(true);
+        const [sheetRes, topicRes] = await Promise.all([
+          adminLearningApi.sheetProgress(),
+          adminLearningApi.topicEngagement(),
+        ]);
+        if (!cancelled) {
+          setSheets(sheetRes.data || []);
+          setTopics(topicRes.data || []);
+          setError("");
+        }
+      } catch (err: any) {
+        if (!cancelled) {
+          setError(
+            err?.response?.data?.message ||
+              "Learning progress APIs unavailable"
+          );
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return (
+    <PermissionGuard permission="analytics:view">
+      {error ? <p className="admin-error">{error}</p> : null}
+      <h3>Sheet progress</h3>
+      <DataTable
+        loading={loading}
+        emptyTitle="No sheet progress yet"
+        emptyDescription="Progress appears once users start working through sheets."
+        emptyIcon={<Layers size={18} strokeWidth={1.75} />}
+        columns={[
+          { key: "title", header: "Sheet", render: (r) => r.title },
+          { key: "users", header: "Users", render: (r) => r.usersWithProgress },
+          {
+            key: "avg",
+            header: "Avg completed",
+            render: (r) => r.avgCompleted,
+          },
+          {
+            key: "pct",
+            header: "Completion %",
+            render: (r) => `${r.completionPct}%`,
+          },
+          {
+            key: "status",
+            header: "Status",
+            render: (r) => <StatusBadge status={r.status} />,
+          },
+        ]}
+        rows={sheets}
+        rowKey={(r) => r.sheetId}
+      />
+      <h3 style={{ marginTop: 20 }}>Topic engagement</h3>
+      <DataTable
+        loading={loading}
+        emptyTitle="No topic engagement yet"
+        emptyDescription="Engagement stats populate as users attempt tagged problems."
+        emptyIcon={<TrendingUp size={18} strokeWidth={1.75} />}
+        columns={[
+          { key: "topic", header: "Topic", render: (r) => r.topic },
+          {
+            key: "problems",
+            header: "Problems",
+            render: (r) => r.problemCount,
+          },
+          { key: "att", header: "Attempted", render: (r) => r.attempted },
+          { key: "sol", header: "Solved", render: (r) => r.solved },
+          { key: "rate", header: "Solve %", render: (r) => r.solveRate },
+        ]}
+        rows={topics}
+        rowKey={(r) => r.topic}
+      />
     </PermissionGuard>
   );
 };

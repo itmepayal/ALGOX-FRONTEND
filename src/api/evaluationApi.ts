@@ -9,6 +9,12 @@ export const evaluationClient = axios.create({
   },
 });
 
+evaluationClient.interceptors.request.use((config) => {
+  const token = localStorage.getItem("accessToken");
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
+
 export interface RunCodePayload {
   code: string;
   language: string;

@@ -10,6 +10,8 @@ export interface User {
   status?: "active" | "suspended" | "banned";
   isEmailVerified?: boolean;
   twoFactorEnabled?: boolean;
+  /** Live permissions from GET /auth/admin/me/permissions when available. */
+  permissions?: string[];
 }
 
 export interface AuthResponse {
@@ -141,5 +143,43 @@ export const authApi = {
       localStorage.removeItem("accessToken");
       localStorage.removeItem("user");
     }
+  },
+
+  listNotifications: async (params?: {
+    page?: number;
+    limit?: number;
+    read?: string;
+    type?: string;
+  }) => {
+    const response = await authClient.get<AuthResponse>("/auth/notifications", {
+      params,
+    });
+    return response.data;
+  },
+
+  unreadNotificationCount: async () => {
+    const response = await authClient.get<AuthResponse>(
+      "/auth/notifications/unread-count"
+    );
+    return response.data;
+  },
+
+  markNotificationRead: async (id: string) => {
+    const response = await authClient.post<AuthResponse>(
+      `/auth/notifications/${id}/read`
+    );
+    return response.data;
+  },
+
+  markAllNotificationsRead: async () => {
+    const response = await authClient.post<AuthResponse>(
+      "/auth/notifications/read-all"
+    );
+    return response.data;
+  },
+
+  listAnnouncements: async () => {
+    const response = await authClient.get<AuthResponse>("/auth/announcements");
+    return response.data;
   },
 };

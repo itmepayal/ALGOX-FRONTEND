@@ -9,6 +9,8 @@ export interface AdminUser {
   status: "active" | "suspended" | "banned";
   isEmailVerified?: boolean;
   twoFactorEnabled?: boolean;
+  mustChangePassword?: boolean;
+  deletedAt?: string | null;
   lastActiveAt?: string;
   createdAt?: string;
   updatedAt?: string;
@@ -35,9 +37,87 @@ export interface PageMeta {
   totalPages: number;
 }
 
+export interface UserActivityItem {
+  id: string;
+  type: string;
+  action: string;
+  detail?: string;
+  ip?: string;
+  createdAt: string;
+}
+
+export interface UserProgress {
+  userId: string;
+  submissionCount: number;
+  acceptedCount: number;
+  acceptanceRate: number;
+  problemsAttempted: number;
+  problemsSolved: number;
+  easySolved: number | null;
+  mediumSolved: number | null;
+  hardSolved: number | null;
+  byLanguage: Record<string, number>;
+  recentSolved: Array<{
+    id: string;
+    problemId: string;
+    language?: string;
+    createdAt?: string;
+  }>;
+  recentSubmissions: Array<{
+    id: string;
+    problemId: string;
+    status: string;
+    language?: string;
+    createdAt?: string;
+  }>;
+}
+
+export interface UserSession {
+  id: string;
+  ip?: string | null;
+  userAgent?: string | null;
+  createdAt?: string;
+  expiresAt?: string;
+  expired: boolean;
+}
+
 export const adminAuthApi = {
   getMyPermissions: async () => {
     const res = await authClient.get("/auth/admin/me/permissions");
+    return res.data as {
+      success: boolean;
+      data: { role: string; permissions: string[] };
+    };
+  },
+
+  getRoleMatrix: async () => {
+    const res = await authClient.get("/auth/admin/roles/matrix");
+    return res.data as {
+      success: boolean;
+      data: {
+        permissions: string[];
+        matrix: Record<string, string[]>;
+        overrides: Array<{
+          role: string;
+          updatedBy?: string;
+          updatedAt?: string;
+        }>;
+      };
+    };
+  },
+
+  updateRolePermissions: async (role: string, permissions: string[]) => {
+    const res = await authClient.put(`/auth/admin/roles/${role}/permissions`, {
+      permissions,
+    });
+    return res.data as {
+      success: boolean;
+      data: { role: string; permissions: string[] };
+    };
+  },
+
+  resetRolePermissions: async (role: string) => {
+    const res = await authClient.post(`/auth/admin/roles/${role}/reset`);
     return res.data as {
       success: boolean;
       data: { role: string; permissions: string[] };
@@ -58,6 +138,71 @@ export const adminAuthApi = {
   getUser: async (id: string) => {
     const res = await authClient.get(`/auth/admin/users/${id}`);
     return res.data as { success: boolean; data: AdminUser };
+  },
+
+  createUser: async (payload: {
+    name: string;
+    email: string;
+    password?: string;
+    role?: string;
+    status?: string;
+  }) => {
+    const res = await authClient.post("/auth/admin/users", payload);
+    return res.data as {
+      success: boolean;
+      data: { user: AdminUser; temporaryPassword?: string };
+    };
+  },
+
+  deleteUser: async (id: string) => {
+    const res = await authClient.delete(`/auth/admin/users/${id}`);
+    return res.data as { success: boolean; data: AdminUser };
+  },
+
+  resetPassword: async (id: string, temporaryPassword?: string) => {
+    const res = await authClient.post(`/auth/admin/users/${id}/reset-password`, {
+      temporaryPassword,
+    });
+    return res.data as {
+      success: boolean;
+      data: { user: AdminUser; temporaryPassword: string };
+    };
+  },
+
+  getUserActivity: async (
+    id: string,
+    params?: { page?: number; limit?: number }
+  ) => {
+    const res = await authClient.get(`/auth/admin/users/${id}/activity`, {
+      params,
+    });
+    return res.data as {
+      success: boolean;
+      data: UserActivityItem[];
+      meta: PageMeta;
+    };
+  },
+
+  getUserProgress: async (id: string) => {
+    const res = await authClient.get(`/auth/admin/users/${id}/progress`);
+    return res.data as { success: boolean; data: UserProgress };
+  },
+
+  listUserSessions: async (id: string) => {
+    const res = await authClient.get(`/auth/admin/users/${id}/sessions`);
+    return res.data as { success: boolean; data: UserSession[] };
+  },
+
+  revokeUserSession: async (id: string, sessionId: string) => {
+    const res = await authClient.delete(
+      `/auth/admin/users/${id}/sessions/${sessionId}`
+    );
+    return res.data as { success: boolean };
+  },
+
+  revokeAllUserSessions: async (id: string) => {
+    const res = await authClient.delete(`/auth/admin/users/${id}/sessions`);
+    return res.data as { success: boolean };
   },
 
   updateRole: async (id: string, role: string) => {

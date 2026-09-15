@@ -8,18 +8,22 @@ export interface EngagementState {
   likeCount: number;
   dislikeCount: number;
   bookmarkCount?: number;
+  favouriteCount?: number;
   currentUserReaction: UserReaction;
   isBookmarked: boolean;
+  isFavourite?: boolean;
   isRevision?: boolean;
 }
 
-/** Bookmark mutations must never be used to update revision UI state. */
+/** Bookmark / favourite mutations must never be used to update revision UI state. */
 export interface BookmarkMutationResult {
   isBookmarked: boolean;
-  bookmarkCount?: number;
-  likeCount?: number;
-  dislikeCount?: number;
-  currentUserReaction?: UserReaction;
+  isFavourite?: boolean;
+  bookmarkCount: number;
+  favouriteCount?: number;
+  likeCount: number;
+  dislikeCount: number;
+  currentUserReaction: UserReaction;
 }
 
 /** Revision mutations must never be used to update bookmark UI state. */
@@ -27,10 +31,79 @@ export interface RevisionMutationResult {
   isRevision: boolean;
 }
 
+export type FavouriteSolvedFilter = "all" | "solved" | "attempted" | "unsolved";
+export type FavouriteAccessFilter = "all" | "free" | "premium";
+export type FavouriteSort =
+  | "recent"
+  | "oldest"
+  | "title_asc"
+  | "title_desc"
+  | "difficulty";
+
+export interface FavouriteListQuery {
+  page?: number;
+  limit?: number;
+  search?: string;
+  difficulty?: string;
+  category?: string;
+  solved?: FavouriteSolvedFilter;
+  accessType?: FavouriteAccessFilter;
+  sort?: FavouriteSort;
+  /** Force paged envelope even with defaults. */
+  paginated?: boolean;
+}
+
+export interface FavouriteProblem extends Problem {
+  isFavourite?: boolean;
+  isPremium?: boolean;
+  favouritedAt?: string | null;
+  progressStatus?: "NOT_STARTED" | "ATTEMPTED" | "SOLVED";
+  solvedStatus?: "solved" | "attempted" | "unsolved";
+}
+
+export interface FavouriteStats {
+  total: number;
+  solved: number;
+  unsolved: number;
+  attempted: number;
+  easy: number;
+  medium: number;
+  hard: number;
+}
+
+export interface FavouriteListResult {
+  items: FavouriteProblem[];
+  stats: FavouriteStats;
+  filters: { categories: string[] };
+}
+
+export interface FavouriteAnalytics {
+  mostFavourited: Array<{
+    id: string;
+    title: string;
+    slug: string;
+    difficulty: string;
+    category: string;
+    favouriteCount: number;
+    isPremium: boolean;
+  }>;
+  trends: Array<{ date: string; count: number }>;
+  freeFavourites: number;
+  premiumFavourites: number;
+  mostFavouritedFree: FavouriteAnalytics["mostFavourited"];
+  mostFavouritedPremium: FavouriteAnalytics["mostFavourited"];
+}
+
 export interface ApiResponse<T> {
   success: boolean;
   message: string;
   data: T;
+  meta?: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  };
 }
 
 const engagementClient = axios.create({
@@ -90,9 +163,56 @@ export const engagementApi = {
     return res.data;
   },
 
+  /** Toggle favourite (alias of bookmark toggle). */
+  toggleFavourite: async (problemId: string) => {
+    const res = await engagementClient.post<ApiResponse<BookmarkMutationResult>>(
+      `/problems/${problemId}/favourite`
+    );
+    return res.data;
+  },
+
+  /** Flat list — backward compatible with Dashboard sheet sync. */
   listMyBookmarks: async () => {
     const res = await engagementClient.get<ApiResponse<Problem[]>>(
       `/problems/bookmarks/me`
+    );
+    return res.data;
+  },
+
+  /** Paginated favourites with stats + filters (server-side). */
+  listMyFavourites: async (query?: FavouriteListQuery) => {
+    const res = await engagementClient.get<ApiResponse<FavouriteListResult>>(
+      `/problems/favourites/me`,
+      {
+        params: {
+          paginated: true,
+          page: query?.page ?? 1,
+          limit: query?.limit ?? 20,
+          search: query?.search || undefined,
+          difficulty:
+            query?.difficulty && query.difficulty !== "all"
+              ? query.difficulty
+              : undefined,
+          category:
+            query?.category && query.category !== "all"
+              ? query.category
+              : undefined,
+          solved:
+            query?.solved && query.solved !== "all" ? query.solved : undefined,
+          accessType:
+            query?.accessType && query.accessType !== "all"
+              ? query.accessType
+              : undefined,
+          sort: query?.sort || "recent",
+        },
+      }
+    );
+    return res.data;
+  },
+
+  getFavouriteAnalytics: async () => {
+    const res = await engagementClient.get<ApiResponse<FavouriteAnalytics>>(
+      `/problems/admin/favourite-analytics`
     );
     return res.data;
   },

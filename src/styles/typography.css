@@ -1,0 +1,79 @@
+/**
+ * AlgoPath typography application layer
+ * Loaded last so semantic roles win over legacy font-family declarations.
+ *
+ * Poppins (--font-primary)     → UI / body / navigation
+ * Saira   (--font-technical)   → metrics / timers / ranks / counts
+ * Fira    (--font-mono)        → actual source code only
+ */
+
+/* ── Technical metrics (Saira) ── */
+.lc-stat-value,
+.lc-result-stats,
+.lc-sub-status,
+.lc-status-tag,
+.lc-timer-display,
+.lc-timer-pill,
+.lc-time-big,
+.lc-timer-sep,
+.lc-timer-inputs input,
+.diff-badge,
+.sheet-category-fraction,
+.sheet-problem-num,
+.platform-chip-streak,
+.learn-session-timer,
+.learn-session-bar-time,
+.learn-stat-pills span,
+.admin-kpi-value,
+.admin-metric-value,
+.admin-stat-card .value,
+.admin-rank,
+.admin-updated,
+.ax-topic-count,
+.ax-ring-inner strong,
+.ax-progress-legend b,
+.ax-rail-legend b,
+.ax-rail-streak,
+.profile-email {
+  font-family: var(--font-technical);
+  font-variant-numeric: tabular-nums;
+}
+
+.lc-workspace .lc-stat-value {
+  font-family: var(--font-technical);
+  font-weight: 600;
+}
+
+.lc-workspace .lc-stat-label {
+  font-family: var(--font-primary);
+  font-weight: 500;
+}
+
+.diff-badge,
+.lc-workspace .lc-status-tag,
+.lc-workspace .lc-sub-status {
+  font-family: var(--font-technical);
+  font-weight: 600;
+}
+
+/* ── Source code stays monospace ── */
+code,
+pre,
+kbd,
+samp,
+.lc-inline-code,
+.lc-example-body,
+.lc-line-num,
+.lc-code-textarea,
+.lc-compiler-body,
+.lc-workspace .lc-inline-code,
+.lc-workspace .lc-description-container code,
+.lc-workspace .lc-compiler-body,
+.monaco-editor,
+.cm-editor {
+  font-family: var(--font-mono);
+}
+
+.lc-confirm-modal {
+  font-family: var(--font-primary);
+}

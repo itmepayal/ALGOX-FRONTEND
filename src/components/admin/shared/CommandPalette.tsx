@@ -4,7 +4,7 @@ import { adminProblemApi } from "../../../api/adminProblemApi";
 import { adminAuthApi } from "../../../api/adminAuthApi";
 import { adminSubmissionApi } from "../../../api/adminSubmissionApi";
 import type { AdminTab } from "../adminNav";
-import { ADMIN_NAV, ADMIN_TITLE } from "../adminNav";
+import { ADMIN_NAV, ADMIN_SECONDARY_NAV, ADMIN_TITLE } from "../adminNav";
 
 interface CommandPaletteProps {
   open: boolean;
@@ -45,6 +45,7 @@ export const CommandPalette: FC<CommandPaletteProps> = ({
           id: `nav-${g.tab}`,
           group: "Navigation",
           title: g.label,
+          subtitle: g.section,
           tab: g.tab,
           icon: "nav",
         });
@@ -63,7 +64,22 @@ export const CommandPalette: FC<CommandPaletteProps> = ({
         }
       }
     }
-    return out.slice(0, 8);
+    for (const leaf of ADMIN_SECONDARY_NAV) {
+      if (leaf.permission && !canView(leaf.permission)) continue;
+      if (
+        leaf.label.toLowerCase().includes(query) ||
+        leaf.id.toLowerCase().includes(query)
+      ) {
+        out.push({
+          id: `nav-sec-${leaf.id}`,
+          group: "More",
+          title: leaf.label,
+          tab: leaf.id,
+          icon: "nav",
+        });
+      }
+    }
+    return out.slice(0, 10);
   }, [q, canView]);
 
   useEffect(() => {

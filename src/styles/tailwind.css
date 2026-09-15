@@ -1,0 +1,116 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Ensure common spacing utilities are always emitted for Admin Panel work,
+ * even before a given class appears in scanned source.
+ */
+@source inline("p-0 p-1 p-2 p-3 p-4 p-5 p-6 p-8 px-2 px-3 px-4 px-6 py-1 py-2 py-3 py-4 m-4 mx-4 my-4 gap-2 gap-3 gap-4 gap-6 space-x-4 space-y-4 md:p-6 lg:p-8");
+
+/*
+ * Core spacing scale — Tailwind v4 multiplies this for p-*, m-*, gap-*, etc.
+ * p-4 = 1rem, p-6 = 1.5rem, p-8 = 2rem, gap-4 = 1rem.
+ */
+@theme {
+  --spacing: 0.25rem;
+}
+
+/*
+ * AlgoPath Tailwind — globals palette + legacy product aliases.
+ * Token values: src/styles/globals.css (imported after index.css in main.tsx).
+ */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Legacy product surfaces */
+  --color-card-hover: var(--bg-card-hover, var(--muted));
+  --color-elevated: var(--bg-elevated, var(--card));
+  --color-editor: var(--bg-editor, var(--background));
+  --color-border-strong: var(--border-strong, var(--border));
+  --color-border-active: var(--border-active, var(--ring));
+  --color-primary-hover: var(--primary-hover, var(--primary));
+  --color-primary-bright: var(--primary-bright, var(--primary));
+  --color-primary-subtle: var(--primary-subtle, color-mix(in srgb, var(--primary) 12%, transparent));
+  --color-success: var(--success, var(--chart-4));
+  --color-warning: var(--warning, var(--chart-2));
+  --color-danger: var(--error, var(--destructive));
+  --color-info: var(--info, var(--chart-3));
+
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+  --font-serif: var(--font-serif);
+  --font-tech: var(--font-technical, var(--font-sans));
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --shadow-2xs: var(--shadow-2xs);
+  --shadow-xs: var(--shadow-xs);
+  --shadow-sm: var(--shadow-sm);
+  --shadow: var(--shadow);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+  --shadow-xl: var(--shadow-xl);
+  --shadow-2xl: var(--shadow-2xl);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+}
+
+@utility font-primary {
+  font-family: var(--font-primary, var(--font-sans));
+}
+
+@utility font-technical {
+  font-family: var(--font-technical, var(--font-sans));
+  font-variant-numeric: tabular-nums;
+}
+
+@utility font-code {
+  font-family: var(--font-mono);
+}
+
+@utility animate-fade-in {
+  animation: fadeIn 0.2s ease;
+}
+
+@utility animate-spin {
+  animation: spin 0.8s linear infinite;
+}

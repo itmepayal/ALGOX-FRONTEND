@@ -1,7 +1,16 @@
-import { useCallback, useEffect, useMemo, useState, type FC, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type FC,
+  type ReactNode,
+} from "react";
 import {
   Area,
   AreaChart,
+  Bar,
+  BarChart,
   CartesianGrid,
   Cell,
   Legend,
@@ -15,69 +24,133 @@ import {
 } from "recharts";
 import {
   Activity,
-  Bell,
+  AlertTriangle,
+  ArrowUpRight,
+  BarChart3,
+  BookOpen,
   CheckCircle2,
-  Cpu,
+  Code2,
+  FileBarChart,
   FileCode2,
   Gauge,
+  HeartPulse,
+  Languages,
+  Loader2,
+  Megaphone,
+  Pencil,
   Plus,
   Radio,
   RefreshCw,
-  Server,
+  Search,
+  Send,
   ShieldAlert,
+  Star,
+  Tags,
+  Target,
+  Trash2,
   Trophy,
+  UserCheck,
   Users,
-  BookOpen,
-  Megaphone,
-  Flag,
-  AlertTriangle,
+  XCircle,
 } from "lucide-react";
 import {
   adminAnalyticsApi,
   HEALTH_ENDPOINTS,
-  pingHealth,
+  pingHealthDetailed,
+  type DashboardRange,
 } from "../../../api/adminAnalyticsApi";
-import { adminAuthApi } from "../../../api/adminAuthApi";
+import { adminAuthApi, type AdminUser } from "../../../api/adminAuthApi";
 import { adminSubmissionApi } from "../../../api/adminSubmissionApi";
+import { adminProblemApi } from "../../../api/adminProblemApi";
 import { adminRealtimeApi } from "../../../api/adminRealtimeApi";
 import { PermissionGuard } from "../shared/PermissionGuard";
 import { StatusBadge } from "../shared/StatusBadge";
+import { DifficultyBadge } from "../shared/DifficultyBadge";
+import { SubmissionVerdictBadge } from "../shared/SubmissionVerdictBadge";
 import { DataTable } from "../shared/DataTable";
+import { EmptyState } from "../shared/EmptyState";
 import { hasPermission } from "../../../rbac/permissions";
 import { useAuth } from "../../../context/AuthContext";
 import type { AdminTab } from "../adminNav";
 import { WidgetError } from "../shared/WidgetError";
 import { normalizeApiError } from "../../../lib/apiError";
 import { useToast } from "../../../context/ToastContext";
+import { Button } from "../../ui/button";
 import "./dashboard.css";
 
-const RANGES = [
-  { id: "today", label: "24H" },
+/** Recharts legend without SVG icon glyphs that dump as "svg" in text trees. */
+const ChartLegendContent: FC<{
+  payload?: Array<{ value?: string; color?: string }>;
+}> = ({ payload }) => (
+  <ul className="m-0 flex list-none flex-wrap justify-center gap-x-4 gap-y-1 p-0 pt-1">
+    {(payload || []).map((entry) => (
+      <li
+        key={String(entry.value)}
+        className="font-primary inline-flex items-center gap-1.5 text-[0.7rem] text-muted-foreground"
+      >
+        <span
+          className="inline-block h-2 w-2 shrink-0 rounded-full"
+          style={{ background: entry.color || "var(--muted-foreground)" }}
+          aria-hidden
+        />
+        <span>{humanizeStatus(String(entry.value || ""))}</span>
+      </li>
+    ))}
+  </ul>
+);
+
+const RANGES: Array<{ id: DashboardRange; label: string }> = [
+  { id: "today", label: "Today" },
   { id: "7d", label: "7D" },
   { id: "30d", label: "30D" },
   { id: "90d", label: "90D" },
-] as const;
-
-type RangeId = (typeof RANGES)[number]["id"];
+  { id: "1y", label: "1Y" },
+];
 
 const STATUS_COLORS: Record<string, string> = {
-  ACCEPTED: "#34d399",
-  WRONG_ANSWER: "#fbbf24",
-  RUNTIME_ERROR: "#f87171",
-  COMPILATION_ERROR: "#fb7185",
-  TIME_LIMIT_EXCEEDED: "#38bdf8",
-  MEMORY_LIMIT_EXCEEDED: "#a78bfa",
-  PENDING: "#94a3b8",
-  RUNNING: "#818cf8",
-  SYSTEM_ERROR: "#ef4444",
+  ACCEPTED: "var(--chart-4)",
+  WRONG_ANSWER: "var(--chart-2)",
+  RUNTIME_ERROR: "var(--chart-5)",
+  COMPILATION_ERROR: "var(--chart-5)",
+  TIME_LIMIT_EXCEEDED: "var(--chart-3)",
+  MEMORY_LIMIT_EXCEEDED: "var(--chart-3)",
+  PENDING: "var(--muted-foreground)",
+  RUNNING: "var(--chart-1)",
+  SYSTEM_ERROR: "var(--destructive)",
+};
+
+const DIFF_COLORS = {
+  easy: "var(--chart-4)",
+  medium: "var(--chart-2)",
+  hard: "var(--chart-5)",
 };
 
 const CHART_TOOLTIP = {
-  background: "#0f172a",
-  border: "1px solid #1e293b",
+  background: "var(--popover)",
+  border: "1px solid var(--border)",
   borderRadius: 8,
   fontSize: 12,
+  color: "var(--popover-foreground)",
 };
+
+const CHART = {
+  1: "var(--chart-1)",
+  2: "var(--chart-2)",
+  3: "var(--chart-3)",
+  4: "var(--chart-4)",
+  5: "var(--chart-5)",
+  grid: "var(--border)",
+  tick: "var(--muted-foreground)",
+};
+
+const TOP_SORTS = [
+  { id: "attempts", label: "Most attempted" },
+  { id: "solved", label: "Most solved" },
+  { id: "accept_high", label: "Highest acceptance" },
+  { id: "accept_low", label: "Lowest acceptance" },
+] as const;
+
+type TopSort = (typeof TOP_SORTS)[number]["id"];
 
 function formatNumber(n: unknown): string {
   if (n === null || n === undefined || n === "") return "—";
@@ -98,9 +171,82 @@ function relativeTime(iso?: string): string {
   return new Date(iso).toLocaleString();
 }
 
-function pct(part: number, total: number): string {
-  if (!total) return "0%";
-  return `${Math.round((part / total) * 1000) / 10}%`;
+function formatDateTime(iso?: string): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function humanizeStatus(raw: string): string {
+  return String(raw || "")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function languageLabel(raw?: string | null): string {
+  const s = String(raw || "")
+    .trim()
+    .toLowerCase();
+  if (!s) return "—";
+  const map: Record<string, string> = {
+    cpp: "C++",
+    "c++": "C++",
+    c: "C",
+    javascript: "JavaScript",
+    js: "JavaScript",
+    typescript: "TypeScript",
+    ts: "TypeScript",
+    python: "Python",
+    python3: "Python",
+    java: "Java",
+    go: "Go",
+    golang: "Go",
+    rust: "Rust",
+    csharp: "C#",
+    "c#": "C#",
+  };
+  return map[s] || humanizeStatus(s);
+}
+
+function initialsFrom(name?: string | null, email?: string | null): string {
+  const base = String(name || email || "?").trim();
+  const parts = base.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return `${parts[0]![0] || ""}${parts[1]![0] || ""}`.toUpperCase();
+  }
+  return base.slice(0, 2).toUpperCase() || "?";
+}
+
+function problemDisplayTitle(
+  title: unknown,
+  id: string,
+): { primary: string; secondary?: string } {
+  const t = typeof title === "string" ? title.trim() : "";
+  if (t) return { primary: t, secondary: id || undefined };
+  if (id) return { primary: `Problem ${id.slice(0, 10)}`, secondary: id };
+  return { primary: "Untitled problem" };
+}
+
+function formatTrend(pct: number | null | undefined): string | null {
+  if (pct === null || pct === undefined || Number.isNaN(Number(pct))) return null;
+  const n = Number(pct);
+  const sign = n > 0 ? "+" : "";
+  return `${sign}${n}% vs prior period`;
+}
+
+function debounce<T extends (...args: any[]) => void>(fn: T, ms: number) {
+  let t: number | undefined;
+  return (...args: Parameters<T>) => {
+    window.clearTimeout(t);
+    t = window.setTimeout(() => fn(...args), ms);
+  };
 }
 
 interface AdminDashboardHomeProps {
@@ -112,12 +258,14 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
 }) => {
   const { user } = useAuth();
   const toast = useToast();
-  const [range, setRange] = useState<RangeId>("30d");
+  const [range, setRange] = useState<DashboardRange>("30d");
   const [overview, setOverview] = useState<any>(null);
   const [charts, setCharts] = useState<any>(null);
-  const [error, setError] = useState<{ title: string; message: string } | null>(
-    null
-  );
+  const [fallbackMode, setFallbackMode] = useState(false);
+  const [coreError, setCoreError] = useState<{
+    title: string;
+    message: string;
+  } | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshState, setRefreshState] = useState<"idle" | "loading" | "ok">(
     "idle"
@@ -126,37 +274,122 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
   const [tick, setTick] = useState(0);
 
   const [submissions, setSubmissions] = useState<any[]>([]);
+  const [subsMeta, setSubsMeta] = useState({
+    page: 1,
+    limit: 10,
+    total: 0,
+    totalPages: 1,
+  });
+  const [subsPage, setSubsPage] = useState(1);
+  const [subsStatus, setSubsStatus] = useState("");
+  const [subsSearch, setSubsSearch] = useState("");
+  const [subsSearchQ, setSubsSearchQ] = useState("");
   const [subsError, setSubsError] = useState<{
     title: string;
     message: string;
   } | null>(null);
   const [subsLoading, setSubsLoading] = useState(true);
 
+  const [recentUsers, setRecentUsers] = useState<AdminUser[]>([]);
+  const [usersError, setUsersError] = useState<string | null>(null);
+  const [usersLoading, setUsersLoading] = useState(true);
+  const [userSearch, setUserSearch] = useState("");
+  const [userSearchQ, setUserSearchQ] = useState("");
+
+  const [problemMap, setProblemMap] = useState<Record<string, any>>({});
+  const [topSort, setTopSort] = useState<TopSort>("attempts");
+
+  const [execHealth, setExecHealth] = useState<any>(null);
+  const [execError, setExecError] = useState<string | null>(null);
+
+  const [leaderboard, setLeaderboard] = useState<any[]>([]);
+  const [lbPeriod, setLbPeriod] = useState<"global" | "weekly" | "monthly">(
+    "global"
+  );
+  const [lbError, setLbError] = useState<string | null>(null);
+  const [lbLoading, setLbLoading] = useState(true);
+
   const [auditRows, setAuditRows] = useState<any[]>([]);
   const [health, setHealth] = useState<
-    Array<{ name: string; status: "healthy" | "offline" | "warning"; url: string }>
+    Array<{
+      name: string;
+      status: "healthy" | "offline" | "warning";
+      url: string;
+      ms: number | null;
+      error?: string;
+      checkedAt: string;
+    }>
   >([]);
   const [rt, setRt] = useState<{ ok: boolean; data?: any; error?: string }>({
     ok: false,
   });
+  const [favouriteAnalytics, setFavouriteAnalytics] = useState<{
+    mostFavourited: Array<{
+      id: string;
+      title: string;
+      difficulty?: string;
+      favouriteCount: number;
+      isPremium?: boolean;
+    }>;
+    trends: Array<{ date: string; count: number }>;
+    freeFavourites: number;
+    premiumFavourites: number;
+  } | null>(null);
+
+  const applySubsSearch = useMemo(
+    () => debounce((v: string) => setSubsSearchQ(v), 350),
+    []
+  );
+  const applyUserSearch = useMemo(
+    () => debounce((v: string) => setUserSearchQ(v), 350),
+    []
+  );
 
   const loadCore = useCallback(async () => {
     setLoading(true);
-    setError(null);
+    setCoreError(null);
     setRefreshState("loading");
     try {
-      const [o, c] = await Promise.all([
-        adminAnalyticsApi.overview(range),
-        adminAnalyticsApi.charts(range),
-      ]);
-      setOverview(o.data);
-      setCharts(c.data);
+      const result = await adminAnalyticsApi.loadDashboard(range);
+      setOverview(result.overview);
+      setCharts(result.charts);
+      setFallbackMode(Boolean(result.fallback));
       setUpdatedAt(new Date());
       setRefreshState("ok");
       window.setTimeout(() => setRefreshState("idle"), 900);
+
+      if ((result as any).softWarning) {
+        toast.warning("Partial analytics", (result as any).softWarning);
+      }
+
+      // Enrich top problems with titles/difficulty when possible
+      try {
+        const list = await adminProblemApi.list({ page: 1, limit: 200 });
+        const map: Record<string, any> = {};
+        for (const p of list.data || []) {
+          const id = String(p.id || p._id);
+          map[id] = p;
+        }
+        setProblemMap(map);
+      } catch {
+      }
+
+      try {
+        const fav = await adminProblemApi.favouriteAnalytics();
+        if (fav?.data) {
+          setFavouriteAnalytics({
+            mostFavourited: fav.data.mostFavourited || [],
+            trends: fav.data.trends || [],
+            freeFavourites: fav.data.freeFavourites || 0,
+            premiumFavourites: fav.data.premiumFavourites || 0,
+          });
+        }
+      } catch {
+        setFavouriteAnalytics(null);
+      }
     } catch (err: unknown) {
       const n = normalizeApiError(err);
-      setError({ title: n.title, message: n.message });
+      setCoreError({ title: n.title, message: n.message });
       toast.apiError(err, "Unable to load platform analytics");
       setRefreshState("idle");
     } finally {
@@ -164,41 +397,24 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
     }
   }, [range, toast]);
 
-  const loadSide = useCallback(async () => {
+  const loadSubmissions = useCallback(async () => {
     setSubsLoading(true);
     setSubsError(null);
     try {
-      const [subsRes, healthRows, rtRes, audit] = await Promise.all([
-        adminSubmissionApi.list({ page: 1, limit: 12 }).catch((e) => {
-          throw e;
-        }),
-        Promise.all(
-          HEALTH_ENDPOINTS.map(async (e) => ({
-            name: e.name,
-            url: e.url,
-            status: await pingHealth(e.url),
-          }))
-        ),
-        adminRealtimeApi.overview().then(
-          (res) => ({ ok: true as const, data: res.data || res }),
-          (err: unknown) => {
-            const n = normalizeApiError(err);
-            return {
-              ok: false as const,
-              error: n.message,
-            };
-          }
-        ),
-        hasPermission(user?.role, "audit:view")
-          ? adminAuthApi.listAuditLogs({ page: 1, limit: 12 }).catch(() => ({
-              data: [],
-            }))
-          : Promise.resolve({ data: [] as any[] }),
-      ]);
-      setSubmissions(subsRes.data || []);
-      setHealth(healthRows);
-      setRt(rtRes);
-      setAuditRows(audit.data || []);
+      const params: Record<string, string | number | undefined> = {
+        page: subsPage,
+        limit: 10,
+      };
+      if (subsStatus) params.status = subsStatus;
+      if (subsSearchQ.trim()) params.search = subsSearchQ.trim();
+      const res = await adminSubmissionApi.list(params);
+      setSubmissions(res.data || []);
+      setSubsMeta({
+        page: res.meta?.page || subsPage,
+        limit: res.meta?.limit || 10,
+        total: res.meta?.total || 0,
+        totalPages: res.meta?.totalPages || 1,
+      });
     } catch (err: unknown) {
       const n = normalizeApiError(err);
       setSubsError({ title: n.title, message: n.message });
@@ -206,15 +422,110 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
     } finally {
       setSubsLoading(false);
     }
-  }, [user?.role]);
+  }, [subsPage, subsStatus, subsSearchQ]);
+
+  const loadSide = useCallback(async () => {
+    const [healthRows, rtRes, audit, exec, usersRes] = await Promise.all([
+      Promise.all(
+        HEALTH_ENDPOINTS.map(async (e) => {
+          const detail = await pingHealthDetailed(e.url);
+          return {
+            name: e.name,
+            url: e.url,
+            status: detail.status,
+            ms: detail.ms,
+            error: detail.error,
+            checkedAt: new Date().toISOString(),
+          };
+        })
+      ),
+      adminRealtimeApi.overview().then(
+        (res) => ({ ok: true as const, data: res.data || res }),
+        (err: unknown) => ({
+          ok: false as const,
+          error: normalizeApiError(err).message,
+        })
+      ),
+      hasPermission(user?.role, "audit:view")
+        ? adminAuthApi.listAuditLogs({ page: 1, limit: 12 }).catch(() => ({
+          data: [] as any[],
+        }))
+        : Promise.resolve({ data: [] as any[] }),
+      adminAnalyticsApi.executionHealth().then(
+        (res) => ({ ok: true as const, data: res.data }),
+        (err: unknown) => ({
+          ok: false as const,
+          error: normalizeApiError(err).message,
+        })
+      ),
+      hasPermission(user?.role, "users:view")
+        ? adminAuthApi
+          .listUsers({
+            page: 1,
+            limit: 8,
+            search: userSearchQ || undefined,
+          })
+          .then(
+            (res) => ({ ok: true as const, data: res.data || [] }),
+            (err: unknown) => ({
+              ok: false as const,
+              error: normalizeApiError(err).message,
+            })
+          )
+        : Promise.resolve({ ok: true as const, data: [] as AdminUser[] }),
+    ]);
+
+    setHealth(healthRows);
+    setRt(rtRes);
+    setAuditRows(audit.data || []);
+
+    if (exec.ok) {
+      setExecHealth(exec.data);
+      setExecError(null);
+    } else {
+      setExecHealth(null);
+      setExecError(exec.error || "Evaluation health unavailable");
+    }
+
+    setUsersLoading(false);
+    if (usersRes.ok) {
+      setRecentUsers(usersRes.data);
+      setUsersError(null);
+    } else {
+      setRecentUsers([]);
+      setUsersError(usersRes.error || "Unable to load users");
+    }
+  }, [user?.role, userSearchQ]);
+
+  const loadLeaderboard = useCallback(async () => {
+    setLbLoading(true);
+    setLbError(null);
+    try {
+      const res = await adminAnalyticsApi.topUsers(lbPeriod);
+      setLeaderboard(Array.isArray(res.data) ? res.data.slice(0, 10) : []);
+    } catch (err: unknown) {
+      setLeaderboard([]);
+      setLbError(normalizeApiError(err).message);
+    } finally {
+      setLbLoading(false);
+    }
+  }, [lbPeriod]);
 
   useEffect(() => {
     void loadCore();
   }, [loadCore]);
 
   useEffect(() => {
+    void loadSubmissions();
+  }, [loadSubmissions, tick]);
+
+  useEffect(() => {
     void loadSide();
   }, [loadSide, tick]);
+
+  useEffect(() => {
+    void loadLeaderboard();
+  }, [loadLeaderboard]);
 
   useEffect(() => {
     const id = window.setInterval(() => setTick((t) => t + 1), 45000);
@@ -222,16 +533,26 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
   }, []);
 
   const refreshAll = async () => {
-    await Promise.all([loadCore(), loadSide()]);
+    await Promise.all([
+      loadCore(),
+      loadSubmissions(),
+      loadSide(),
+      loadLeaderboard(),
+    ]);
   };
 
   const kpis = overview?.kpis || {};
+  const usersBlock = overview?.users || {};
+  const problemsBlock = overview?.problems || {};
   const submissionsBlock = overview?.submissions || {};
-  const byStatus: Record<string, number> = charts?.submissionsByStatus || {};
-  const statusTotal = Object.values(byStatus).reduce(
-    (a, b) => a + Number(b || 0),
-    0
-  );
+  const byStatus: Record<string, number> =
+    charts?.submissionsByStatus || submissionsBlock.byStatus || {};
+  const byLang: Record<string, number> =
+    charts?.languageUsage || submissionsBlock.byLanguage || {};
+  const byDiff: Record<string, number> =
+    charts?.difficultyDistribution || problemsBlock.byDifficulty || {};
+  const byTopic: Record<string, number> =
+    charts?.topicDistribution || problemsBlock.byTopic || {};
 
   const statusData = useMemo(
     () =>
@@ -242,12 +563,49 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
     [byStatus]
   );
 
+  const langData = useMemo(
+    () =>
+      Object.entries(byLang)
+        .map(([name, value]) => ({
+          name: languageLabel(name),
+          value: Number(value),
+        }))
+        .filter((d) => d.value > 0)
+        .sort((a, b) => b.value - a.value),
+    [byLang]
+  );
+
+  const diffData = useMemo(
+    () =>
+      ["easy", "medium", "hard"]
+        .map((name) => ({
+          name,
+          value: Number(byDiff[name] || 0),
+        }))
+        .filter((d) => d.value > 0),
+    [byDiff]
+  );
+
+  const topicData = useMemo(
+    () =>
+      Object.entries(byTopic)
+        .map(([name, value]) => ({ name, value: Number(value) }))
+        .sort((a, b) => b.value - a.value)
+        .slice(0, 10),
+    [byTopic]
+  );
+
   const activitySeries = useMemo(() => {
     const series = charts?.submissionSeries || [];
     if (!Array.isArray(series) || series.length === 0) return [];
     const byDate = new Map<
       string,
-      { date: string; submissions: number; accepted: number; users?: number }
+      {
+        date: string;
+        submissions: number;
+        accepted: number;
+        failed: number;
+      }
     >();
     for (const row of series) {
       const date = row.date || row._id?.date;
@@ -256,19 +614,73 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
         date,
         submissions: 0,
         accepted: 0,
+        failed: 0,
       };
       const count = Number(row.count || 0);
       cur.submissions += count;
       if (row.status === "ACCEPTED") cur.accepted += count;
+      if (
+        [
+          "WRONG_ANSWER",
+          "RUNTIME_ERROR",
+          "COMPILATION_ERROR",
+          "TIME_LIMIT_EXCEEDED",
+          "MEMORY_LIMIT_EXCEEDED",
+        ].includes(row.status)
+      ) {
+        cur.failed += count;
+      }
       byDate.set(date, cur);
     }
+
+    // Overlay active-user growth when available (registration proxy only if no activity series)
     return [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
   }, [charts]);
 
-  const topProblems = useMemo(() => {
-    const rows = charts?.topProblems || [];
-    return Array.isArray(rows) ? rows.slice(0, 8) : [];
-  }, [charts]);
+  const userGrowth = useMemo(() => {
+    const rows = charts?.userGrowth || usersBlock.growth || [];
+    return Array.isArray(rows) ? rows : [];
+  }, [charts, usersBlock]);
+
+  const sortedTopProblems = useMemo(() => {
+    const rows = (charts?.topProblems || []).map((r: any) => {
+      const id = String(r.problemId || r._id || "");
+      const p = problemMap[id];
+      return {
+        ...r,
+        title:
+          r.title ||
+          r.problemTitle ||
+          p?.title ||
+          (id ? `Problem ${id.slice(0, 10)}` : "Untitled problem"),
+        difficulty: r.difficulty || p?.difficulty,
+        attempts: Number(r.attempts ?? r.count ?? 0),
+        accepted: Number(r.accepted ?? 0),
+        acceptanceRate: Number(
+          r.acceptanceRate ??
+          (r.attempts
+            ? Math.round((Number(r.accepted || 0) / Number(r.attempts)) * 1000) /
+            10
+            : 0)
+        ),
+      };
+    });
+    const sorted = [...rows];
+    switch (topSort) {
+      case "solved":
+        sorted.sort((a, b) => b.accepted - a.accepted);
+        break;
+      case "accept_high":
+        sorted.sort((a, b) => b.acceptanceRate - a.acceptanceRate);
+        break;
+      case "accept_low":
+        sorted.sort((a, b) => a.acceptanceRate - b.acceptanceRate);
+        break;
+      default:
+        sorted.sort((a, b) => b.attempts - a.attempts);
+    }
+    return sorted.slice(0, 8);
+  }, [charts, problemMap, topSort]);
 
   const pending = Number(byStatus.PENDING || 0);
   const running = Number(byStatus.RUNNING || 0);
@@ -279,18 +691,29 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
     Number(byStatus.RUNTIME_ERROR || 0) +
     Number(byStatus.COMPILATION_ERROR || 0) +
     Number(byStatus.TIME_LIMIT_EXCEEDED || 0) +
-    Number(byStatus.MEMORY_LIMIT_EXCEEDED || 0);
+    Number(byStatus.MEMORY_LIMIT_EXCEEDED || 0) +
+    Number(byStatus.WRONG_ANSWER || 0);
+
+  const avgRuntime =
+    charts?.avgExecutionTime ?? submissionsBlock.avgExecutionTime ?? null;
+  const avgMemory =
+    charts?.avgMemory ?? submissionsBlock.avgMemory ?? null;
+
+  const queue = execHealth?.queue || {};
+  const queueStatus = String(
+    queue.status || (execError ? "unavailable" : "unknown"),
+  );
 
   const offlineServices = health.filter((h) => h.status === "offline");
   const warningServices = health.filter((h) => h.status === "warning");
   const healthyCount = health.filter((h) => h.status === "healthy").length;
   const systemHealthLabel =
     health.length === 0
-      ? "—"
+      ? "unknown"
       : offlineServices.length > 0
         ? "Degraded"
         : warningServices.length > 0
-          ? "Warning"
+          ? "Degraded"
           : "Healthy";
 
   const alerts = useMemo(() => {
@@ -304,15 +727,16 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
       items.push({
         severity: "CRITICAL",
         title: `${s.name} offline`,
-        description: `Health check failed for ${s.url}`,
-        at: new Date().toISOString(),
+        description: s.error || `Health check failed for ${s.url}`,
+        at: s.checkedAt,
       });
     }
-    for (const s of warningServices) {
+    if (fallbackMode) {
       items.push({
         severity: "WARNING",
-        title: `${s.name} degraded`,
-        description: `Non-OK response from ${s.url}`,
+        title: "AnalyticsService unavailable",
+        description:
+          "Dashboard is using direct Auth/Problem/Submission stats fallback.",
         at: new Date().toISOString(),
       });
     }
@@ -333,7 +757,7 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
       });
     }
     return items.slice(0, 8);
-  }, [offlineServices, warningServices, pending, rt]);
+  }, [offlineServices, fallbackMode, pending, rt]);
 
   const liveActivity = useMemo(() => {
     const items: Array<{
@@ -341,25 +765,52 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
       title: string;
       entity: string;
       when: string;
+      status?: string | null;
       icon: ReactNode;
     }> = [];
     for (const s of submissions.slice(0, 8)) {
       const id = String(s.id || s._id);
+      const pid = String(s.problemId || "");
+      const pTitle =
+        problemMap[pid]?.title || `Problem ${pid.slice(0, 8) || "—"}`;
+      const st = String(s.status || "").toUpperCase();
+      const ok = st === "ACCEPTED";
+      const fail =
+        st.includes("ERROR") ||
+        st === "WRONG_ANSWER" ||
+        st === "FAILED" ||
+        st.includes("EXCEEDED");
       items.push({
         id: `sub-${id}`,
-        title: `Submission ${s.status || "updated"}`,
-        entity: `Problem ${s.problemId || "—"} · ${s.language || "—"}`,
+        title: `Submission ${humanizeStatus(st || "updated")}`,
+        entity: `${pTitle} · ${s.language || "—"}`,
         when: s.createdAt || s.updatedAt,
-        icon: <FileCode2 size={14} color="#a5b4fc" />,
+        status: st || null,
+        icon: ok ? (
+          <CheckCircle2 size={14} strokeWidth={2} className="size-3.5 text-success" aria-hidden />
+        ) : fail ? (
+          <XCircle size={14} strokeWidth={2} className="size-3.5 text-destructive" aria-hidden />
+        ) : (
+          <FileCode2 size={14} strokeWidth={2} className="size-3.5 text-chart-1" aria-hidden />
+        ),
       });
     }
     for (const a of auditRows.slice(0, 4)) {
+      const action = String(a.action || "Admin action");
+      const lower = action.toLowerCase();
+      const icon = lower.includes("delete") ? (
+        <Trash2 size={14} strokeWidth={2} className="size-3.5 text-destructive" aria-hidden />
+      ) : lower.includes("update") || lower.includes("edit") ? (
+        <Pencil size={14} strokeWidth={2} className="size-3.5 text-chart-2" aria-hidden />
+      ) : (
+        <ShieldAlert size={14} strokeWidth={2} className="size-3.5 text-chart-2" aria-hidden />
+      );
       items.push({
         id: `audit-${a.id || a.action}-${a.createdAt}`,
-        title: a.action || "Admin action",
+        title: action,
         entity: `${a.resource || "—"}${a.resourceId ? ` · ${a.resourceId}` : ""}`,
         when: a.createdAt,
-        icon: <ShieldAlert size={14} color="#fbbf24" />,
+        icon,
       });
     }
     return items
@@ -368,11 +819,9 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
           new Date(b.when || 0).getTime() - new Date(a.when || 0).getTime()
       )
       .slice(0, 12);
-  }, [submissions, auditRows]);
+  }, [submissions, auditRows, problemMap]);
 
-  const execCritical = offlineServices.some((s) =>
-    ["Submission", "Evaluation"].includes(s.name)
-  );
+  const newUsersTrend = formatTrend(kpis.newUsersTrendPct);
 
   return (
     <PermissionGuard
@@ -382,9 +831,11 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
       <div className="admin-dash">
         <header className="admin-dash-header">
           <div>
-            <h2>Dashboard</h2>
+            <h2>Analytics</h2>
+            <p className="admin-dash-kicker">Platform performance &amp; activity</p>
             <p className="admin-dash-sub">
-              Monitor AlgoPath platform activity, performance, and infrastructure.
+              Monitor users, problems, submissions, execution health, and
+              real-time platform activity from one place.
             </p>
           </div>
           <div className="admin-dash-actions">
@@ -395,34 +846,41 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
                   type="button"
                   className={range === r.id ? "active" : ""}
                   onClick={() => setRange(r.id)}
+                  aria-pressed={range === r.id}
                 >
                   {r.label}
                 </button>
               ))}
             </div>
-            <button
+            <Button
               type="button"
-              className="admin-btn"
+              variant="secondary"
+              size="sm"
               onClick={() => void refreshAll()}
               aria-label="Refresh dashboard"
               disabled={refreshState === "loading"}
             >
-              <RefreshCw size={14} />
+              {refreshState === "loading" ? (
+                <Loader2
+                  size={14}
+                  strokeWidth={2}
+                  className="size-3.5 shrink-0 animate-spin"
+                  aria-hidden
+                />
+              ) : (
+                <RefreshCw
+                  size={14}
+                  strokeWidth={2}
+                  className="size-3.5 shrink-0"
+                  aria-hidden
+                />
+              )}
               {refreshState === "loading"
-                ? "Refreshing"
+                ? "Refreshing…"
                 : refreshState === "ok"
                   ? "Updated"
                   : "Refresh"}
-            </button>
-            <button
-              type="button"
-              className="admin-icon-btn"
-              aria-label="Announcements"
-              title="Announcements"
-              onClick={() => onNavigate?.("announcements")}
-            >
-              <Bell size={16} />
-            </button>
+            </Button>
             <span className="admin-dash-updated">
               Last updated:{" "}
               {updatedAt ? relativeTime(updatedAt.toISOString()) : "—"}
@@ -430,130 +888,371 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
           </div>
         </header>
 
-        {error ? (
-          <div className="admin-alert admin-alert-error" role="alert">
+        {fallbackMode && !coreError ? (
+          <div className="admin-alert admin-alert-warn" role="status">
             <div className="admin-alert-icon" aria-hidden>
-              <AlertTriangle size={18} />
+              <AlertTriangle size={18} strokeWidth={2} className="size-[18px]" />
             </div>
             <div className="admin-alert-body">
-              <strong>Unable to load platform analytics</strong>
-              <p>{error.message}</p>
-              <p className="admin-alert-hint">
-                KPI cards and charts may be incomplete. System health and live
-                panels below still use independent checks.
+              <strong>Analytics service unavailable</strong>
+              <p>
+                Dashboard is running in degraded mode. KPIs and charts are being
+                loaded from fallback Auth, Problem, and Submission services.
               </p>
             </div>
-            <button
+            <Button
               type="button"
-              className="admin-btn admin-alert-action"
+              variant="secondary"
+              size="sm"
+              className="admin-alert-action"
               onClick={() => void loadCore()}
             >
-              <RefreshCw size={14} />
-              Retry
-            </button>
+              <RefreshCw
+                size={14}
+                strokeWidth={2}
+                className="size-3.5 shrink-0"
+                aria-hidden
+              />
+              Retry Analytics
+            </Button>
           </div>
         ) : null}
 
+        {coreError ? (
+          <div className="admin-alert admin-alert-error" role="alert">
+            <div className="admin-alert-icon" aria-hidden>
+              <AlertTriangle size={18} strokeWidth={2} className="size-[18px]" />
+            </div>
+            <div className="admin-alert-body">
+              <strong>{coreError.title || "Unable to load analytics"}</strong>
+              <p>{coreError.message}</p>
+              <p className="admin-alert-hint">
+                System health, recent submissions, and live panels below still use
+                independent checks.
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="admin-alert-action"
+              onClick={() => void loadCore()}
+            >
+              <RefreshCw
+                size={14}
+                strokeWidth={2}
+                className="size-3.5 shrink-0"
+                aria-hidden
+              />
+              Retry
+            </Button>
+          </div>
+        ) : null}
+
+        {/* KPI cards */}
         <section className="admin-kpi-grid" aria-label="Key metrics">
           {loading
-            ? Array.from({ length: 8 }).map((_, i) => (
-                <div key={i} className="admin-kpi">
-                  <div className="admin-skel" style={{ height: 14, width: "40%" }} />
-                  <div className="admin-skel" style={{ height: 28, width: "55%" }} />
-                  <div className="admin-skel" style={{ height: 10, width: "70%" }} />
-                </div>
-              ))
+            ? Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="admin-kpi" aria-hidden>
+                <div className="admin-skel" style={{ height: 14, width: "40%" }} />
+                <div className="admin-skel" style={{ height: 28, width: "55%" }} />
+                <div className="admin-skel" style={{ height: 10, width: "70%" }} />
+              </div>
+            ))
             : (
               <>
                 <Kpi
-                  icon={<Users size={15} />}
+                  icon={<Users size={15} strokeWidth={2} className="size-[15px]" aria-hidden />}
                   label="Total Users"
                   value={formatNumber(kpis.totalUsers)}
-                  meta={`Last updated · ${updatedAt ? relativeTime(updatedAt.toISOString()) : "—"}`}
+                  meta={
+                    newUsersTrend ||
+                    `New: ${formatNumber(usersBlock.newUsersInRange)}`
+                  }
                 />
                 <Kpi
-                  icon={<Activity size={15} />}
+                  icon={<UserCheck size={15} strokeWidth={2} className="size-[15px]" aria-hidden />}
                   label="Active Users"
-                  value={formatNumber(kpis.dau)}
-                  meta={`DAU · WAU ${formatNumber(kpis.wau)} · MAU ${formatNumber(kpis.mau)}`}
+                  value={formatNumber(kpis.dau ?? kpis.activeUsers)}
+                  meta={`DAU: ${formatNumber(kpis.dau ?? kpis.activeUsers)} · WAU ${formatNumber(kpis.wau)} · MAU ${formatNumber(kpis.mau)}`}
                 />
                 <Kpi
-                  icon={<BookOpen size={15} />}
-                  label="Problems"
+                  icon={<Code2 size={15} strokeWidth={2} className="size-[15px]" aria-hidden />}
+                  label="Total Problems"
                   value={formatNumber(
                     kpis.totalProblems ??
-                      Number(kpis.publishedProblems || 0) +
-                        Number(kpis.draftProblems || 0)
+                    Number(kpis.publishedProblems || 0) +
+                    Number(kpis.draftProblems || 0)
                   )}
                   meta={`Published ${formatNumber(kpis.publishedProblems)} · Drafts ${formatNumber(kpis.draftProblems)}`}
                 />
                 <Kpi
-                  icon={<FileCode2 size={15} />}
-                  label="Submissions"
+                  icon={<Send size={15} strokeWidth={2} className="size-[15px]" aria-hidden />}
+                  label="Total Submissions"
                   value={formatNumber(kpis.totalSubmissions)}
                   meta={`Today ${formatNumber(kpis.todaySubmissions)}`}
                 />
                 <Kpi
-                  icon={<Gauge size={15} />}
+                  icon={<Target size={15} strokeWidth={2} className="size-[15px]" aria-hidden />}
                   label="Acceptance Rate"
                   value={`${kpis.successRate ?? 0}%`}
-                  meta="Official submit ACCEPTED / total"
+                  meta="Accepted / total submissions"
                 />
                 <Kpi
-                  icon={<CheckCircle2 size={15} />}
+                  icon={<Trophy size={15} strokeWidth={2} className="size-[15px]" aria-hidden />}
                   label="Solved Problems"
-                  value={formatNumber(accepted)}
-                  meta="Accepted submissions (excl. run)"
-                />
-                <Kpi
-                  icon={<Cpu size={15} />}
-                  label="Running Executions"
-                  value={formatNumber(running)}
-                  meta={`Pending ${formatNumber(pending)}`}
-                />
-                <Kpi
-                  icon={<Server size={15} />}
-                  label="System Health"
-                  value={systemHealthLabel}
-                  meta={`${healthyCount}/${health.length || 0} services healthy`}
+                  value={formatNumber(kpis.solvedProblems ?? accepted)}
+                  meta="Distinct problems with ≥1 accepted submit"
                 />
               </>
             )}
         </section>
 
+        {/* Primary monitoring */}
+        <div className="admin-dash-row admin-dash-row-monitor">
+          <section className="admin-panel" aria-label="Code execution health">
+            <div className="admin-panel-head">
+              <div>
+                <h3>Code Execution</h3>
+                <p className="admin-panel-desc">Evaluation Service</p>
+              </div>
+              <StatusBadge
+                status={
+                  queueStatus === "healthy"
+                    ? "healthy"
+                    : queueStatus === "degraded"
+                      ? "degraded"
+                      : queueStatus === "timeout"
+                        ? "timeout"
+                        : execError
+                          ? "offline"
+                          : "unknown"
+                }
+              />
+            </div>
+            <div className="admin-panel-body">
+              {execError && !execHealth ? (
+                <WidgetError
+                  title="Evaluation service is currently unavailable"
+                  message={execError}
+                  onRetry={() => void loadSide()}
+                  compact
+                />
+              ) : (
+                <div className="admin-engage-grid">
+                  <MetricCell label="Queued" value={formatNumber(queue.waiting ?? pending)} />
+                  <MetricCell label="Active jobs" value={formatNumber(queue.active ?? running)} />
+                  <MetricCell label="Failed jobs" value={formatNumber(queue.failed ?? failedExec)} />
+                  <MetricCell
+                    label="Workers"
+                    value={formatNumber(queue.configuredWorkers)}
+                  />
+                  <MetricCell
+                    label="Avg runtime"
+                    value={avgRuntime != null ? `${avgRuntime} ms` : "N/A"}
+                  />
+                  <MetricCell
+                    label="Avg memory"
+                    value={avgMemory != null ? `${avgMemory} MB` : "N/A"}
+                  />
+                  <MetricCell label="Redis" value={String(execHealth?.redis ?? "N/A")} />
+                  <MetricCell label="Compile fails" value={formatNumber(byStatus.COMPILATION_ERROR)} />
+                </div>
+              )}
+              <p className="admin-panel-foot">
+                Queue metrics from EvaluationService BullMQ health. Verdict averages
+                from Submission records.
+              </p>
+            </div>
+          </section>
+
+          <section className="admin-panel" aria-label="Live activity">
+            <div className="admin-panel-head">
+              <h3>Live Activity</h3>
+              <span className="hint">Auto-refresh 45s</span>
+            </div>
+            <div className="admin-panel-body admin-panel-scroll">
+              {liveActivity.length === 0 ? (
+                <EmptyState
+                  compact
+                  icon={<Activity size={18} strokeWidth={1.75} aria-hidden />}
+                  title="No recent activity"
+                  description="There are no live platform events available right now."
+                />
+              ) : (
+                <ul className="admin-activity-timeline">
+                  {liveActivity.map((item) => (
+                    <li key={item.id} className="admin-activity-tl-item">
+                      <span className="admin-activity-tl-dot" aria-hidden>
+                        {item.icon}
+                      </span>
+                      <div className="admin-activity-tl-body">
+                        <div className="admin-activity-tl-top">
+                          <span className="title">{item.title}</span>
+                          {item.status ? (
+                            <SubmissionVerdictBadge status={item.status} />
+                          ) : null}
+                        </div>
+                        <div className="entity">{item.entity}</div>
+                        <time className="when" dateTime={item.when}>
+                          {formatDateTime(item.when)}
+                        </time>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </section>
+        </div>
+
+        {/* Infrastructure */}
+        <div className="admin-dash-row admin-dash-row-infra">
+          <section className="admin-panel" aria-label="System health">
+            <div className="admin-panel-head">
+              <div>
+                <h3>System Health</h3>
+                <p className="admin-panel-desc">
+                  {healthyCount}/{health.length || 0} services healthy
+                </p>
+              </div>
+              <StatusBadge status={systemHealthLabel || "unknown"} />
+            </div>
+            <div className="admin-panel-body">
+              <div className="admin-svc-list">
+                {health.map((h) => (
+                  <div key={h.name} className="admin-svc-row">
+                    <div className="admin-svc-left">
+                      <span className={`admin-status-dot ${h.status}`} aria-hidden />
+                      <span>{h.name}</span>
+                    </div>
+                    <div className="admin-svc-right">
+                      <StatusBadge status={String(h.status || "unknown")} showIcon={false} />
+                      <span className="admin-svc-latency">
+                        {h.ms != null ? `${h.ms}ms` : h.error || "N/A"}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+                <div className="admin-svc-row">
+                  <div className="admin-svc-left">
+                    <span
+                      className={`admin-status-dot ${rt.ok ? "healthy" : "offline"}`}
+                      aria-hidden
+                    />
+                    <span>Realtime</span>
+                  </div>
+                  <div className="admin-svc-right">
+                    <StatusBadge status={rt.ok ? "healthy" : "timeout"} showIcon={false} />
+                    <span className="admin-svc-latency">
+                      {rt.ok ? "OK" : rt.error || "Timeout"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section className="admin-panel" aria-label="Realtime ops">
+            <div className="admin-panel-head">
+              <div>
+                <h3>Realtime</h3>
+                <p className="admin-panel-desc">Live gateway metrics</p>
+              </div>
+              {rt.ok ? (
+                <StatusBadge status="live" />
+              ) : (
+                <StatusBadge status="offline" />
+              )}
+            </div>
+            <div className="admin-panel-body">
+              {!rt.ok ? (
+                <EmptyState
+                  compact
+                  icon={<Radio size={18} strokeWidth={1.75} aria-hidden />}
+                  title={rt.error ? "Realtime unavailable" : "Offline"}
+                  description={rt.error || "Connect the realtime gateway to see live metrics."}
+                />
+              ) : (
+                <>
+                  <div className="admin-engage-grid admin-engage-grid-3">
+                    <MetricCell
+                      label="Connections"
+                      value={formatNumber(
+                        rt.data?.activeConnections ?? rt.data?.connections
+                      )}
+                    />
+                    <MetricCell
+                      label="Online users"
+                      value={formatNumber(rt.data?.onlineUsers)}
+                    />
+                    <MetricCell
+                      label="Events/sec"
+                      value={adminRealtimeApi.metricOrUnavailable(
+                        rt.data?.eventsPerSecond
+                      )}
+                    />
+                  </div>
+                  <div className="admin-metric-cell admin-metric-cell-wide">
+                    <span className="admin-metric-label">Latency</span>
+                    <span
+                      className={`admin-metric-value${
+                        rt.data?.avgLatencyMs == null ? " unavailable" : ""
+                      }`}
+                    >
+                      {rt.data?.avgLatencyMs == null
+                        ? "Unavailable"
+                        : adminRealtimeApi.metricOrUnavailable(rt.data?.avgLatencyMs)}
+                    </span>
+                  </div>
+                </>
+              )}
+            </div>
+          </section>
+        </div>
+
         <div className="admin-dash-grid">
+          {/* Platform activity */}
           <section className="admin-panel span-8" aria-label="Platform activity">
             <div className="admin-panel-head">
-              <h3>Platform Activity</h3>
-              <span className="hint">Submissions / Accepted · {range}</span>
+              <div>
+                <h3>Platform Activity</h3>
+                <p className="admin-panel-desc">Submission activity over time</p>
+              </div>
+              <span className="hint">{range.toUpperCase()}</span>
             </div>
             {loading ? (
-              <div className="admin-skel" style={{ height: 220 }} />
+              <div className="admin-skel admin-skel-chart" aria-hidden />
             ) : activitySeries.length === 0 ? (
-              <div className="admin-empty-soft">
-                No submission activity yet.
-                <br />
-                Your platform hasn&apos;t generated enough data for this chart.
-              </div>
+              <EmptyState
+                compact
+                icon={<Activity size={18} strokeWidth={1.75} aria-hidden />}
+                title="No submission activity"
+                description="There is no submission activity for the selected time range."
+              />
             ) : (
-              <ResponsiveContainer width="100%" height={240}>
+              <ResponsiveContainer width="100%" height={260}>
                 <AreaChart data={activitySeries}>
                   <defs>
                     <linearGradient id="gSub" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#6366f1" stopOpacity={0.35} />
-                      <stop offset="100%" stopColor="#6366f1" stopOpacity={0} />
+                      <stop offset="0%" stopColor="var(--chart-1)" stopOpacity={0.35} />
+                      <stop offset="100%" stopColor="var(--chart-1)" stopOpacity={0} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid stroke="#1e293b" strokeDasharray="3 3" />
-                  <XAxis dataKey="date" tick={{ fill: "#64748b", fontSize: 11 }} minTickGap={28} />
-                  <YAxis tick={{ fill: "#64748b", fontSize: 11 }} width={36} />
+                  <CartesianGrid stroke={CHART.grid} strokeDasharray="3 3" />
+                  <XAxis
+                    dataKey="date"
+                    tick={{ fill: CHART.tick, fontSize: 11 }}
+                    minTickGap={28}
+                  />
+                  <YAxis tick={{ fill: CHART.tick, fontSize: 11 }} width={36} />
                   <Tooltip contentStyle={CHART_TOOLTIP} />
-                  <Legend wrapperStyle={{ fontSize: 12, color: "#94a3b8" }} />
+                  <Legend content={<ChartLegendContent />} />
                   <Area
                     type="monotone"
                     dataKey="submissions"
                     name="Submissions"
-                    stroke="#6366f1"
+                    stroke={CHART[1]}
                     fill="url(#gSub)"
                     strokeWidth={2}
                   />
@@ -561,7 +1260,15 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
                     type="monotone"
                     dataKey="accepted"
                     name="Accepted"
-                    stroke="#34d399"
+                    stroke={CHART[4]}
+                    strokeWidth={2}
+                    dot={false}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="failed"
+                    name="Failed"
+                    stroke="var(--destructive)"
                     strokeWidth={2}
                     dot={false}
                   />
@@ -570,167 +1277,296 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
             )}
           </section>
 
-          <section className="admin-panel span-4" aria-label="Submission overview">
+          <section className="admin-panel span-4" aria-label="Verdict distribution">
             <div className="admin-panel-head">
-              <h3>Submission Overview</h3>
+              <div>
+                <h3>Verdict Distribution</h3>
+                <p className="admin-panel-desc">Outcomes across submissions</p>
+              </div>
             </div>
             {loading ? (
-              <div className="admin-skel" style={{ height: 220 }} />
+              <div className="admin-skel admin-skel-chart" style={{ height: 220 }} aria-hidden />
             ) : statusData.length === 0 ? (
-              <div className="admin-empty-soft">No status breakdown yet.</div>
+              <EmptyState
+                compact
+                icon={<BarChart3 size={18} strokeWidth={1.75} aria-hidden />}
+                title="No verdict data"
+                description="Submission outcomes will appear once users submit solutions."
+              />
             ) : (
-              <>
-                <ResponsiveContainer width="100%" height={140}>
+              <ResponsiveContainer width="100%" height={240}>
+                <PieChart>
+                  <Pie
+                    data={statusData}
+                    dataKey="value"
+                    nameKey="name"
+                    innerRadius={48}
+                    outerRadius={78}
+                    paddingAngle={2}
+                  >
+                    {statusData.map((d) => (
+                      <Cell
+                        key={d.name}
+                        fill={STATUS_COLORS[d.name] || CHART.tick}
+                      />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    contentStyle={CHART_TOOLTIP}
+                    formatter={(value, name) => [
+                      formatNumber(value),
+                      humanizeStatus(String(name)),
+                    ]}
+                  />
+                  <Legend content={<ChartLegendContent />} />
+                </PieChart>
+              </ResponsiveContainer>
+            )}
+          </section>
+
+          <section className="admin-panel span-6" aria-label="User analytics">
+            <div className="admin-panel-head">
+              <h3>User Analytics</h3>
+              <button
+                type="button"
+                className="admin-link admin-link-action"
+                onClick={() => onNavigate?.("users")}
+              >
+                Manage users
+                <ArrowUpRight size={14} strokeWidth={2} className="size-3.5" aria-hidden />
+              </button>
+            </div>
+            <div className="admin-engage-grid">
+              <MetricCell label="Total" value={formatNumber(usersBlock.totalUsers ?? kpis.totalUsers)} />
+              <MetricCell label="New" value={formatNumber(usersBlock.newUsersInRange)} />
+              <MetricCell label="Active" value={formatNumber(usersBlock.activeUsers)} />
+              <MetricCell label="Inactive" value={formatNumber(usersBlock.inactiveUsers)} />
+              <MetricCell label="Verified" value={formatNumber(usersBlock.verifiedUsers)} />
+              <MetricCell label="Unverified" value={formatNumber(usersBlock.unverifiedUsers)} />
+              <MetricCell label="Admins" value={formatNumber(usersBlock.adminUsers)} />
+              <MetricCell label="Blocked" value={formatNumber(usersBlock.blockedUsers)} />
+            </div>
+          </section>
+
+          <section className="admin-panel span-6" aria-label="Registration trend">
+            <div className="admin-panel-head">
+              <div>
+                <h3>Registration Trend</h3>
+                <p className="admin-panel-desc">
+                  New user registrations over the selected range.
+                </p>
+              </div>
+            </div>
+            {loading ? (
+              <div className="admin-skel admin-skel-chart" style={{ height: 160 }} aria-hidden />
+            ) : userGrowth.length > 0 ? (
+              <ResponsiveContainer width="100%" height={180}>
+                <AreaChart data={userGrowth}>
+                  <CartesianGrid stroke={CHART.grid} strokeDasharray="3 3" />
+                  <XAxis
+                    dataKey="date"
+                    tick={{ fill: CHART.tick, fontSize: 10 }}
+                    minTickGap={24}
+                  />
+                  <YAxis width={28} tick={{ fill: CHART.tick, fontSize: 10 }} />
+                  <Tooltip contentStyle={CHART_TOOLTIP} />
+                  <Area
+                    type="monotone"
+                    dataKey="count"
+                    name="Registrations"
+                    stroke={CHART[3]}
+                    fill="rgba(56,189,248,0.15)"
+                    strokeWidth={2}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <EmptyState
+                compact
+                icon={<Users size={18} strokeWidth={1.75} aria-hidden />}
+                title="No registration data"
+                description="No registration activity was recorded for this selected range."
+              />
+            )}
+          </section>
+
+          {/* Problem analytics */}
+          <section className="admin-panel span-6" aria-label="Problem analytics">
+            <div className="admin-panel-head">
+              <h3>Problem Analytics</h3>
+              <button
+                type="button"
+                className="admin-link admin-link-action"
+                onClick={() => onNavigate?.("problems")}
+              >
+                All problems
+                <ArrowUpRight size={14} strokeWidth={2} className="size-3.5" aria-hidden />
+              </button>
+            </div>
+            <div className="admin-engage-grid">
+              <MetricCell label="Total" value={formatNumber(problemsBlock.total ?? kpis.totalProblems)} />
+              <MetricCell label="Easy" value={formatNumber(byDiff.easy)} />
+              <MetricCell label="Medium" value={formatNumber(byDiff.medium)} />
+              <MetricCell label="Hard" value={formatNumber(byDiff.hard)} />
+              <MetricCell label="Published" value={formatNumber(problemsBlock.published ?? kpis.publishedProblems)} />
+              <MetricCell label="Draft" value={formatNumber(problemsBlock.draft ?? kpis.draftProblems)} />
+            </div>
+            <div className="admin-dual-charts">
+              {diffData.length > 0 ? (
+                <ResponsiveContainer width="100%" height={160}>
                   <PieChart>
                     <Pie
-                      data={statusData}
+                      data={diffData}
                       dataKey="value"
                       nameKey="name"
-                      innerRadius={42}
-                      outerRadius={62}
-                      paddingAngle={2}
+                      cx="50%"
+                      cy="45%"
+                      outerRadius={46}
                     >
-                      {statusData.map((d) => (
-                        <Cell key={d.name} fill={STATUS_COLORS[d.name] || "#64748b"} />
+                      {diffData.map((d) => (
+                        <Cell
+                          key={d.name}
+                          fill={
+                            DIFF_COLORS[d.name as keyof typeof DIFF_COLORS] ||
+                            CHART.tick
+                          }
+                        />
                       ))}
                     </Pie>
                     <Tooltip contentStyle={CHART_TOOLTIP} />
+                    <Legend content={<ChartLegendContent />} />
                   </PieChart>
                 </ResponsiveContainer>
-                <div className="admin-breakdown">
-                  {statusData.map((d) => (
-                    <div key={d.name} className="admin-breakdown-row">
-                      <span>{d.name.replace(/_/g, " ")}</span>
-                      <span style={{ color: "#e2e8f0" }}>{formatNumber(d.value)}</span>
-                      <span>{pct(d.value, statusTotal)}</span>
-                      <div className="bar">
-                        <i
-                          style={{
-                            width: pct(d.value, statusTotal),
-                            background: STATUS_COLORS[d.name] || "#64748b",
-                          }}
-                        />
+              ) : (
+                <EmptyState
+                  compact
+                  icon={<Gauge size={18} strokeWidth={1.75} aria-hidden />}
+                  title="No difficulty data"
+                  description="Publish problems to see easy / medium / hard distribution."
+                />
+              )}
+              {topicData.length > 0 ? (
+                <div className="admin-category-list" aria-label="Problem categories">
+                  <div className="admin-category-head">Problem Categories</div>
+                  {topicData.slice(0, 6).map((t) => {
+                    const max = Math.max(...topicData.map((x) => Number(x.value) || 0), 1);
+                    const pct = Math.round((Number(t.value) / max) * 100);
+                    return (
+                      <div key={t.name} className="admin-category-row">
+                        <span className="admin-category-name" title={String(t.name)}>
+                          {t.name}
+                        </span>
+                        <span className="admin-category-bar" aria-hidden>
+                          <i style={{ width: `${pct}%` }} />
+                        </span>
+                        <span className="admin-category-val">{formatNumber(t.value)}</span>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
-              </>
-            )}
+              ) : (
+                <EmptyState
+                  compact
+                  icon={<Tags size={18} strokeWidth={1.75} aria-hidden />}
+                  title="No topic tags yet"
+                  description="Add tags on problems to unlock topic insights."
+                />
+              )}
+            </div>
           </section>
 
-          <section className="admin-panel span-5" aria-label="Live activity">
+          {/* Submission analytics */}
+          <section className="admin-panel span-6" aria-label="Submission analytics">
             <div className="admin-panel-head">
-              <h3>Live Activity</h3>
-              <span className="hint">Submissions + audit</span>
-            </div>
-            {subsLoading && liveActivity.length === 0 ? (
-              <div className="admin-skel" style={{ height: 180 }} />
-            ) : liveActivity.length === 0 ? (
-              <div className="admin-empty-soft">No recent platform events.</div>
-            ) : (
-              <div className="admin-activity-list">
-                {liveActivity.map((ev) => (
-                  <div key={ev.id} className="admin-activity-item">
-                    <div>{ev.icon}</div>
-                    <div>
-                      <div className="title">{ev.title}</div>
-                      <div className="entity">{ev.entity}</div>
-                    </div>
-                    <div className="when">{relativeTime(ev.when)}</div>
-                  </div>
-                ))}
+              <h3>Submission Analytics</h3>
+              <div className="admin-stat-chips" aria-label="Submission summary">
+                <span className="admin-stat-chip">
+                  Acceptance {kpis.successRate ?? 0}%
+                </span>
+                <span className="admin-stat-chip">
+                  Avg runtime {avgRuntime != null ? `${avgRuntime} ms` : "N/A"}
+                </span>
+                <span className="admin-stat-chip">
+                  Avg memory {avgMemory != null ? `${avgMemory} MB` : "N/A"}
+                </span>
               </div>
-            )}
-          </section>
-
-          <section className="admin-panel span-4" aria-label="Code execution">
-            <div className="admin-panel-head">
-              <h3>Code Execution</h3>
-              <span className="admin-rt-status">
-                <span className={`admin-status-dot ${execCritical ? "offline" : "healthy"}`} />
-                {execCritical ? "Critical" : "Healthy"}
-              </span>
             </div>
-            <div className="admin-engage-grid">
-              <MetricCell label="Queued" value={formatNumber(pending)} />
+            <div className="admin-engage-grid admin-engage-grid-dense">
+              <MetricCell label="Total" value={formatNumber(kpis.totalSubmissions)} />
+              <MetricCell label="Accepted" value={formatNumber(byStatus.ACCEPTED ?? accepted)} />
+              <MetricCell label="Wrong Answer" value={formatNumber(byStatus.WRONG_ANSWER)} />
+              <MetricCell label="Runtime Error" value={formatNumber(byStatus.RUNTIME_ERROR)} />
+              <MetricCell label="Compile Error" value={formatNumber(byStatus.COMPILATION_ERROR)} />
+              <MetricCell label="TLE" value={formatNumber(byStatus.TIME_LIMIT_EXCEEDED)} />
+              <MetricCell label="MLE" value={formatNumber(byStatus.MEMORY_LIMIT_EXCEEDED)} />
+              <MetricCell label="Pending" value={formatNumber(pending)} />
               <MetricCell label="Running" value={formatNumber(running)} />
-              <MetricCell label="Accepted" value={formatNumber(accepted)} />
               <MetricCell label="Failed" value={formatNumber(failedExec)} />
-              <MetricCell
-                label="Timeout"
-                value={formatNumber(byStatus.TIME_LIMIT_EXCEEDED || 0)}
-              />
-              <MetricCell label="Avg runtime" value="Metric unavailable" />
-              <MetricCell label="Queue wait" value="Metric unavailable" />
-              <MetricCell label="Workers" value="Metric unavailable" />
             </div>
-            <p className="admin-muted" style={{ fontSize: "0.72rem", margin: 0 }}>
-              Queue / worker CPU metrics are not exposed by EvaluationService yet.
-            </p>
-          </section>
-
-          <section className="admin-panel span-3" aria-label="System health">
-            <div className="admin-panel-head">
-              <h3>System Health</h3>
+            <div className="admin-panel-subhead">
+              <h4>Language Distribution</h4>
             </div>
-            {health.length === 0 ? (
-              <div className="admin-skel" style={{ height: 160 }} />
+            {langData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={160}>
+                <BarChart data={langData} layout="vertical" margin={{ left: 8, right: 12, top: 4, bottom: 4 }}>
+                  <XAxis type="number" hide />
+                  <YAxis
+                    type="category"
+                    dataKey="name"
+                    width={88}
+                    tick={{ fill: CHART.tick, fontSize: 11 }}
+                  />
+                  <Tooltip contentStyle={CHART_TOOLTIP} />
+                  <Bar dataKey="value" name="Submissions" fill={CHART[3]} radius={[0, 4, 4, 0]} barSize={12} />
+                </BarChart>
+              </ResponsiveContainer>
             ) : (
-              health.map((h) => (
-                <div key={h.name} className="admin-svc-row">
-                  <div className="admin-svc-left">
-                    <span
-                      className={`admin-status-dot ${
-                        h.status === "healthy"
-                          ? "healthy"
-                          : h.status === "warning"
-                            ? "degraded"
-                            : "offline"
-                      }`}
-                    />
-                    <span>{h.name}</span>
-                  </div>
-                  <span className="admin-muted" style={{ fontSize: "0.7rem" }}>
-                    {h.status}
-                  </span>
-                </div>
-              ))
+              <EmptyState
+                compact
+                icon={<Languages size={18} strokeWidth={1.75} aria-hidden />}
+                title="No language distribution yet"
+                description="Language share appears after submissions are recorded."
+              />
             )}
-            <div className="admin-svc-row">
-              <div className="admin-svc-left">
-                <span className={`admin-status-dot ${rt.ok ? "healthy" : "unknown"}`} />
-                <span>WebSocket</span>
-              </div>
-              <span className="admin-muted" style={{ fontSize: "0.7rem" }}>
-                {rt.ok ? "healthy" : "not configured / offline"}
-              </span>
-            </div>
           </section>
 
-          <section className="admin-panel span-7" aria-label="Problem performance">
+          {/* Top problems */}
+          <section className="admin-panel span-7" aria-label="Top problems">
             <div className="admin-panel-head">
-              <h3>Problem Performance</h3>
-              <button
-                type="button"
-                className="admin-link"
-                onClick={() => onNavigate?.("problems")}
+              <h3>Top Problems</h3>
+              <select
+                className="admin-select-sm"
+                value={topSort}
+                onChange={(e) => setTopSort(e.target.value as TopSort)}
+                aria-label="Sort top problems"
               >
-                View all problems →
-              </button>
+                {TOP_SORTS.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
             </div>
-            {topProblems.length === 0 ? (
-              <div className="admin-empty-soft">
-                Not enough submission volume to rank problems in this range.
-              </div>
+            {sortedTopProblems.length === 0 ? (
+              <EmptyState
+                compact
+                icon={<BookOpen size={18} strokeWidth={1.75} aria-hidden />}
+                title="No ranked problems yet"
+                description="Not enough submission volume to rank problems in this range."
+              />
             ) : (
               <DataTable
-                emptyTitle="No problems"
+                emptyTitle="No problems found"
+                emptyDescription="Problems with enough attempts will appear here."
+                emptyIcon={<BookOpen size={18} strokeWidth={1.75} aria-hidden />}
                 columns={[
                   {
                     key: "rank",
                     header: "#",
                     render: (r) => (
-                      <span className={`admin-rank ${Number(r.__rank) <= 3 ? "top" : ""}`}>
+                      <span
+                        className={`admin-rank ${Number(r.__rank) <= 3 ? "top" : ""}`}
+                      >
                         {r.__rank}
                       </span>
                     ),
@@ -738,17 +1574,39 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
                   {
                     key: "problem",
                     header: "Problem",
-                    render: (r) =>
-                      r.title ||
-                      r.problemTitle ||
-                      String(r.problemId || "—").slice(0, 14),
+                    render: (r) => {
+                      const id = String(r.problemId || "");
+                      const { primary, secondary } = problemDisplayTitle(
+                        r.title,
+                        id,
+                      );
+                      return (
+                        <button
+                          type="button"
+                          className="admin-link admin-problem-cell"
+                          onClick={() =>
+                            onNavigate?.(
+                              "problem-editor",
+                              id
+                            )
+                          }
+                        >
+                          <span className="admin-problem-title">{primary}</span>
+                          {secondary ? (
+                            <span className="admin-problem-id" title={secondary}>
+                              {secondary}
+                            </span>
+                          ) : null}
+                        </button>
+                      );
+                    },
                   },
                   {
                     key: "diff",
                     header: "Difficulty",
                     render: (r) =>
                       r.difficulty ? (
-                        <StatusBadge status={String(r.difficulty)} />
+                        <DifficultyBadge difficulty={String(r.difficulty)} />
                       ) : (
                         "—"
                       ),
@@ -756,221 +1614,561 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
                   {
                     key: "attempts",
                     header: "Attempts",
-                    render: (r) => formatNumber(r.count ?? r.attempts),
+                    render: (r) => formatNumber(r.attempts),
                   },
                   {
                     key: "ac",
-                    header: "Accepted",
-                    render: (r) =>
-                      r.accepted != null ? formatNumber(r.accepted) : "—",
+                    header: "Solved",
+                    render: (r) => formatNumber(r.accepted),
                   },
                   {
                     key: "rate",
                     header: "Acceptance",
-                    render: (r) =>
-                      r.acceptanceRate != null ? `${r.acceptanceRate}%` : "—",
+                    render: (r) => `${r.acceptanceRate}%`,
                   },
                 ]}
-                rows={topProblems.map((r: any, i: number) => ({
+                rows={sortedTopProblems.map((r: any, i: number) => ({
                   ...r,
                   __rank: i + 1,
                 }))}
-                rowKey={(r) => String(r.problemId || r._id || r.__rank)}
+                rowKey={(r) => String(r.problemId || r.__rank)}
               />
             )}
           </section>
 
-          <section className="admin-panel span-5" aria-label="User engagement">
+          {/* Most favourited questions */}
+          <section className="admin-panel span-7" aria-label="Most favourited">
             <div className="admin-panel-head">
-              <h3>User Engagement</h3>
+              <h3>Most Favourited</h3>
+              <span className="admin-muted" style={{ fontSize: 12 }}>
+                Free {favouriteAnalytics?.freeFavourites ?? 0} · Premium{" "}
+                {favouriteAnalytics?.premiumFavourites ?? 0}
+              </span>
             </div>
-            <div className="admin-engage-grid">
-              <MetricCell label="DAU" value={formatNumber(kpis.dau)} />
-              <MetricCell label="WAU" value={formatNumber(kpis.wau)} />
-              <MetricCell label="MAU" value={formatNumber(kpis.mau)} />
-              <MetricCell label="Total users" value={formatNumber(kpis.totalUsers)} />
-              <MetricCell
-                label="Today submissions"
-                value={formatNumber(kpis.todaySubmissions)}
+            {!favouriteAnalytics || favouriteAnalytics.mostFavourited.length === 0 ? (
+              <EmptyState
+                compact
+                icon={<Star size={18} strokeWidth={1.75} aria-hidden />}
+                title="No favourites yet"
+                description="Favourite counts appear when users save questions."
               />
-              <MetricCell label="Accepted" value={formatNumber(accepted)} />
-            </div>
-            {(charts?.userGrowth || []).length > 0 ? (
-              <ResponsiveContainer width="100%" height={120}>
-                <AreaChart data={charts.userGrowth}>
+            ) : (
+              <DataTable
+                emptyTitle="No favourites"
+                emptyDescription="Favourite counts will appear here."
+                emptyIcon={<Star size={18} strokeWidth={1.75} aria-hidden />}
+                columns={[
+                  {
+                    key: "rank",
+                    header: "#",
+                    render: (r) => (
+                      <span
+                        className={`admin-rank ${Number(r.__rank) <= 3 ? "top" : ""}`}
+                      >
+                        {r.__rank}
+                      </span>
+                    ),
+                  },
+                  {
+                    key: "problem",
+                    header: "Problem",
+                    render: (r) => (
+                      <button
+                        type="button"
+                        className="admin-link"
+                        onClick={() => onNavigate?.("problems", String(r.id))}
+                      >
+                        {r.title}
+                      </button>
+                    ),
+                  },
+                  {
+                    key: "diff",
+                    header: "Difficulty",
+                    render: (r) =>
+                      r.difficulty ? (
+                        <DifficultyBadge difficulty={String(r.difficulty)} />
+                      ) : (
+                        "—"
+                      ),
+                  },
+                  {
+                    key: "access",
+                    header: "Access",
+                    render: (r) => (r.isPremium ? "Premium" : "Free"),
+                  },
+                  {
+                    key: "count",
+                    header: "Favourites",
+                    render: (r) => formatNumber(r.favouriteCount),
+                  },
+                ]}
+                rows={favouriteAnalytics.mostFavourited
+                  .slice(0, 8)
+                  .map((r, i) => ({ ...r, __rank: i + 1 }))}
+                rowKey={(r) => String(r.id || r.__rank)}
+              />
+            )}
+          </section>
+
+          {favouriteAnalytics && favouriteAnalytics.trends.some((t) => t.count > 0) && (
+            <section className="admin-panel span-5" aria-label="Favourite trends">
+              <div className="admin-panel-head">
+                <h3>Favourite Trends</h3>
+                <span className="admin-muted" style={{ fontSize: 12 }}>
+                  Last 30 days
+                </span>
+              </div>
+              <ResponsiveContainer width="100%" height={180}>
+                <AreaChart data={favouriteAnalytics.trends}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
+                  <XAxis
+                    dataKey="date"
+                    tick={{ fill: CHART.tick, fontSize: 10 }}
+                    tickFormatter={(v) => String(v).slice(5)}
+                  />
+                  <YAxis tick={{ fill: CHART.tick, fontSize: 11 }} allowDecimals={false} />
+                  <Tooltip contentStyle={CHART_TOOLTIP} />
                   <Area
                     type="monotone"
                     dataKey="count"
-                    stroke="#38bdf8"
-                    fill="rgba(56,189,248,0.15)"
-                    strokeWidth={2}
+                    name="Favourites"
+                    stroke={CHART[1]}
+                    fill={CHART[1]}
+                    fillOpacity={0.2}
                   />
-                  <Tooltip contentStyle={CHART_TOOLTIP} />
                 </AreaChart>
               </ResponsiveContainer>
-            ) : (
-              <div className="admin-empty-soft" style={{ padding: 12 }}>
-                No user growth series for this range.
+            </section>
+          )}
+
+          {/* Top users / leaderboard */}
+          <section className="admin-panel span-5" aria-label="Top users">
+            <div className="admin-panel-head">
+              <h3>Top Users</h3>
+              <div className="admin-seg admin-seg-sm" role="group" aria-label="Leaderboard period">
+                {(
+                  [
+                    ["global", "All Time"],
+                    ["weekly", "This Week"],
+                    ["monthly", "This Month"],
+                  ] as const
+                ).map(([id, label]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    className={lbPeriod === id ? "active" : ""}
+                    onClick={() => setLbPeriod(id)}
+                    aria-pressed={lbPeriod === id}
+                  >
+                    {label}
+                  </button>
+                ))}
               </div>
+            </div>
+            {lbLoading ? (
+              <div className="admin-skel" style={{ height: 180 }} />
+            ) : lbError ? (
+              <WidgetError
+                title="Leaderboard unavailable"
+                message={lbError}
+                onRetry={() => void loadLeaderboard()}
+                compact
+              />
+            ) : leaderboard.length === 0 ? (
+              <EmptyState
+                compact
+                icon={<Trophy size={18} strokeWidth={1.75} />}
+                title="No leaderboard rows yet"
+                description="Rankings will populate as users earn points."
+              />
+            ) : (
+              <DataTable
+                emptyTitle="No users found"
+                emptyDescription="Top solvers will appear once rankings are available."
+                emptyIcon={<Users size={18} strokeWidth={1.75} />}
+                columns={[
+                  {
+                    key: "rank",
+                    header: "#",
+                    render: (r) => r.__rank ?? r.rank ?? "—",
+                  },
+                  {
+                    key: "user",
+                    header: "User",
+                    render: (r) =>
+                      r.username ||
+                      r.name ||
+                      r.userId ||
+                      String(r._id || "—").slice(0, 10),
+                  },
+                  {
+                    key: "solved",
+                    header: "Solved",
+                    render: (r) =>
+                      formatNumber(r.solved ?? r.score ?? r.problemsSolved),
+                  },
+                  {
+                    key: "score",
+                    header: "Score",
+                    render: (r) => formatNumber(r.score ?? r.points),
+                  },
+                ]}
+                rows={leaderboard.map((r, i) => ({
+                  ...r,
+                  __rank: r.rank ?? i + 1,
+                }))}
+                rowKey={(r) => String(r.userId || r._id || r.__rank)}
+              />
             )}
           </section>
 
-          <section className="admin-panel span-4" aria-label="Realtime operations">
+          {/* Recent submissions */}
+          <section className="admin-panel span-8" aria-label="Recent submissions">
             <div className="admin-panel-head">
-              <h3>Real-Time Operations</h3>
-              <span className="admin-rt-status">
-                <span className={`admin-status-dot ${rt.ok ? "healthy" : "unknown"}`} />
-                {rt.ok ? "Operational" : "Not configured"}
-              </span>
-            </div>
-            {rt.ok ? (
-              <div className="admin-engage-grid">
-                <MetricCell
-                  label="Connections"
-                  value={formatNumber(
-                    rt.data?.activeConnections ?? rt.data?.data?.activeConnections
-                  )}
-                />
-                <MetricCell
-                  label="Events/sec"
-                  value={adminRealtimeApi.metricOrUnavailable(
-                    rt.data?.eventsPerSecond ?? rt.data?.data?.eventsPerSecond
-                  )}
-                />
-                <MetricCell
-                  label="Online users"
-                  value={formatNumber(
-                    rt.data?.onlineUsers ?? rt.data?.data?.onlineUsers
-                  )}
-                />
-                <MetricCell
-                  label="Latency"
-                  value={adminRealtimeApi.metricOrUnavailable(
-                    rt.data?.avgLatencyMs ?? rt.data?.data?.avgLatencyMs
-                  )}
-                />
+              <h3>Recent Submissions</h3>
+              <div className="admin-inline-filters">
+                <label className="admin-search-sm">
+                  <Search size={13} />
+                  <input
+                    value={subsSearch}
+                    onChange={(e) => {
+                      setSubsSearch(e.target.value);
+                      applySubsSearch(e.target.value);
+                      setSubsPage(1);
+                    }}
+                    placeholder="Search…"
+                    aria-label="Search submissions"
+                  />
+                </label>
+                <select
+                  className="admin-select-sm"
+                  value={subsStatus}
+                  onChange={(e) => {
+                    setSubsStatus(e.target.value);
+                    setSubsPage(1);
+                  }}
+                  aria-label="Filter by status"
+                >
+                  <option value="">All statuses</option>
+                  {[
+                    "ACCEPTED",
+                    "WRONG_ANSWER",
+                    "RUNTIME_ERROR",
+                    "COMPILATION_ERROR",
+                    "TIME_LIMIT_EXCEEDED",
+                    "MEMORY_LIMIT_EXCEEDED",
+                    "PENDING",
+                    "RUNNING",
+                    "SYSTEM_ERROR",
+                    "FAILED",
+                  ].map((s) => (
+                    <option key={s} value={s}>
+                      {humanizeStatus(s)}
+                    </option>
+                  ))}
+                </select>
               </div>
+            </div>
+            {subsError ? (
+              <WidgetError
+                title={subsError.title}
+                message={subsError.message}
+                onRetry={() => void loadSubmissions()}
+                compact
+              />
             ) : (
-              <div className="admin-empty-soft">
-                Socket.IO infrastructure is not currently reachable.
-                <div style={{ marginTop: 10 }}>
+              <>
+                <DataTable
+                  loading={subsLoading}
+                  emptyTitle="No submissions found"
+                  emptyDescription="New submissions in this range will show up here."
+                  emptyIcon={<FileCode2 size={18} strokeWidth={1.75} />}
+                  columns={[
+                    {
+                      key: "user",
+                      header: "User",
+                      render: (r) => {
+                        const uid = String(r.userId || "");
+                        const label =
+                          r.username ||
+                          r.userName ||
+                          (uid ? `${uid.slice(0, 8)}…` : "—");
+                        return (
+                          <button
+                            type="button"
+                            className="admin-link admin-user-cell"
+                            onClick={() =>
+                              onNavigate?.(
+                                "user-detail",
+                                uid
+                              )
+                            }
+                          >
+                            <span>{String(label)}</span>
+                            {uid ? (
+                              <span className="admin-problem-id" title={uid}>
+                                {uid.slice(0, 10)}
+                              </span>
+                            ) : null}
+                          </button>
+                        );
+                      },
+                    },
+                    {
+                      key: "problem",
+                      header: "Problem",
+                      render: (r) => {
+                        const pid = String(r.problemId || "");
+                        const { primary } = problemDisplayTitle(
+                          problemMap[pid]?.title,
+                          pid,
+                        );
+                        return (
+                          <button
+                            type="button"
+                            className="admin-link"
+                            onClick={() =>
+                              onNavigate?.("problem-editor", pid)
+                            }
+                          >
+                            {primary}
+                          </button>
+                        );
+                      },
+                    },
+                    {
+                      key: "lang",
+                      header: "Language",
+                      render: (r) => languageLabel(r.language),
+                    },
+                    {
+                      key: "verdict",
+                      header: "Verdict",
+                      render: (r) =>
+                        r.status ? (
+                          <SubmissionVerdictBadge status={String(r.status)} />
+                        ) : (
+                          "—"
+                        ),
+                    },
+                    {
+                      key: "runtime",
+                      header: "Runtime",
+                      render: (r) =>
+                        r.executionTime != null ? `${r.executionTime} ms` : "—",
+                    },
+                    {
+                      key: "mem",
+                      header: "Memory",
+                      render: (r) =>
+                        r.memory != null ? `${r.memory} MB` : "—",
+                    },
+                    {
+                      key: "at",
+                      header: "Submitted",
+                      render: (r) => formatDateTime(r.createdAt),
+                    },
+                  ]}
+                  rows={submissions}
+                  rowKey={(r) => String(r.id || r._id)}
+                />
+                <div className="admin-pager">
                   <button
                     type="button"
                     className="admin-btn"
-                    onClick={() => onNavigate?.("realtime")}
+                    disabled={subsPage <= 1}
+                    onClick={() => setSubsPage((p) => Math.max(1, p - 1))}
                   >
-                    <Radio size={14} /> Configure Real-Time →
+                    Prev
+                  </button>
+                  <span className="admin-muted">
+                    Page {subsMeta.page} / {subsMeta.totalPages} ·{" "}
+                    {formatNumber(subsMeta.total)} total
+                  </span>
+                  <button
+                    type="button"
+                    className="admin-btn"
+                    disabled={subsPage >= subsMeta.totalPages}
+                    onClick={() =>
+                      setSubsPage((p) => Math.min(subsMeta.totalPages, p + 1))
+                    }
+                  >
+                    Next
                   </button>
                 </div>
-              </div>
+              </>
             )}
           </section>
 
+          {/* Recent users */}
+          <section className="admin-panel span-4" aria-label="Recent users">
+            <div className="admin-panel-head">
+              <h3>Recent Users</h3>
+              <label className="admin-search-sm">
+                <Search size={13} />
+                <input
+                  value={userSearch}
+                  onChange={(e) => {
+                    setUserSearch(e.target.value);
+                    applyUserSearch(e.target.value);
+                  }}
+                  placeholder="Search users…"
+                  aria-label="Search users"
+                />
+              </label>
+            </div>
+            {usersLoading ? (
+              <div className="admin-skel" style={{ height: 160 }} />
+            ) : usersError ? (
+              <WidgetError
+                title="Users unavailable"
+                message={usersError}
+                onRetry={() => void loadSide()}
+                compact
+              />
+            ) : recentUsers.length === 0 ? (
+              <EmptyState
+                compact
+                icon={<Users size={18} strokeWidth={1.75} />}
+                title="No users found"
+                description="Try a different search or invite your first users."
+              />
+            ) : (
+              <ul className="admin-user-list">
+                {recentUsers.map((u) => (
+                  <li key={u.id}>
+                    <button
+                      type="button"
+                      className="admin-user-row"
+                      onClick={() => onNavigate?.("user-detail", u.id)}
+                    >
+                      <span className="admin-avatar" aria-hidden>
+                        {u.avatar ? (
+                          <img src={u.avatar} alt="" />
+                        ) : (
+                          initialsFrom(u.name, u.email)
+                        )}
+                      </span>
+                      <span className="admin-user-meta">
+                        <strong>{u.name || "—"}</strong>
+                        <span>{u.email}</span>
+                      </span>
+                      <span className="admin-user-side">
+                        <StatusBadge status={u.status} />
+                        <time dateTime={u.createdAt}>
+                          {relativeTime(u.createdAt)}
+                        </time>
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          {/* Quick actions + alerts */}
           <section className="admin-panel span-4" aria-label="Quick actions">
             <div className="admin-panel-head">
               <h3>Quick Actions</h3>
             </div>
             <div className="admin-qa-grid">
-              <Qa icon={<Plus size={14} />} label="Create Problem" onClick={() => onNavigate?.("problem-editor")} />
-              <Qa icon={<FileCode2 size={14} />} label="Add Test Case" onClick={() => onNavigate?.("problem-test-cases")} />
-              <Qa icon={<Users size={14} />} label="Manage Users" onClick={() => onNavigate?.("users")} />
-              <Qa icon={<Activity size={14} />} label="View Submissions" onClick={() => onNavigate?.("submissions")} />
-              <Qa icon={<Megaphone size={14} />} label="Create Announcement" onClick={() => onNavigate?.("announcements")} />
-              <Qa icon={<Trophy size={14} />} label="Create Contest" onClick={() => onNavigate?.("leaderboards-contest")} />
+              <Qa
+                icon={<Plus size={14} strokeWidth={2} className="size-3.5" aria-hidden />}
+                label="New Problem"
+                description="Create a new challenge"
+                onClick={() => onNavigate?.("problem-editor")}
+              />
+              <Qa
+                icon={<Users size={14} strokeWidth={2} className="size-3.5" aria-hidden />}
+                label="Users"
+                description="Manage accounts"
+                onClick={() => onNavigate?.("users")}
+              />
+              <Qa
+                icon={<FileBarChart size={14} strokeWidth={2} className="size-3.5" aria-hidden />}
+                label="Reports"
+                description="Review flagged content"
+                onClick={() => onNavigate?.("reports")}
+              />
+              <Qa
+                icon={<Megaphone size={14} strokeWidth={2} className="size-3.5" aria-hidden />}
+                label="Announcements"
+                description="Broadcast updates"
+                onClick={() => onNavigate?.("announcements")}
+              />
+              <Qa
+                icon={<Radio size={14} strokeWidth={2} className="size-3.5" aria-hidden />}
+                label="Realtime"
+                description="Live connections"
+                onClick={() => onNavigate?.("realtime")}
+              />
+              <Qa
+                icon={<Trophy size={14} strokeWidth={2} className="size-3.5" aria-hidden />}
+                label="Leaderboards"
+                description="Rankings & scores"
+                onClick={() => onNavigate?.("leaderboards")}
+              />
+              <Qa
+                icon={<HeartPulse size={14} strokeWidth={2} className="size-3.5" aria-hidden />}
+                label="Health"
+                description="Service status"
+                onClick={() => onNavigate?.("health")}
+              />
+              <Qa
+                icon={<Code2 size={14} strokeWidth={2} className="size-3.5" aria-hidden />}
+                label="Executions"
+                description="Queue & workers"
+                onClick={() => onNavigate?.("code-execution")}
+              />
             </div>
           </section>
 
           <section className="admin-panel span-4" aria-label="System alerts">
             <div className="admin-panel-head">
               <h3>System Alerts</h3>
-              <Flag size={14} color="#94a3b8" />
             </div>
             {alerts.length === 0 ? (
-              <div className="admin-empty-soft">No active alerts from health checks.</div>
+              <EmptyState
+                compact
+                icon={<CheckCircle2 size={18} strokeWidth={1.75} aria-hidden />}
+                title="No active alerts"
+                description="System looks healthy — no alerts right now."
+              />
             ) : (
-              alerts.map((a, i) => (
-                <div key={`${a.title}-${i}`} className="admin-alert-item">
-                  <div className="admin-alert-top">
-                    <StatusBadge status={a.severity.toLowerCase()} />
-                    {a.title}
-                  </div>
-                  <div className="admin-muted" style={{ fontSize: "0.72rem" }}>
-                    {a.description}
-                  </div>
-                  <div className="admin-muted" style={{ fontSize: "0.68rem" }}>
-                    {relativeTime(a.at)}
-                  </div>
-                </div>
-              ))
+              <ul className="admin-alert-list">
+                {alerts.map((a, i) => (
+                  <li
+                    key={`${a.title}-${i}`}
+                    className={`admin-alert-item sev-${a.severity.toLowerCase()}`}
+                  >
+                    <div className="admin-alert-top">
+                      <AlertTriangle
+                        size={14}
+                        strokeWidth={2}
+                        className="size-3.5 shrink-0"
+                        aria-hidden
+                      />
+                      <strong>{a.title}</strong>
+                      <time dateTime={a.at}>{relativeTime(a.at)}</time>
+                    </div>
+                    <p>{a.description}</p>
+                  </li>
+                ))}
+              </ul>
             )}
           </section>
 
-          <section className="admin-panel span-12" aria-label="Recent submissions">
+          <section className="admin-panel span-4" aria-label="Running executions">
             <div className="admin-panel-head">
-              <h3>Recent Submissions</h3>
-              <button
-                type="button"
-                className="admin-link"
-                onClick={() => onNavigate?.("submissions")}
-              >
-                Open live feed →
-              </button>
+              <h3>Execution Snapshot</h3>
             </div>
-            {subsError ? (
-              <WidgetError
-                compact
-                title={subsError.title}
-                message={subsError.message}
-                onRetry={() => void loadSide()}
-              />
-            ) : (
-              <DataTable
-                loading={subsLoading}
-                emptyTitle="No recent submissions."
-                columns={[
-                  {
-                    key: "user",
-                    header: "User",
-                    render: (r) => String(r.userId || "—").slice(0, 10),
-                  },
-                  {
-                    key: "problem",
-                    header: "Problem",
-                    render: (r) => String(r.problemId || "—").slice(0, 10),
-                  },
-                  {
-                    key: "lang",
-                    header: "Language",
-                    render: (r) => r.language || "—",
-                  },
-                  {
-                    key: "status",
-                    header: "Status",
-                    render: (r) => (
-                      <StatusBadge status={String(r.status || "pending")} />
-                    ),
-                  },
-                  {
-                    key: "runtime",
-                    header: "Runtime",
-                    render: (r) =>
-                      r.executionTime != null ? `${r.executionTime} ms` : "—",
-                  },
-                  {
-                    key: "mem",
-                    header: "Memory",
-                    render: (r) => (r.memory != null ? `${r.memory} KB` : "—"),
-                  },
-                  {
-                    key: "time",
-                    header: "Time",
-                    render: (r) => relativeTime(r.createdAt),
-                  },
-                ]}
-                rows={submissions}
-                rowKey={(r) => String(r.id || r._id)}
-              />
-            )}
+            <div className="admin-engage-grid">
+              <MetricCell label="Pending" value={formatNumber(pending)} />
+              <MetricCell label="Running" value={formatNumber(running)} />
+              <MetricCell label="Accepted" value={formatNumber(accepted)} />
+              <MetricCell label="System" value={systemHealthLabel} />
+            </div>
           </section>
         </div>
       </div>
@@ -981,7 +2179,7 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
 const Kpi: FC<{
   icon: ReactNode;
   label: string;
-  value: string | number;
+  value: string;
   meta: string;
 }> = ({ icon, label, value, meta }) => (
   <article className="admin-kpi">
@@ -1000,29 +2198,42 @@ const MetricCell: FC<{ label: string; value: string | number }> = ({
   label,
   value,
 }) => (
-  <div className="admin-engage-cell">
-    <div className="l">{label}</div>
-    <div
-      className="v"
-      style={{
-        fontSize:
-          typeof value === "string" && String(value).includes("unavailable")
-            ? "0.78rem"
-            : undefined,
-      }}
+  <div className="admin-metric-cell">
+    <span className="admin-metric-label">{label}</span>
+    <span
+      className={`admin-metric-value${typeof value === "string" && String(value).includes("unavailable")
+        ? " unavailable"
+        : ""
+        }`}
     >
       {value}
-    </div>
+    </span>
   </div>
 );
 
 const Qa: FC<{
   icon: ReactNode;
   label: string;
+  description?: string;
   onClick?: () => void;
-}> = ({ icon, label, onClick }) => (
+}> = ({ icon, label, description, onClick }) => (
   <button type="button" className="admin-qa-btn" onClick={onClick}>
-    {icon}
-    {label}
+    <span className="admin-qa-icon" aria-hidden>
+      {icon}
+    </span>
+    <span className="admin-qa-copy">
+      <span className="admin-qa-label">{label}</span>
+      {description ? (
+        <span className="admin-qa-desc">{description}</span>
+      ) : null}
+    </span>
+    <ArrowUpRight
+      size={14}
+      strokeWidth={2}
+      className="admin-qa-arrow size-3.5 shrink-0"
+      aria-hidden
+    />
   </button>
 );
+
+export default AdminDashboardHome;

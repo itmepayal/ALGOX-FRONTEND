@@ -329,7 +329,7 @@ export const TimeTracker: FC<TimeTrackerProps> = memo(function TimeTracker({
     state.timer.status === "completed";
 
   return (
-    <div className="lc-time-tracker" ref={rootRef}>
+    <div className={`lc-time-tracker${open ? " is-open" : ""}`} ref={rootRef}>
       <div className="lc-timer-pill lc-timer-pill-interactive">
         <button
           type="button"
@@ -356,9 +356,10 @@ export const TimeTracker: FC<TimeTrackerProps> = memo(function TimeTracker({
         <button
           type="button"
           className="lc-timer-display-btn"
-          aria-label="Open timer panel"
+          aria-label={open ? "Close timer panel" : "Open timer panel"}
           aria-expanded={open}
           aria-haspopup="dialog"
+          title={open ? "Close timer" : "Open timer"}
           onClick={onTopBarPrimary}
         >
           {state.mode === "timer" && (
@@ -366,7 +367,7 @@ export const TimeTracker: FC<TimeTrackerProps> = memo(function TimeTracker({
           )}
           <span className="lc-timer-display">{displayLabel}</span>
           {state.timer.status === "completed" && state.mode === "timer" && (
-            <span className="lc-timer-done-dot" title="Time's up" />
+            <span className="lc-timer-done-dot" title="Time's up" aria-hidden />
           )}
         </button>
 

@@ -11,6 +11,7 @@ import {
   ChevronDown,
   CircleHelp,
   LogOut,
+  Menu,
   PanelLeft,
   PanelLeftClose,
   RefreshCw,
@@ -54,7 +55,6 @@ function buildBreadcrumb(tab: AdminTab, title: string): string {
     parts.push(group.label);
   }
   parts.push(leaf);
-  // Dedupe consecutive identical segments
   return parts.filter((p, i, arr) => i === 0 || p !== arr[i - 1]).join(" / ");
 }
 
@@ -82,12 +82,8 @@ export const AdminShell: FC<AdminShellProps> = ({
   const [refreshing, setRefreshing] = useState(false);
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => ({
     [activeGroup]: true,
-    problems: true,
-    submissions: true,
-    users: true,
     realtime: true,
-    leaderboards: true,
-    learning: true,
+    content: true,
   }));
 
   useEffect(() => {
@@ -196,7 +192,11 @@ export const AdminShell: FC<AdminShellProps> = ({
             title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             onClick={() => setCollapsed((c) => !c)}
           >
-            {collapsed ? <PanelLeft size={15} /> : <PanelLeftClose size={15} />}
+            {collapsed ? (
+              <PanelLeft size={15} strokeWidth={1.75} />
+            ) : (
+              <PanelLeftClose size={15} strokeWidth={1.75} />
+            )}
           </button>
         </div>
 
@@ -218,21 +218,28 @@ export const AdminShell: FC<AdminShellProps> = ({
             ) : null;
 
             if (!hasChildren && group.tab) {
+              const isActive = tab === group.tab || activeGroup === group.id;
               return (
-                <div key={group.id}>
+                <div key={group.id} className="admin-nav-item-wrap">
                   {sectionEl}
                   <button
                     type="button"
-                    className={`admin-nav-leaf ${
-                      tab === group.tab ? "active" : ""
-                    }`}
+                    className={`admin-nav-leaf ${isActive ? "active" : ""}`}
                     onClick={() => onNavigate(group.tab!)}
                     title={group.label}
                     aria-label={group.label}
+                    aria-current={isActive ? "page" : undefined}
                   >
-                    {group.icon}
+                    <span className="admin-nav-icon" aria-hidden>
+                      {group.icon}
+                    </span>
                     {!collapsed ? (
                       <span className="label">{group.label}</span>
+                    ) : null}
+                    {collapsed ? (
+                      <span className="admin-nav-tooltip" role="tooltip">
+                        {group.label}
+                      </span>
                     ) : null}
                   </button>
                 </div>
@@ -260,16 +267,24 @@ export const AdminShell: FC<AdminShellProps> = ({
                   aria-label={group.label}
                   aria-expanded={expanded}
                 >
-                  {group.icon}
+                  <span className="admin-nav-icon" aria-hidden>
+                    {group.icon}
+                  </span>
                   {!collapsed ? (
                     <span className="label">{group.label}</span>
                   ) : null}
                   {!collapsed ? (
                     <ChevronDown
                       size={14}
+                      strokeWidth={1.75}
                       className={`admin-nav-chevron ${expanded ? "open" : ""}`}
                       aria-hidden
                     />
+                  ) : null}
+                  {collapsed ? (
+                    <span className="admin-nav-tooltip" role="tooltip">
+                      {group.label}
+                    </span>
                   ) : null}
                 </button>
                 {expanded && !collapsed ? (
@@ -281,6 +296,7 @@ export const AdminShell: FC<AdminShellProps> = ({
                         className={tab === child.id ? "active" : ""}
                         onClick={() => onNavigate(child.id)}
                         title={child.label}
+                        aria-current={tab === child.id ? "page" : undefined}
                       >
                         <span className="label">{child.label}</span>
                       </button>
@@ -316,7 +332,7 @@ export const AdminShell: FC<AdminShellProps> = ({
                 title="Settings"
                 aria-label="Settings"
               >
-                <Settings size={14} />
+                <Settings size={14} strokeWidth={1.75} />
                 {!collapsed ? <span>Settings</span> : null}
               </button>
             ) : null}
@@ -327,7 +343,7 @@ export const AdminShell: FC<AdminShellProps> = ({
               title="Back to app"
               aria-label="Back to app"
             >
-              <ArrowLeft size={14} />
+              <ArrowLeft size={14} strokeWidth={1.75} />
               {!collapsed ? <span>Back to app</span> : null}
             </button>
             <button
@@ -337,7 +353,7 @@ export const AdminShell: FC<AdminShellProps> = ({
               title="Sign out"
               aria-label="Sign out"
             >
-              <LogOut size={14} />
+              <LogOut size={14} strokeWidth={1.75} />
               {!collapsed ? <span>Sign out</span> : null}
             </button>
           </div>
@@ -352,9 +368,10 @@ export const AdminShell: FC<AdminShellProps> = ({
               type="button"
               className="admin-icon-btn admin-mobile-toggle"
               aria-label="Open navigation"
+              title="Open navigation"
               onClick={() => setMobileOpen(true)}
             >
-              <PanelLeft size={16} />
+              <Menu size={15} strokeWidth={1.75} />
             </button>
             <p className="admin-crumb">{breadcrumb}</p>
           </div>
@@ -365,7 +382,7 @@ export const AdminShell: FC<AdminShellProps> = ({
             onClick={() => setCmdOpen(true)}
             aria-label="Open global search"
           >
-            <Search size={14} aria-hidden />
+            <Search size={14} strokeWidth={1.75} aria-hidden />
             <span>Search problems, users, submissions…</span>
             <kbd>/</kbd>
           </button>
@@ -382,7 +399,7 @@ export const AdminShell: FC<AdminShellProps> = ({
               onClick={handleRefresh}
               disabled={!onRefresh}
             >
-              <RefreshCw size={15} />
+              <RefreshCw size={15} strokeWidth={1.75} />
             </button>
             <button
               type="button"
@@ -391,9 +408,12 @@ export const AdminShell: FC<AdminShellProps> = ({
               title="In-app help is not configured"
               disabled
             >
-              <CircleHelp size={15} />
+              <CircleHelp size={15} strokeWidth={1.75} />
             </button>
-            <div className="admin-topbar-profile" title={adminEmail || displayName}>
+            <div
+              className="admin-topbar-profile"
+              title={adminEmail || displayName}
+            >
               <div className="admin-avatar sm" aria-hidden>
                 {initials}
               </div>
@@ -402,9 +422,24 @@ export const AdminShell: FC<AdminShellProps> = ({
         </header>
 
         {tab !== "dashboard" &&
+        tab !== "analytics" &&
+        tab !== "health" &&
+        tab !== "roles" &&
         tab !== "problem-editor" &&
-        tab !== "settings" &&
-        tab !== "announcements" ? (
+        tab !== "user-create" &&
+        tab !== "realtime" &&
+        tab !== "realtime-events" &&
+        tab !== "realtime-broadcast" &&
+        tab !== "realtime-leaderboard" &&
+        !String(tab).startsWith("leaderboards") &&
+        tab !== "contests" &&
+        tab !== "contest-detail" &&
+        tab !== "content-articles" &&
+        tab !== "content-tutorials" &&
+        tab !== "content-study-plans" &&
+        tab !== "announcements" &&
+        tab !== "notifications" &&
+        tab !== "settings" ? (
           <div className="admin-page-title-bar">
             <h1>{title}</h1>
           </div>

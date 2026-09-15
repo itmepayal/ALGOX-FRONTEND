@@ -1,5 +1,5 @@
 import { useEffect, useState, type FC } from "react";
-import { Plus, Copy, Archive, Trash2 } from "lucide-react";
+import { Plus, Copy, Archive, Trash2, BookOpen } from "lucide-react";
 import {
   adminProblemApi,
   type AdminProblem,
@@ -163,6 +163,9 @@ export const ProblemListPage: FC<Props> = ({ onEdit }) => {
         rows={rows}
         rowKey={idOf}
         loading={loading}
+        emptyTitle="No problems found"
+        emptyDescription="Try adjusting filters, or create a new problem."
+        emptyIcon={<BookOpen size={18} strokeWidth={1.75} />}
         selectedIds={selected}
         onToggleSelect={(id) => {
           setSelected((prev) => {

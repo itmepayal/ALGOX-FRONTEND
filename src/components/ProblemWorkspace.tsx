@@ -18,7 +18,6 @@ import {
   RotateCcw,
   Maximize2,
   Minimize2,
-  Settings,
   Terminal,
   Check,
   Minus,
@@ -30,10 +29,14 @@ import {
   ChevronUp,
 } from "lucide-react";
 import { TimeTracker } from "./TimeTracker";
+import { OnlineUsersIndicator } from "./presence/OnlineUsersIndicator";
 import { ProblemShare } from "./ProblemShare";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { BrandMark } from "./BrandLogo";
 import { EditorShortcutBar, shortcutModLabel } from "./EditorShortcutBar";
+import { EditorSettingsPopover } from "./EditorSettingsPopover";
+import { MonacoCodeEditor } from "./MonacoCodeEditor";
+import { useEditorSettings } from "../hooks/useEditorSettings";
 import type { Problem, Testcase } from "../api/problemApi";
 import type { Submission } from "../api/submissionApi";
 import type { RunResult } from "../types/judge";
@@ -56,9 +59,8 @@ import {
   getProblemId,
   loadNotes,
   saveNotes,
-  loadEditorFontSize,
-  saveEditorFontSize,
 } from "../utils/workspacePersistence";
+import { contentApi, type ProblemEditorial } from "../api/contentApi";
 
 interface ProblemWorkspaceProps {
   problem: Problem;
@@ -95,6 +97,29 @@ interface ProblemWorkspaceProps {
   onRequireAuth?: () => void;
   /** Notify parent when bookmark state changes (for My Bookmarks list). */
   onBookmarkChange?: (problemId: string, isBookmarked: boolean) => void;
+  /** When false, Submit is unavailable (feature flag). */
+  submissionsEnabled?: boolean;
+  /** When false, experimental editor settings popover is hidden. */
+  advancedEditorEnabled?: boolean;
+  /** Restrict language dropdown to platform-supported languages. */
+  supportedLanguages?: string[];
+}
+
+const LANGUAGE_OPTIONS = [
+  { value: "javascript", label: "JavaScript" },
+  { value: "python", label: "Python" },
+  { value: "cpp", label: "C++" },
+  { value: "java", label: "Java" },
+];
+
+function formatCmsEditorial(editorial: ProblemEditorial | null | undefined): string {
+  if (!editorial?.solutions?.length) return "";
+  return editorial.solutions
+    .map(
+      (s) =>
+        `## ${s.approachName || s.title}\n\n${s.explanation}\n\n**Time:** ${s.timeComplexity} | **Space:** ${s.spaceComplexity}`
+    )
+    .join("\n\n---\n\n");
 }
 
 type LeftTab = "description" | "editorial" | "hints" | "notes" | "submissions";
@@ -313,13 +338,24 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
   onCloseSubmissionView,
   onRequireAuth,
   onBookmarkChange,
+  submissionsEnabled = true,
+  advancedEditorEnabled = true,
+  supportedLanguages,
 }) => {
   const problemId = getProblemId(problem);
   const [leftTab, setLeftTab] = useState<LeftTab>("description");
   const [activeEditorTab, setActiveEditorTab] = useState<EditorTab>("code");
   const [revealedHints, setRevealedHints] = useState(0);
   const [notes, setNotes] = useState("");
-  const [fontSize, setFontSize] = useState(() => loadEditorFontSize());
+  const [cmsEditorial, setCmsEditorial] = useState("");
+  const {
+    settings: editorSettings,
+    setEditorSetting,
+    bumpFontSize,
+    fontSizeMin,
+    fontSizeMax,
+  } = useEditorSettings();
+  const fontSize = editorSettings.fontSize;
   const notesTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [leftPct, setLeftPct] = useState(42);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -429,6 +465,7 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
   };
 
   const handleSubmitClick = () => {
+    if (!submissionsEnabled) return;
     setActiveEditorTab("result");
     onSubmit();
   };
@@ -457,7 +494,12 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
     (problem.examples?.length ?? 0) > 0 ? problem.examples! : officialCases;
 
   const constraintsText = problem.constraints;
-  const editorialText = problem.editorial;
+  const editorialText = problem.editorial || cmsEditorial;
+
+  const languageOptions = useMemo(() => {
+    if (!supportedLanguages?.length) return LANGUAGE_OPTIONS;
+    return LANGUAGE_OPTIONS.filter((l) => supportedLanguages.includes(l.value));
+  }, [supportedLanguages]);
 
   const activeRunCase = useMemo(() => {
     if (!runResult?.cases?.length) return null;
@@ -480,6 +522,7 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
     setActiveEditorTab("code");
     setRevealedHints(0);
     setNotes(loadNotes(userId, problemId));
+    setCmsEditorial("");
     setLikeCount(problem.likeCount ?? 0);
     setDislikeCount(problem.dislikeCount ?? 0);
     setUserReaction(null);
@@ -504,10 +547,25 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
       }
     };
     void load();
+
+    if (!problem.editorial && problemId) {
+      void contentApi.getEditorialByProblemId(problemId).then((res) => {
+        if (cancelled) return;
+        setCmsEditorial(formatCmsEditorial(res.data));
+      }).catch(() => {});
+    }
+
+    if (userId && problemId && localStorage.getItem("accessToken")) {
+      void contentApi.getProblemNote(userId, problemId).then((res) => {
+        if (cancelled) return;
+        if (res?.data?.noteText) setNotes(res.data.noteText);
+      }).catch(() => {});
+    }
+
     return () => {
       cancelled = true;
     };
-  }, [problemId, userId, problem.likeCount, problem.dislikeCount, problem.isBookmarked]);
+  }, [problemId, userId, problem.editorial, problem.likeCount, problem.dislikeCount, problem.isBookmarked]);
 
   // Clamp selected case index when cases shrink
   useEffect(() => {
@@ -525,6 +583,11 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
     if (notesTimerRef.current) clearTimeout(notesTimerRef.current);
     notesTimerRef.current = setTimeout(() => {
       saveNotes(userId, problemId, value);
+      if (userId && problemId && localStorage.getItem("accessToken")) {
+        void contentApi
+          .upsertProblemNote({ userId, problemId, content: value })
+          .catch(() => {});
+      }
     }, 400);
   };
 
@@ -536,7 +599,7 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
 
   const requireAuthOrContinue = (): boolean => {
     if (!localStorage.getItem("accessToken") || !userId) {
-      setEngagementError("Please sign in to like, dislike, or bookmark.");
+      setEngagementError("Please sign in to like, dislike, or save favourites.");
       onRequireAuth?.();
       return false;
     }
@@ -547,14 +610,19 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
     likeCount: number;
     dislikeCount: number;
     currentUserReaction: UserReaction;
-    isBookmarked: boolean;
+    isBookmarked?: boolean;
+    isFavourite?: boolean;
   }) => {
+    const isBm =
+      typeof data.isFavourite === "boolean"
+        ? data.isFavourite
+        : Boolean(data.isBookmarked);
     setLikeCount(data.likeCount);
     setDislikeCount(data.dislikeCount);
     setUserReaction(data.currentUserReaction);
-    setBookmarked(data.isBookmarked);
-    // Bookmark only — never notify parent about revision from workspace actions.
-    onBookmarkChange?.(problemId, data.isBookmarked);
+    setBookmarked(isBm);
+    // Favourite only — never notify parent about revision from workspace actions.
+    onBookmarkChange?.(problemId, isBm);
   };
 
   const handleReaction = async (reaction: "like" | "dislike") => {
@@ -640,7 +708,9 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
       setUserReaction(prev.userReaction);
       setBookmarked(prev.bookmarked);
       setEngagementError(
-        err.response?.data?.message || err.message || "Failed to update bookmark."
+        err.response?.data?.message ||
+          err.message ||
+          "Unable to update favourites. Please try again."
       );
     } finally {
       if (reqId === engagementReqRef.current) setEngagementBusy(false);
@@ -648,11 +718,7 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
   };
 
   const changeFontSize = (delta: number) => {
-    setFontSize((prev) => {
-      const next = Math.min(22, Math.max(12, prev + delta));
-      saveEditorFontSize(next);
-      return next;
-    });
+    bumpFontSize(delta);
   };
 
   const handleAddCase = () => {
@@ -709,8 +775,6 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
   })();
 
   const editorCode = viewingHistory ? selectedSubmission!.code : userCode;
-  const lineCount = Math.max(15, editorCode.split("\n").length);
-  const lineNumbers = Array.from({ length: lineCount }, (_, i) => i + 1);
 
   const submitStatus = submissionResult?.status;
   const submitPending =
@@ -805,8 +869,12 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
             type="button"
             className="lc-action-btn lc-submit-btn"
             onClick={handleSubmitClick}
-            disabled={busy || viewingHistory}
-            title={`Submit (${modKey}+Shift+Enter)`}
+            disabled={busy || viewingHistory || !submissionsEnabled}
+            title={
+              !submissionsEnabled
+                ? "Submissions are currently disabled"
+                : `Submit (${modKey}+Shift+Enter)`
+            }
           >
             {isSubmitting ? (
               <Loader2 size={14} className="animate-spin" strokeWidth={1.75} />
@@ -822,20 +890,25 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
           <button
             type="button"
             className="lc-icon-btn"
-            title="Reset Code"
+            data-tooltip="Reset"
             aria-label="Reset Code"
             onClick={openResetConfirm}
             disabled={busy || viewingHistory}
           >
             <RotateCcw size={15} strokeWidth={1.75} />
           </button>
-          <button type="button" className="lc-icon-btn" title="Settings" aria-label="Settings">
-            <Settings size={15} strokeWidth={1.75} />
-          </button>
-          <button
+          {advancedEditorEnabled ? (
+            <EditorSettingsPopover
+              settings={editorSettings}
+              setEditorSetting={setEditorSetting}
+              bumpFontSize={bumpFontSize}
+              fontSizeMin={fontSizeMin}
+              fontSizeMax={fontSizeMax}
+            />
+          ) : null}          <button
             type="button"
             className="lc-icon-btn"
-            title={isFullscreen ? "Exit fullscreen" : "Fullscreen editor"}
+            data-tooltip={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
             aria-label={isFullscreen ? "Exit fullscreen" : "Fullscreen editor"}
             onClick={() => setIsFullscreen((v) => !v)}
           >
@@ -857,7 +930,7 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
             : ({ ["--lc-left" as string]: `${leftPct}%` } as CSSProperties)
         }
       >
-        <section className="lc-panel lc-left-panel">
+        <section className="lc-panel lc-left-panel relative">
           <div className="lc-tabs-header">
             <button
               type="button"
@@ -1072,9 +1145,9 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
                         <button
                           type="button"
                           className={`lc-social-btn ${bookmarked ? "lc-bookmark-active" : ""}`}
-                          aria-label={bookmarked ? "Remove bookmark" : "Bookmark problem"}
+                          aria-label={bookmarked ? "Remove from favourites" : "Add to favourites"}
                           aria-pressed={bookmarked}
-                          title={bookmarked ? "Remove bookmark" : "Bookmark"}
+                          title={bookmarked ? "Remove from favourites" : "Add to favourites"}
                           disabled={engagementBusy}
                           onClick={() => void handleBookmark()}
                         >
@@ -1247,6 +1320,8 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
               </>
             )}
           </div>
+
+          <OnlineUsersIndicator problemId={problemId} />
         </section>
 
         <div
@@ -1324,10 +1399,11 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
                       value={selectedLanguage}
                       onChange={(e) => onLanguageChange(e.target.value)}
                     >
-                      <option value="javascript">JavaScript</option>
-                      <option value="python">Python</option>
-                      <option value="cpp">C++</option>
-                      <option value="java">Java</option>
+                      {languageOptions.map((l) => (
+                        <option key={l.value} value={l.value}>
+                          {l.label}
+                        </option>
+                      ))}
                     </select>
                   )}
                 </div>
@@ -1337,6 +1413,7 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
                     className="lc-icon-btn"
                     title="Decrease font size"
                     aria-label="Decrease font size"
+                    disabled={fontSize <= fontSizeMin}
                     onClick={() => changeFontSize(-1)}
                   >
                     <Minus size={14} strokeWidth={2} aria-hidden />
@@ -1346,6 +1423,7 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
                     className="lc-icon-btn"
                     title="Increase font size"
                     aria-label="Increase font size"
+                    disabled={fontSize >= fontSizeMax}
                     onClick={() => changeFontSize(1)}
                   >
                     <Plus size={14} strokeWidth={2} aria-hidden />
@@ -1365,24 +1443,15 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
                 </div>
               </div>
 
-              <div className="lc-editor-container">
-                <div className="lc-editor-gutter" style={{ fontSize }}>
-                  {lineNumbers.map((num) => (
-                    <div key={num} className="lc-line-num">
-                      {num}
-                    </div>
-                  ))}
-                </div>
-                <textarea
-                  className={`lc-code-textarea${viewingHistory ? " lc-readonly-code" : ""}`}
+              <div className="lc-editor-container lc-monaco-container">
+                <MonacoCodeEditor
                   value={editorCode}
-                  onChange={(e) => {
-                    if (!viewingHistory) onCodeChange(e.target.value);
-                  }}
+                  language={selectedLanguage}
+                  settings={editorSettings}
                   readOnly={viewingHistory}
-                  spellCheck={false}
-                  wrap="off"
-                  style={{ fontSize }}
+                  onChange={(next) => {
+                    if (!viewingHistory) onCodeChange(next);
+                  }}
                 />
               </div>
               {!viewingHistory && <EditorShortcutBar />}
@@ -1670,11 +1739,7 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
                               ) : (
                                 <span className="lc-pending-dot" />
                               )}
-                              <span>
-                                {idx < publicCount
-                                  ? `Case ${idx + 1}`
-                                  : `#${idx + 1}`}
-                              </span>
+                              <span>{`Case ${idx + 1}`}</span>
                             </span>
                           ))}
                         </div>
@@ -1899,7 +1964,7 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
           type="button"
           className="lc-action-btn lc-submit-btn"
           onClick={handleSubmitClick}
-          disabled={busy || viewingHistory}
+          disabled={busy || viewingHistory || !submissionsEnabled}
         >
           {isSubmitting ? (
             <Loader2 size={14} className="animate-spin" />

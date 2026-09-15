@@ -1,14 +1,20 @@
 import { useEffect, useState, type FC } from "react";
+import { Users } from "lucide-react";
 import { adminAuthApi, type AdminUser } from "../../../api/adminAuthApi";
 import { DataTable } from "../shared/DataTable";
 import { StatusBadge } from "../shared/StatusBadge";
 import { PermissionGuard } from "../shared/PermissionGuard";
+import { hasPermission } from "../../../rbac/permissions";
+import { useAuth } from "../../../context/AuthContext";
 
 interface Props {
   onOpen: (id: string) => void;
+  onCreate?: () => void;
 }
 
-export const UserListPage: FC<Props> = ({ onOpen }) => {
+export const UserListPage: FC<Props> = ({ onOpen, onCreate }) => {
+  const { user } = useAuth();
+  const canCreate = hasPermission(user?.role, "users:create");
   const [rows, setRows] = useState<AdminUser[]>([]);
   const [page, setPage] = useState(1);
   const [meta, setMeta] = useState({ total: 0, totalPages: 1 });
@@ -78,6 +84,11 @@ export const UserListPage: FC<Props> = ({ onOpen }) => {
         <button type="button" className="admin-btn" onClick={() => { setPage(1); load(); }}>
           Search
         </button>
+        {canCreate && onCreate ? (
+          <button type="button" className="admin-btn primary" onClick={onCreate}>
+            Create user
+          </button>
+        ) : null}
       </div>
       {error ? <p className="admin-error">{error}</p> : null}
       <DataTable
@@ -88,6 +99,9 @@ export const UserListPage: FC<Props> = ({ onOpen }) => {
         totalPages={meta.totalPages}
         total={meta.total}
         onPageChange={setPage}
+        emptyTitle="No users found"
+        emptyDescription="Try adjusting search or filters, or create a new user."
+        emptyIcon={<Users size={18} strokeWidth={1.75} />}
         columns={[
           {
             key: "name",

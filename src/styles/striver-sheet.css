@@ -364,6 +364,7 @@
 }
 
 .ax-ring-inner strong {
+  font-family: var(--font-technical);
   font-size: 0.95rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
@@ -411,6 +412,7 @@
 
 .ax-progress-legend b,
 .ax-rail-legend b {
+  font-family: var(--font-technical);
   color: var(--text-main);
   font-weight: 650;
   font-variant-numeric: tabular-nums;
@@ -503,6 +505,7 @@
 }
 
 .ax-topic-count {
+  font-family: var(--font-technical);
   font-size: 0.82rem;
   font-weight: 600;
   color: var(--text-secondary);
@@ -774,6 +777,7 @@
   border-radius: 8px;
   background: var(--primary-subtle);
   border: 1px solid rgba(99, 102, 241, 0.22);
+  font-family: var(--font-technical);
   font-size: 0.75rem;
   color: var(--primary-bright);
   font-weight: 600;

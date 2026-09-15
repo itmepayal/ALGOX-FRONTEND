@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { AuthProvider, useAuth } from "./context/AuthContext";
+import { PlatformSettingsProvider, usePlatformSettings } from "./context/PlatformSettingsContext";
 import { AuthModal } from "./components/AuthModal";
 import { Dashboard } from "./components/Dashboard";
 import { AdminApp } from "./components/admin/AdminApp";
@@ -9,11 +10,16 @@ import {
   rememberPendingProblemSlug,
 } from "./utils/problemShare";
 import { BrandMark } from "./components/BrandLogo";
+import { cn } from "./lib/cn";
 import "./index.css";
 
 function AppContent() {
   const { user } = useAuth();
+  const { settings, isEnabled, flags } = usePlatformSettings();
   const [view, setView] = useState<"dashboard" | "admin">("dashboard");
+
+  const inMaintenance =
+    flags.maintenance && !isEnabled("maintenance");
 
   // If a shared ?problem= link is opened while logged out, remember it for after login
   useEffect(() => {
@@ -24,31 +30,35 @@ function AppContent() {
 
   // Sync /admin path when entering admin; restore / when leaving
   useEffect(() => {
-    if (view === "admin" && canAccessAdmin(user?.role)) {
+    if (view === "admin" && canAccessAdmin(user?.role, user?.permissions)) {
       if (!window.location.pathname.startsWith("/admin")) {
         window.history.replaceState({}, "", "/admin?admin=dashboard");
       }
     } else if (view === "dashboard" && window.location.pathname.startsWith("/admin")) {
       window.history.replaceState({}, "", "/");
     }
-  }, [view, user?.role]);
+  }, [view, user?.role, user?.permissions]);
 
   // Drop admin view if role cannot access
   useEffect(() => {
-    if (view === "admin" && user && !canAccessAdmin(user.role)) {
+    if (view === "admin" && user && !canAccessAdmin(user.role, user.permissions)) {
       setView("dashboard");
     }
   }, [view, user]);
 
   // Deep-link: land on admin if URL is /admin
   useEffect(() => {
-    if (user && canAccessAdmin(user.role) && window.location.pathname.startsWith("/admin")) {
+    if (
+      user &&
+      canAccessAdmin(user.role, user.permissions) &&
+      window.location.pathname.startsWith("/admin")
+    ) {
       setView("admin");
     }
   }, [user]);
 
   if (user) {
-    if (view === "admin" && canAccessAdmin(user.role)) {
+    if (view === "admin" && canAccessAdmin(user.role, user.permissions)) {
       return (
         <AdminApp
           onBackToUserView={() => {
@@ -58,10 +68,33 @@ function AppContent() {
         />
       );
     }
+    if (inMaintenance) {
+      return (
+        <div className="flex min-h-screen flex-col items-center justify-center px-6 text-center">
+          <h1 className="text-2xl font-bold">Under maintenance</h1>
+          <p className="mt-2 max-w-md text-muted-foreground">
+            {settings?.maintenanceMessage ||
+              "AlgoPath is under maintenance. Please check back soon."}
+          </p>
+          {canAccessAdmin(user.role, user.permissions) ? (
+            <button
+              type="button"
+              className="mt-4 rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground"
+              onClick={() => {
+                window.history.replaceState({}, "", "/admin?admin=dashboard");
+                setView("admin");
+              }}
+            >
+              Open Admin Console
+            </button>
+          ) : null}
+        </div>
+      );
+    }
     return (
       <Dashboard
         onOpenAdmin={
-          canAccessAdmin(user.role)
+          canAccessAdmin(user.role, user.permissions)
             ? () => {
                 window.history.replaceState({}, "", "/admin?admin=dashboard");
                 setView("admin");
@@ -72,94 +105,48 @@ function AppContent() {
     );
   }
 
+  if (inMaintenance) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center px-6 text-center">
+        <h1 className="text-2xl font-bold">Under maintenance</h1>
+        <p className="mt-2 max-w-md text-muted-foreground">
+          {settings?.maintenanceMessage ||
+            "AlgoPath is under maintenance. Please check back soon."}
+        </p>
+      </div>
+    );
+  }
+
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        backgroundColor: "var(--bg-main)",
-        color: "var(--text-main)",
-        fontFamily: "var(--font-sans)",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: "24px",
-      }}
-    >
-      <header style={{ textAlign: "center", marginBottom: "28px" }}>
+    <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4 py-6 font-primary text-foreground">
+      <header className="mb-6 text-center">
         <div
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "10px",
-            padding: "6px 16px",
-            backgroundColor: "var(--bg-card)",
-            border: "1px solid var(--border-subtle)",
-            borderRadius: "30px",
-            fontSize: "0.825rem",
-            fontWeight: 500,
-            color: "var(--text-secondary)",
-            marginBottom: "20px",
-            backdropFilter: "blur(12px)",
-            boxShadow: "0 4px 20px rgba(0, 0, 0, 0.4), 0 0 15px var(--primary-glow)",
-          }}
+          className={cn(
+            "mb-4 inline-flex items-center gap-2.5 rounded-full border border-border",
+            "bg-card px-3.5 py-1 text-xs sm:text-sm font-medium text-muted-foreground shadow-md backdrop-blur-md",
+          )}
         >
-          <BrandMark size={22} />
-
-          <span
-            style={{
-              width: "6px",
-              height: "6px",
-              borderRadius: "50%",
-              backgroundColor: "var(--success)",
-              boxShadow: "0 0 8px var(--success)",
-            }}
-          />
-
-          <span style={{ color: "var(--text-main)", fontWeight: 600 }}>
-            Algo<span style={{ color: "var(--primary)" }}>Path</span> Platform
+          <BrandMark size={20} />
+          <span className="h-1.5 w-1.5 rounded-full bg-success shadow-[0_0_8px_var(--success)]" />
+          <span className="font-semibold text-foreground">
+            Algo<span className="text-primary">Path</span> Platform
           </span>
-          <span style={{ color: "var(--text-muted)" }}>|</span>
-          <span style={{ color: "var(--primary-hover)", fontFamily: "var(--font-sans)" }}>
-            v2.4 Production Active
-          </span>
+          <span className="text-muted-foreground">|</span>
+          <span className="text-primary-hover">v2.4 Production Active</span>
         </div>
 
-        <h1
-          style={{
-            fontSize: "1.85rem",
-            fontWeight: 700,
-            color: "var(--text-main)",
-            letterSpacing: "-0.02em",
-            fontFamily: "var(--font-sans)",
-            lineHeight: 1.3,
-          }}
-        >
+        <h1 className="font-primary text-2xl font-bold leading-tight tracking-tight text-foreground sm:text-3xl md:text-4xl">
           Master Coding & System Design on{" "}
-          <span
-            style={{
-              color: "var(--primary)",
-              fontWeight: 800,
-              textShadow: "0 0 25px var(--primary-glow)",
-            }}
-          >
-            Algo<span style={{ color: "var(--primary-hover)" }}>Path</span>
+          <span className="text-primary">
+            Algo<span className="text-primary-hover">Path</span>
           </span>
         </h1>
-        <p
-          style={{
-            color: "var(--text-secondary)",
-            fontSize: "0.9rem",
-            fontFamily: "var(--font-sans)",
-            maxWidth: "500px",
-            margin: "8px auto 0",
-          }}
-        >
+        <p className="mx-auto mt-1.5 max-w-lg font-primary text-xs text-muted-foreground sm:text-sm md:text-base">
           Ultra-fast microservice algorithm execution, live contests & real-time analytics
         </p>
       </header>
 
-      <main style={{ width: "100%" }}>
+      <main className="w-full max-w-md">
         <AuthModal />
       </main>
     </div>
@@ -169,7 +156,9 @@ function AppContent() {
 function App() {
   return (
     <AuthProvider>
-      <AppContent />
+      <PlatformSettingsProvider>
+        <AppContent />
+      </PlatformSettingsProvider>
     </AuthProvider>
   );
 }

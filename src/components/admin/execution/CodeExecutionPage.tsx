@@ -1,4 +1,5 @@
 import { useEffect, useState, type FC } from "react";
+import { Cpu } from "lucide-react";
 import {
   HEALTH_ENDPOINTS,
   pingHealth,
@@ -7,12 +8,25 @@ import {
 import { StatsCard } from "../shared/StatsCard";
 import { PermissionGuard } from "../shared/PermissionGuard";
 import { StatusBadge } from "../shared/StatusBadge";
+import { EmptyState } from "../shared/EmptyState";
+
+type QueueView =
+  | { status: "loading" }
+  | { status: "error"; message: string }
+  | { status: "empty" }
+  | {
+      status: "ready";
+      waiting: number;
+      running: number;
+      failed: number;
+    };
 
 export const CodeExecutionPage: FC = () => {
   const [health, setHealth] = useState<
     Array<{ name: string; status: string; url: string }>
   >([]);
   const [kpis, setKpis] = useState<any>({});
+  const [queue, setQueue] = useState<QueueView>({ status: "loading" });
   const [updatedAt, setUpdatedAt] = useState<string>("");
 
   useEffect(() => {
@@ -34,9 +48,37 @@ export const CodeExecutionPage: FC = () => {
       } catch {
         overview = {};
       }
+
+      let nextQueue: QueueView = { status: "empty" };
+      try {
+        const h = await adminAnalyticsApi.executionHealth();
+        const q = h.data?.queue || {};
+        const waiting = Number(q.waiting);
+        const running = Number(q.active ?? q.running);
+        const failed = Number(q.failed);
+        if (
+          Number.isFinite(waiting) &&
+          Number.isFinite(running) &&
+          Number.isFinite(failed)
+        ) {
+          nextQueue = { status: "ready", waiting, running, failed };
+        } else {
+          nextQueue = { status: "empty" };
+        }
+      } catch (err: any) {
+        nextQueue = {
+          status: "error",
+          message:
+            err?.response?.data?.message ||
+            err?.message ||
+            "Evaluation health unavailable",
+        };
+      }
+
       if (cancelled) return;
       setHealth(rows);
       setKpis(overview);
+      setQueue(nextQueue);
       setUpdatedAt(new Date().toISOString());
     })();
     return () => {
@@ -50,14 +92,38 @@ export const CodeExecutionPage: FC = () => {
       fallback={<div className="admin-denied">No permission.</div>}
     >
       <p className="admin-muted" style={{ marginBottom: 12 }}>
-        Live service health + submission KPIs. Deep queue/worker heartbeats require
-        EvaluationService queue metrics endpoints (next infra pass).
+        Live service health + Evaluation BullMQ queue (waiting / running / failed).
         {updatedAt ? ` Updated ${new Date(updatedAt).toLocaleTimeString()}.` : ""}
       </p>
       <div className="admin-stats-grid" style={{ marginBottom: 14 }}>
         <StatsCard label="Submissions (range)" value={kpis.totalSubmissions ?? "—"} />
         <StatsCard label="Accepted rate" value={`${kpis.successRate ?? 0}%`} />
         <StatsCard label="Today submissions" value={kpis.todaySubmissions ?? "—"} />
+      </div>
+      <div className="admin-stats-grid" style={{ marginBottom: 14 }}>
+        {queue.status === "loading" && (
+          <div className="admin-stat-card admin-muted">Loading queue…</div>
+        )}
+        {queue.status === "error" && (
+          <div className="admin-stat-card admin-muted">{queue.message}</div>
+        )}
+        {queue.status === "empty" && (
+          <div className="admin-stat-card" style={{ gridColumn: "1 / -1" }}>
+            <EmptyState
+              compact
+              icon={<Cpu size={18} strokeWidth={1.75} />}
+              title="Queue metrics unavailable"
+              description="Connect EvaluationService to inspect waiting, running, and failed jobs."
+            />
+          </div>
+        )}
+        {queue.status === "ready" && (
+          <>
+            <StatsCard label="Waiting" value={queue.waiting} />
+            <StatsCard label="Running" value={queue.running} />
+            <StatsCard label="Failed" value={queue.failed} />
+          </>
+        )}
       </div>
       <div className="admin-stats-grid">
         {health.map((h) => (

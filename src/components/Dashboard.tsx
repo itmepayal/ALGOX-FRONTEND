@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef, type FC } from "react";
 import { useAuth } from "../context/AuthContext";
+import { usePlatformSettings } from "../context/PlatformSettingsContext";
+import type { JudgeLanguage } from "../api/adminSettingsApi";
 import { authApi } from "../api/authApi";
 import { problemApi, type Problem, type Testcase } from "../api/problemApi";
 import {
@@ -17,7 +19,14 @@ import { LearningCalendarRoadmap } from "./LearningCalendarRoadmap";
 import { StudySessionsPanel } from "./StudySessionsPanel";
 import { DailyPlannerPanel } from "./DailyPlannerPanel";
 import { ActiveStudySessionBar } from "./ActiveStudySessionBar";
+import { FavouritesPage } from "./FavouritesPage";
 import { BrandMark } from "./BrandLogo";
+import { DiscussionsPanel } from "./DiscussionsPanel";
+import { ContestsPanel } from "./ContestsPanel";
+import { LeaderboardPanel } from "./LeaderboardPanel";
+import { ContentLibraryPanel } from "./ContentLibraryPanel";
+import { NotificationBell } from "./NotificationBell";
+import { AnnouncementBanner } from "./AnnouncementBanner";
 import {
   formatJudgeInput,
   getTestCaseExpectedOutput,
@@ -54,21 +63,23 @@ import {
   Flame,
   Home,
   ListTodo,
-  MessageSquare,
   Search,
   ShieldCheck,
+  Star,
   Timer,
-  Trophy,
   User as UserIcon,
 } from "lucide-react";
 
 type PlatformTab =
   | "problems"
+  | "favourites"
   | "calendar"
   | "sessions"
   | "planner"
   | "contests"
   | "discuss"
+  | "learn"
+  | "ranks"
   | "profile";
 
 interface DashboardProps {
@@ -77,8 +88,18 @@ interface DashboardProps {
 
 export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
   const { user, signout, setUser } = useAuth();
+  const { settings, isEnabled } = usePlatformSettings();
+  const contestsEnabled = isEnabled("contests");
+  const discussionsEnabled = isEnabled("discussions");
+  const submissionsEnabled = isEnabled("submissions");
+  const notificationsEnabled = isEnabled("notifications");
+  const newEditorEnabled = isEnabled("newEditor");
+  const platformName = settings?.platformName || "AlgoPath";
+  const logoUrl = settings?.logoUrl;
+  const supportedLanguages = settings?.supportedLanguages;
   const [activeTab, setActiveTab] = useState<PlatformTab>("problems");
   const [learningRefreshKey, setLearningRefreshKey] = useState(0);
+  const [favouritesRefreshKey, setFavouritesRefreshKey] = useState(0);
   const [selectedDifficulty, setSelectedDifficulty] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "solved" | "attempted" | "unsolved">("all");
@@ -214,6 +235,7 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
         normalizeProblemId(p.id || p._id) === id ? { ...p, isBookmarked } : p
       )
     );
+    setFavouritesRefreshKey((k) => k + 1);
   };
 
   /** Revision-only state update — must never modify bookmarkedIds. */
@@ -232,7 +254,7 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
       // Do not call fetchRevisions / handleRevisionChange.
     } catch (err) {
       console.warn("Remove bookmark failed:", err);
-      window.alert("Failed to remove bookmark. Please try again.");
+      window.alert("Unable to update favourites. Please try again.");
     }
   };
 
@@ -649,6 +671,10 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
   };
 
   const handleRunCode = async () => {
+    if (!submissionsEnabled) {
+      setRunError("Code runs are currently disabled.");
+      return;
+    }
     if (!selectedProblem || busy || runLockRef.current || submitLockRef.current) return;
     runLockRef.current = true;
     setSelectedSubmission(null);
@@ -670,6 +696,10 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
   };
 
   const handleSubmitCode = async () => {
+    if (!submissionsEnabled) {
+      setSubmissionError("Submissions are currently disabled.");
+      return;
+    }
     if (!selectedProblem || !user || busy || submitLockRef.current || runLockRef.current) return;
     submitLockRef.current = true;
     setSelectedSubmission(null);
@@ -843,17 +873,48 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
     [bumpLearning]
   );
 
+  useEffect(() => {
+    if (activeTab === "contests" && !contestsEnabled) setActiveTab("problems");
+    if (activeTab === "discuss" && !discussionsEnabled) setActiveTab("problems");
+  }, [activeTab, contestsEnabled, discussionsEnabled]);
+
+  useEffect(() => {
+    if (!settings?.faviconUrl) return;
+    let link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+    if (!link) {
+      link = document.createElement("link");
+      link.rel = "icon";
+      document.head.appendChild(link);
+    }
+    link.href = settings.faviconUrl;
+  }, [settings?.faviconUrl]);
+
+  useEffect(() => {
+    if (!settings?.defaultLanguage || !settings.supportedLanguages?.length) return;
+    if (!settings.supportedLanguages.includes(selectedLanguage as JudgeLanguage)) {
+      setSelectedLanguage(settings.defaultLanguage);
+    }
+  }, [settings?.defaultLanguage, settings?.supportedLanguages, selectedLanguage]);
+
   const topNavItems = [
     { id: "problems" as const, label: "Sheets" },
+    { id: "favourites" as const, label: "My Favourites" },
     { id: "calendar" as const, label: "Roadmap" },
     { id: "sessions" as const, label: "Sessions" },
     { id: "planner" as const, label: "Planner" },
-    { id: "contests" as const, label: "Contest" },
-    { id: "discuss" as const, label: "Discuss" },
+    ...(contestsEnabled
+      ? [{ id: "contests" as const, label: "Contest" }]
+      : []),
+    ...(discussionsEnabled
+      ? [{ id: "discuss" as const, label: "Discuss" }]
+      : []),
+    { id: "learn" as const, label: "Learn" },
+    ...(submissionsEnabled ? [{ id: "ranks" as const, label: "Ranks" }] : []),
   ];
 
   const railItems = [
     { id: "problems" as const, icon: Home, label: "Sheet" },
+    { id: "favourites" as const, icon: Star, label: "My Favourites" },
     { id: "calendar" as const, icon: CalendarDays, label: "Calendar" },
     { id: "sessions" as const, icon: Timer, label: "Sessions" },
     { id: "planner" as const, icon: ListTodo, label: "Planner" },
@@ -867,10 +928,21 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
           type="button"
           className="platform-brand"
           onClick={() => setActiveTab("problems")}
-          aria-label="AlgoPath home"
+          aria-label={`${platformName} home`}
         >
-          <BrandMark size={30} className="platform-brand-mark" />
-          <span className="platform-brand-name">AlgoPath</span>
+          {logoUrl ? (
+            <img
+              src={logoUrl}
+              alt=""
+              width={30}
+              height={30}
+              className="platform-brand-mark algopath-brand-mark"
+              draggable={false}
+            />
+          ) : (
+            <BrandMark size={30} className="platform-brand-mark" />
+          )}
+          <span className="platform-brand-name">{platformName}</span>
         </button>
 
         <nav className="platform-navbar-nav" aria-label="Primary">
@@ -895,6 +967,7 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
           <span className="platform-chip platform-chip-streak" title="Current streak">
             <Flame size={14} fill="currentColor" /> {streakInfo.current}d
           </span>
+          <NotificationBell enabled={notificationsEnabled} />
           {onOpenAdmin && (
             <button
               type="button"
@@ -958,7 +1031,8 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
         </aside>
 
         <div className="platform-main">
-          {activeTab !== "problems" && (
+          <AnnouncementBanner />
+          {activeTab !== "problems" && activeTab !== "favourites" && (
             <header className="platform-topbar">
               <span className="platform-topbar-title">
                 {activeTab === "calendar" && "Calendar + Roadmap"}
@@ -966,6 +1040,8 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
                 {activeTab === "planner" && "Daily Planner"}
                 {activeTab === "contests" && "Contests"}
                 {activeTab === "discuss" && "Discuss"}
+                {activeTab === "learn" && "Learn"}
+                {activeTab === "ranks" && "Leaderboard"}
                 {activeTab === "profile" && "Profile & Settings"}
               </span>
               <div className="platform-topbar-actions">
@@ -1003,6 +1079,17 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
                   await fetchUserSubmissions();
                   setLearningRefreshKey((k) => k + 1);
                 }}
+              />
+            )}
+
+            {activeTab === "favourites" && (
+              <FavouritesPage
+                submissions={userSubmissions}
+                userId={userId}
+                refreshKey={favouritesRefreshKey}
+                onSelectProblem={setSelectedProblem}
+                onBookmarkChange={handleBookmarkChange}
+                onExploreQuestions={() => setActiveTab("problems")}
               />
             )}
 
@@ -1044,20 +1131,16 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
             )}
 
             {activeTab === "contests" && (
-              <div className="placeholder-tab">
-                <Trophy size={40} color="var(--primary)" style={{ marginBottom: 12 }} />
-                <h2>Contests Coming Soon</h2>
-                <p>Weekly coding contests will appear here.</p>
-              </div>
+              <ContestsPanel authenticated={Boolean(user && localStorage.getItem("accessToken"))} />
             )}
 
             {activeTab === "discuss" && (
-              <div className="placeholder-tab">
-                <MessageSquare size={40} color="var(--primary)" style={{ marginBottom: 12 }} />
-                <h2>Discussion Forum</h2>
-                <p>Share solutions and ask questions with the community.</p>
-              </div>
+              <DiscussionsPanel authenticated={Boolean(user && localStorage.getItem("accessToken"))} />
             )}
+
+            {activeTab === "learn" && <ContentLibraryPanel />}
+
+            {activeTab === "ranks" && <LeaderboardPanel />}
 
             {activeTab === "profile" && (
               <ProfilePanel
@@ -1183,6 +1266,9 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
           onLoadSubmission={handleLoadSubmission}
           onCloseSubmissionView={handleCloseSubmissionView}
           onBookmarkChange={handleBookmarkChange}
+          submissionsEnabled={submissionsEnabled}
+          advancedEditorEnabled={newEditorEnabled}
+          supportedLanguages={supportedLanguages}
         />
       )}
     </div>

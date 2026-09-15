@@ -34,6 +34,38 @@ export const adminProblemApi = {
     return res.data;
   },
 
+  favouriteAnalytics: async () => {
+    const res = await problemClient.get<
+      ApiResponse<{
+        mostFavourited: Array<{
+          id: string;
+          title: string;
+          slug: string;
+          difficulty: string;
+          category: string;
+          favouriteCount: number;
+          isPremium: boolean;
+        }>;
+        trends: Array<{ date: string; count: number }>;
+        freeFavourites: number;
+        premiumFavourites: number;
+        mostFavouritedFree: Array<{
+          id: string;
+          title: string;
+          favouriteCount: number;
+          isPremium: boolean;
+        }>;
+        mostFavouritedPremium: Array<{
+          id: string;
+          title: string;
+          favouriteCount: number;
+          isPremium: boolean;
+        }>;
+      }>
+    >("/problems/admin/favourite-analytics");
+    return res.data;
+  },
+
   update: async (id: string, payload: Partial<AdminProblem>) => {
     const res = await problemClient.put<ApiResponse<AdminProblem>>(
       `/problems/${id}`,

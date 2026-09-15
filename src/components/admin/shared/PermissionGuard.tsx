@@ -15,7 +15,9 @@ export const PermissionGuard: FC<PermissionGuardProps> = ({
 }) => {
   const { user } = useAuth();
   const perms = Array.isArray(permission) ? permission : [permission];
-  const ok = perms.some((p) => hasPermission(user?.role, p));
+  const ok = perms.some((p) =>
+    hasPermission(user?.role, p, user?.permissions)
+  );
   if (!ok) return <>{fallback}</>;
   return <>{children}</>;
 };

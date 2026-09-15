@@ -591,25 +591,39 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
     const pid = normalizeProblemId(p.id || p._id);
     if (!pid || bookmarkBusy) return;
     if (!localStorage.getItem("accessToken")) {
-      setRowError("Please sign in to bookmark problems.");
+      setRowError("Please sign in to save favourite questions.");
       return;
     }
     const prev = bookmarkedIds.has(pid);
-    // Optimistic bookmark-only update — never touch revision
+    // Optimistic favourite-only update — never touch revision
     onBookmarkChange?.(pid, !prev);
     setBookmarkBusy(pid);
     setRowError("");
     try {
       const res = await engagementApi.toggleBookmark(pid);
       // Only apply bookmark flag. Ignore any unrelated fields.
-      if (typeof res.data?.isBookmarked === "boolean") {
-        onBookmarkChange?.(pid, res.data.isBookmarked);
-      }
+      const next =
+        typeof res.data?.isFavourite === "boolean"
+          ? res.data.isFavourite
+          : typeof res.data?.isBookmarked === "boolean"
+            ? res.data.isBookmarked
+            : !prev;
+      onBookmarkChange?.(pid, next);
+      setToast({
+        type: "success",
+        text: next ? "Added to favourites" : "Removed from favourites",
+      });
     } catch (err: any) {
       onBookmarkChange?.(pid, prev);
       setRowError(
-        err.response?.data?.message || err.message || "Failed to update bookmark."
+        err.response?.data?.message ||
+          err.message ||
+          "Unable to update favourites. Please try again."
       );
+      setToast({
+        type: "error",
+        text: "Unable to update favourites. Please try again.",
+      });
     } finally {
       setBookmarkBusy(null);
     }
@@ -731,8 +745,8 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
             <button
               type="button"
               className={`ax-icon ${isBm ? "on-bookmark" : ""}`}
-              title={isBm ? "Remove bookmark" : "Bookmark"}
-              aria-label={isBm ? "Remove bookmark" : "Bookmark"}
+              title={isBm ? "Remove from favourites" : "Add to favourites"}
+              aria-label={isBm ? "Remove from favourites" : "Add to favourites"}
               aria-pressed={isBm}
               disabled={bookmarkBusy === pid}
               onClick={(e) => void toggleBookmark(prob, e)}
@@ -860,7 +874,7 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
               [
                 ["all", "All Problems"],
                 ["revision", `Revision (${revisionIds.size})`],
-                ["bookmarks", `Bookmarks (${bookmarkedIds.size})`],
+                ["bookmarks", `Favourites (${bookmarkedIds.size})`],
               ] as const
             ).map(([id, label]) => (
               <button

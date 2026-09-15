@@ -93,9 +93,9 @@
   border: none;
   background: transparent;
   color: var(--text-secondary);
-  font: inherit;
+  font-family: var(--font-primary);
   font-size: 0.85rem;
-  font-weight: 550;
+  font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
   transition: color 0.15s ease;
@@ -107,6 +107,7 @@
 
 .platform-navbar-link.active {
   color: var(--text-main);
+  font-weight: 600;
 }
 
 .platform-navbar-link.active::after {
@@ -396,6 +397,7 @@
 }
 
 .platform-chip-streak {
+  font-family: var(--font-technical);
   color: var(--primary-bright);
   border-color: rgba(99, 102, 241, 0.35);
   background: var(--primary-subtle);
@@ -802,7 +804,7 @@
 }
 
 .sheet-category-fraction {
-  font-family: var(--font-mono);
+  font-family: var(--font-technical);
   font-size: 0.78rem;
   color: var(--primary-hover);
   font-weight: 600;
@@ -899,7 +901,7 @@
 
 .sheet-problem-num {
   color: var(--text-muted);
-  font-family: var(--font-mono);
+  font-family: var(--font-technical);
   font-size: 0.82rem;
   flex-shrink: 0;
 }
@@ -1068,11 +1070,13 @@
 
 /* Difficulty badges */
 .diff-badge {
+  font-family: var(--font-technical);
   font-size: 0.7rem;
   padding: 3px 9px;
   border-radius: 6px;
   font-weight: 700;
   text-transform: capitalize;
+  font-variant-numeric: tabular-nums;
 }
 
 .diff-badge.easy { background: rgba(34, 197, 94, 0.15); color: var(--success); }
@@ -1088,7 +1092,7 @@
   color: var(--text-main);
   display: flex;
   flex-direction: column;
-  font-family: var(--font-sans);
+  font-family: var(--font-primary);
 }
 
 /* ── Top Bar ── */
@@ -1244,7 +1248,7 @@
   border-radius: 14px;
   font-size: 0.75rem;
   color: var(--text-secondary);
-  font-family: var(--font-mono);
+  font-family: var(--font-technical);
 }
 
 .lc-timer-pill-interactive {
@@ -1367,7 +1371,7 @@
 
 .lc-time-big {
   text-align: center;
-  font-family: var(--font-mono);
+  font-family: var(--font-technical);
   font-size: 1.65rem;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.04em;
@@ -1379,7 +1383,7 @@
   color: var(--warning);
   font-size: 1.25rem;
   font-weight: 600;
-  font-family: var(--font-sans);
+  font-family: var(--font-primary);
   letter-spacing: 0;
 }
 
@@ -1452,7 +1456,7 @@
   border: 1px solid var(--border-subtle);
   background: var(--bg-secondary);
   color: var(--text-main);
-  font-family: var(--font-mono);
+  font-family: var(--font-technical);
   font-size: 0.95rem;
 }
 
@@ -1464,7 +1468,7 @@
 .lc-timer-sep {
   padding-bottom: 10px;
   color: var(--text-muted);
-  font-family: var(--font-mono);
+  font-family: var(--font-technical);
 }
 
 @media (max-width: 640px) {
@@ -1750,7 +1754,7 @@
 
 .lc-expl-val {
   color: var(--text-secondary);
-  font-family: var(--font-sans);
+  font-family: var(--font-primary);
 }
 
 .lc-raw-example {
@@ -2338,7 +2342,7 @@
   text-align: center;
   font-size: 0.78rem;
   color: var(--text-muted);
-  font-family: var(--font-mono);
+  font-family: var(--font-technical);
   word-break: break-all;
 }
 
@@ -2555,7 +2559,7 @@
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
   color: var(--text-main);
-  font-family: var(--font-mono);
+  font-family: var(--font-primary);
   font-size: 0.85rem;
   line-height: 1.5;
   resize: vertical;
@@ -3165,6 +3169,7 @@
   border-radius: 999px;
   border: 1px solid var(--border-subtle);
   background: var(--bg-card);
+  font-family: var(--font-technical);
   font-size: 0.8rem;
   font-weight: 600;
   color: var(--text-secondary);
@@ -3493,7 +3498,7 @@
 }
 
 .learn-session-timer {
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: var(--font-technical);
   font-size: clamp(1.8rem, 4vw, 2.4rem);
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -3798,7 +3803,7 @@
 }
 
 .learn-session-bar-time {
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: var(--font-technical);
   font-weight: 700;
   letter-spacing: 0.03em;
 }

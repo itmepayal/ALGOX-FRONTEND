@@ -1,10 +1,18 @@
 import type { FC, ReactNode } from "react";
+import { Inbox } from "lucide-react";
+import { EmptyState } from "../../ui/empty-state";
+import { cn } from "../../../lib/cn";
 
 export interface DataTableColumn<T> {
   key: string;
   header: string;
   render: (row: T) => ReactNode;
   width?: string;
+  /** Prefer for numeric / ID columns */
+  technical?: boolean;
+  align?: "left" | "right" | "center";
+  /** Skeleton bar max width hint (px or css length) */
+  skeletonWidth?: string;
 }
 
 interface DataTableProps<T> {
@@ -14,6 +22,9 @@ interface DataTableProps<T> {
   loading?: boolean;
   emptyTitle?: string;
   emptyHint?: string;
+  emptyDescription?: string;
+  emptyIcon?: ReactNode;
+  emptyAction?: ReactNode;
   selectedIds?: Set<string>;
   onToggleSelect?: (id: string) => void;
   onToggleSelectAll?: () => void;
@@ -22,6 +33,10 @@ interface DataTableProps<T> {
   total?: number;
   onPageChange?: (page: number) => void;
   skeletonRows?: number;
+  /** Row ids that should briefly highlight (e.g. newly arrived events) */
+  highlightIds?: Set<string>;
+  className?: string;
+  minWidth?: string;
 }
 
 export function DataTable<T>({
@@ -31,6 +46,9 @@ export function DataTable<T>({
   loading,
   emptyTitle = "No results",
   emptyHint,
+  emptyDescription,
+  emptyIcon,
+  emptyAction,
   selectedIds,
   onToggleSelect,
   onToggleSelectAll,
@@ -39,18 +57,21 @@ export function DataTable<T>({
   total,
   onPageChange,
   skeletonRows = 6,
+  highlightIds,
+  className,
+  minWidth = "720px",
 }: DataTableProps<T>) {
   const selectable = Boolean(onToggleSelect);
   const colCount = columns.length + (selectable ? 1 : 0);
 
   return (
-    <div className="admin-datatable">
+    <div className={cn("admin-datatable", className)}>
       <div className="admin-table-wrap">
-        <table className="admin-table">
+        <table className="admin-table" style={{ minWidth }}>
           <thead>
             <tr>
               {selectable && (
-                <th style={{ width: 36 }}>
+                <th style={{ width: 40 }} scope="col">
                   <input
                     type="checkbox"
                     checked={
@@ -63,7 +84,14 @@ export function DataTable<T>({
                 </th>
               )}
               {columns.map((c) => (
-                <th key={c.key} style={c.width ? { width: c.width } : undefined}>
+                <th
+                  key={c.key}
+                  scope="col"
+                  style={{
+                    width: c.width,
+                    textAlign: c.align || "left",
+                  }}
+                >
                   {c.header}
                 </th>
               ))}
@@ -79,29 +107,47 @@ export function DataTable<T>({
                     </td>
                   ) : null}
                   {columns.map((c) => (
-                    <td key={c.key}>
-                      <div className="admin-skel" />
+                    <td
+                      key={c.key}
+                      style={{ textAlign: c.align || "left" }}
+                    >
+                      <div
+                        className="admin-skel"
+                        style={{
+                          maxWidth: c.skeletonWidth || c.width || "7rem",
+                          width: "100%",
+                        }}
+                      />
                     </td>
                   ))}
                 </tr>
               ))
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={colCount}>
-                  <div className="admin-empty admin-empty-rich">
-                    <div className="admin-empty-title">{emptyTitle}</div>
-                    {emptyHint ? (
-                      <div className="admin-muted">{emptyHint}</div>
-                    ) : null}
-                  </div>
+                <td colSpan={colCount} className="admin-table-empty-cell">
+                  <EmptyState
+                    compact
+                    title={emptyTitle}
+                    description={emptyDescription ?? emptyHint}
+                    icon={emptyIcon ?? <Inbox size={18} strokeWidth={1.75} />}
+                    action={emptyAction}
+                    className="mx-auto max-w-lg"
+                  />
                 </td>
               </tr>
             ) : (
               rows.map((row) => {
                 const id = rowKey(row);
                 const selected = selectedIds?.has(id);
+                const highlight = highlightIds?.has(id);
                 return (
-                  <tr key={id} className={selected ? "is-selected" : undefined}>
+                  <tr
+                    key={id}
+                    className={cn(
+                      selected && "is-selected",
+                      highlight && "is-new",
+                    )}
+                  >
                     {selectable && (
                       <td>
                         <input
@@ -113,7 +159,18 @@ export function DataTable<T>({
                       </td>
                     )}
                     {columns.map((c) => (
-                      <td key={c.key}>{c.render(row)}</td>
+                      <td
+                        key={c.key}
+                        className={cn(
+                          c.technical && "num",
+                          c.align === "right" && "text-right",
+                          c.align === "center" && "text-center",
+                        )}
+                        data-tech={c.technical ? "" : undefined}
+                        style={{ textAlign: c.align || "left" }}
+                      >
+                        {c.render(row)}
+                      </td>
                     ))}
                   </tr>
                 );

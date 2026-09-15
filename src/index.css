@@ -33,8 +33,30 @@
   --text-secondary: #94a3b8;
   --text-muted: #64748b;
 
-  --font-sans: "Poppins", sans-serif;
-  --font-mono: "Fira Code", ui-monospace, monospace;
+  /* Typography design tokens
+     Poppins  → primary UI
+     Saira    → technical / metrics
+     Fira Code → source code only */
+  --font-primary: "Poppins", sans-serif;
+  --font-technical: "Saira", sans-serif;
+  --font-mono: "Fira Code", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  /* Back-compat aliases */
+  --font-sans: var(--font-primary);
+  --font-tech: var(--font-technical);
+
+  /* Type scale */
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.25rem;
+  --text-2xl: 1.5rem;
+  --text-3xl: 1.875rem;
+
+  --leading-tight: 1.25;
+  --leading-snug: 1.4;
+  --leading-normal: 1.6;
+  --leading-relaxed: 1.7;
 
   --radius-sm: 6px;
   --radius-md: 10px;
@@ -85,11 +107,44 @@
   --text-muted: #64748b;
 }
 
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
+[data-theme="high-contrast"] {
+  --bg-main: #000000;
+  --bg-secondary: #0a0a0a;
+  --bg-card: #0a0a0a;
+  --bg-card-hover: #141414;
+  --bg-tertiary: #111111;
+  --bg-elevated: #121212;
+  --bg-editor: #000000;
+
+  --border-subtle: #ffffff;
+  --border-strong: #ffffff;
+  --border-active: #fde047;
+
+  --primary: #fde047;
+  --primary-hover: #fef08a;
+  --primary-bright: #fef9c3;
+  --primary-dark: #eab308;
+  --primary-deep: #a16207;
+  --primary-glow: rgba(253, 224, 71, 0.35);
+  --primary-subtle: rgba(253, 224, 71, 0.12);
+  --primary-gradient: linear-gradient(135deg, #fef08a 0%, #fde047 55%, #eab308 100%);
+
+  --success: #4ade80;
+  --success-glow: rgba(74, 222, 128, 0.2);
+  --warning: #fbbf24;
+  --warning-glow: rgba(251, 191, 36, 0.2);
+  --error: #f87171;
+  --error-glow: rgba(248, 113, 113, 0.2);
+  --info: #fde047;
+
+  --text-main: #ffffff;
+  --text-secondary: #e5e5e5;
+  --text-muted: #a3a3a3;
 }
+
+/* Box model / reset: rely on Tailwind preflight (@layer base).
+   An unlayered `* { padding:0; margin:0 }` here defeats all
+   Tailwind spacing utilities (unlayered > @layer utilities). */
 
 html,
 body {
@@ -99,11 +154,108 @@ body {
 body {
   background-color: var(--bg-main);
   color: var(--text-main);
-  font-family: var(--font-sans);
+  font-family: var(--font-primary);
+  font-size: var(--text-base);
+  font-weight: 400;
+  line-height: var(--leading-normal);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   min-height: 100vh;
   overflow-x: hidden;
+}
+
+/* ── Typography utilities ── */
+.font-primary {
+  font-family: var(--font-primary);
+}
+
+.font-technical,
+.font-tech {
+  font-family: var(--font-technical);
+  font-variant-numeric: tabular-nums;
+}
+
+.font-mono {
+  font-family: var(--font-mono);
+}
+
+/* ── Heading hierarchy (Poppins) ── */
+h1,
+.h1 {
+  font-family: var(--font-primary);
+  font-size: var(--text-3xl);
+  font-weight: 700;
+  line-height: var(--leading-tight);
+  letter-spacing: -0.02em;
+}
+
+h2,
+.h2 {
+  font-family: var(--font-primary);
+  font-size: var(--text-2xl);
+  font-weight: 600;
+  line-height: var(--leading-tight);
+  letter-spacing: -0.015em;
+}
+
+h3,
+.h3 {
+  font-family: var(--font-primary);
+  font-size: var(--text-xl);
+  font-weight: 600;
+  line-height: var(--leading-snug);
+}
+
+h4,
+.h4 {
+  font-family: var(--font-primary);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  line-height: var(--leading-snug);
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
+button {
+  font-weight: 500;
+}
+
+@media (max-width: 1024px) {
+  h1,
+  .h1 {
+    font-size: var(--text-2xl);
+  }
+
+  h2,
+  .h2 {
+    font-size: var(--text-xl);
+  }
+}
+
+@media (max-width: 640px) {
+  body {
+    font-size: var(--text-sm);
+  }
+
+  h1,
+  .h1 {
+    font-size: var(--text-xl);
+  }
+
+  h2,
+  .h2 {
+    font-size: var(--text-lg);
+  }
+
+  h3,
+  .h3 {
+    font-size: var(--text-base);
+  }
 }
 
 ::-webkit-scrollbar {

@@ -1,61 +1,43 @@
 import type { FC } from "react";
-import { ModuleGate } from "../shared/ModuleGate";
+import { Users } from "lucide-react";
 import { PermissionGuard } from "../shared/PermissionGuard";
 import { adminAuthApi } from "../../../api/adminAuthApi";
 import { useEffect, useState } from "react";
 import { DataTable } from "../shared/DataTable";
 
-export const SubmissionAnalyticsPage: FC = () => (
-  <PermissionGuard permission="analytics:view">
-    <ModuleGate
-      title="Submission analytics"
-      description="Dedicated submission charts (status mix, language, latency) are available on Analytics / Dashboard today via AnalyticsService."
-      status="live"
-    />
-  </PermissionGuard>
-);
-
-type UserExtraMode = "activity" | "online" | "progress" | "sessions";
-
-export const UserOpsPages: FC<{ mode: UserExtraMode }> = ({ mode }) => {
+/** Cross-user online presence lives in Realtime; deep links from Users nav. */
+export const UserOpsPages: FC<{
+  mode: "activity" | "online" | "progress" | "sessions";
+}> = ({ mode }) => {
   if (mode === "online") {
     return (
-      <ModuleGate
-        title="Online users"
-        description="Use Real-Time → Live Users — presence is served by RealtimeService socket connections."
-        status="live"
-      />
+      <p className="admin-muted">
+        Use Real-Time → Live Users for presence (RealtimeService sockets).
+      </p>
     );
   }
 
-  if (mode === "activity") {
+  if (mode === "activity" || mode === "progress" || mode === "sessions") {
     return (
       <PermissionGuard permission="users:view">
-        <ModuleGate
-          title="User activity timeline"
-          description="Cross-service activity feed (opens, runs, solves, logins) will aggregate Auth security logs + submissions. Use Audit Logs and User Detail for current investigation."
-          status="backend"
-        />
+        <p className="admin-muted" style={{ marginBottom: 12 }}>
+          Open a user from All Users for full{" "}
+          {mode === "activity"
+            ? "activity timeline"
+            : mode === "progress"
+              ? "progress stats"
+              : "session revoke"}
+          . Showing recent users below as a quick jump list.
+        </p>
+        <RecentUsersJump />
       </PermissionGuard>
     );
   }
 
-  if (mode === "progress") {
-    return (
-      <PermissionGuard permission="users:view">
-        <ModuleGate
-          title="User progress overview"
-          description="Open a user from All Users for role/status. Deep progress (solved/attempted/sheets) will join Submission + UserProblemProgress APIs on User Detail."
-          status="backend"
-        />
-      </PermissionGuard>
-    );
-  }
-
-  return <AdminSessionsProbe />;
+  return null;
 };
 
-const AdminSessionsProbe: FC = () => {
+const RecentUsersJump: FC = () => {
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -73,29 +55,25 @@ const AdminSessionsProbe: FC = () => {
   }, []);
 
   return (
-    <PermissionGuard permission="users:view">
-      <p className="admin-muted" style={{ marginBottom: 10 }}>
-        Session revoke for arbitrary users needs AuthService admin session APIs.
-        Showing recent users (last active) as an interim ops view.
-      </p>
-      <DataTable
-        loading={loading}
-        emptyTitle="No users"
-        columns={[
-          { key: "name", header: "User", render: (u) => u.name || u.email },
-          { key: "email", header: "Email", render: (u) => u.email },
-          { key: "role", header: "Role", render: (u) => u.role },
-          { key: "status", header: "Status", render: (u) => u.status },
-          {
-            key: "last",
-            header: "Last active",
-            render: (u) =>
-              u.lastActiveAt ? new Date(u.lastActiveAt).toLocaleString() : "—",
-          },
-        ]}
-        rows={users}
-        rowKey={(u) => u.id}
-      />
-    </PermissionGuard>
+    <DataTable
+      loading={loading}
+      emptyTitle="No users found"
+      emptyDescription="Recent accounts will appear here for quick jumps."
+      emptyIcon={<Users size={18} strokeWidth={1.75} />}
+      columns={[
+        { key: "name", header: "User", render: (u) => u.name || u.email },
+        { key: "email", header: "Email", render: (u) => u.email },
+        { key: "role", header: "Role", render: (u) => u.role },
+        { key: "status", header: "Status", render: (u) => u.status },
+        {
+          key: "last",
+          header: "Last active",
+          render: (u) =>
+            u.lastActiveAt ? new Date(u.lastActiveAt).toLocaleString() : "—",
+        },
+      ]}
+      rows={users}
+      rowKey={(u) => u.id}
+    />
   );
 };

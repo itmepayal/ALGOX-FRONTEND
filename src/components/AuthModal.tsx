@@ -1,5 +1,6 @@
 import { useState, useEffect, type FC, type FormEvent } from "react";
 import { useAuth } from "../context/AuthContext";
+import { usePlatformSettings } from "../context/PlatformSettingsContext";
 import { authApi } from "../api/authApi";
 import { BrandMark } from "./BrandLogo";
 import {
@@ -12,7 +13,6 @@ import {
   Lock,
   User as UserIcon,
   KeyRound,
-  ArrowRight,
   ShieldCheck,
 } from "lucide-react";
 
@@ -20,6 +20,8 @@ type AuthTab = "login" | "signup" | "2fa" | "forgot_request" | "forgot_confirm";
 
 export const AuthModal: FC = () => {
   const { user, signin, signup, signout, setUser } = useAuth();
+  const { isEnabled } = usePlatformSettings();
+  const registrationOpen = isEnabled("registration");
   const [activeTab, setActiveTab] = useState<AuthTab>("login");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -35,6 +37,12 @@ export const AuthModal: FC = () => {
   const [securityLogs, setSecurityLogs] = useState<any[]>([]);
   const [loadingSessions, setLoadingSessions] = useState(false);
   const [loadingLogs, setLoadingLogs] = useState(false);
+
+  useEffect(() => {
+    if (!registrationOpen && activeTab === "signup") {
+      setActiveTab("login");
+    }
+  }, [registrationOpen, activeTab]);
 
   useEffect(() => {
     if (user) {
@@ -111,6 +119,10 @@ export const AuthModal: FC = () => {
           if (res.data.otp) setSuccessMsg(`[Dev Mode OTP]: ${res.data.otp}`);
         }
       } else if (activeTab === "signup") {
+        if (!registrationOpen) {
+          setErrorMsg("New registrations are currently closed.");
+          return;
+        }
         await signup({ name, email, password });
       } else if (activeTab === "2fa") {
         await authApi.verify2FA(pendingUserId, otp);
@@ -135,14 +147,14 @@ export const AuthModal: FC = () => {
 
   if (user) {
     return (
-      <div className="auth-card-responsive animate-fade-in" style={{ maxWidth: "580px", width: "100%", margin: "20px auto", padding: "32px 28px", backgroundColor: "var(--bg-card)", border: "1px solid var(--border-subtle)", borderRadius: "20px", boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.7)", fontFamily: "'Poppins', sans-serif" }}>
+      <div className="auth-card-responsive animate-fade-in" style={{ maxWidth: "580px", width: "100%", margin: "20px auto", padding: "32px 28px", backgroundColor: "var(--bg-card)", border: "1px solid var(--border-subtle)", borderRadius: "20px", boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.7)", fontFamily: "var(--font-primary)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "16px", marginBottom: "24px" }}>
           <div style={{ width: "54px", height: "54px", borderRadius: "14px", background: "linear-gradient(135deg, rgba(99, 102, 241, 0.25) 0%, rgba(34, 197, 94, 0.15) 100%)", border: "1px solid rgba(99, 102, 241, 0.4)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--success)" }}>
             <CheckCircle2 size={28} />
           </div>
           <div>
             <h3 style={{ fontSize: "1.25rem", fontWeight: 700, color: "var(--text-main)" }}>{user.name}</h3>
-            <p style={{ color: "var(--text-secondary)", fontSize: "0.85rem", fontFamily: "'Fira Code', monospace" }}>{user.email}</p>
+            <p style={{ color: "var(--text-secondary)", fontSize: "0.85rem", fontFamily: "var(--font-technical)" }}>{user.email}</p>
           </div>
         </div>
 
@@ -226,47 +238,47 @@ export const AuthModal: FC = () => {
     <div
       className="auth-card-responsive animate-fade-in"
       style={{
-        maxWidth: "460px",
+        maxWidth: "440px",
         width: "100%",
-        margin: "20px auto",
-        padding: "36px 32px",
+        margin: "0 auto",
+        padding: "28px 28px 24px 28px",
         backgroundColor: "var(--bg-card)",
         border: "1px solid var(--border-subtle)",
-        borderRadius: "20px",
-        boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 40px rgba(99, 102, 241, 0.12)",
-        fontFamily: "'Poppins', sans-serif",
+        borderRadius: "16px",
+        boxShadow: "0 20px 40px -15px rgba(0, 0, 0, 0.6), 0 0 30px rgba(99, 102, 241, 0.1)",
+        fontFamily: "var(--font-primary)",
         position: "relative",
         zIndex: 1,
       }}
     >
-      <div style={{ textAlign: "center", marginBottom: "26px" }}>
+      <div style={{ textAlign: "center", marginBottom: "20px" }}>
         <div
           style={{
             display: "inline-flex",
             alignItems: "center",
-            gap: "10px",
-            padding: "8px 18px",
-            borderRadius: "14px",
-            background: "linear-gradient(135deg, rgba(99, 102, 241, 0.2) 0%, rgba(17, 24, 39, 0.95) 100%)",
-            border: "1px solid rgba(99, 102, 241, 0.4)",
-            boxShadow: "0 6px 20px rgba(99, 102, 241, 0.25)",
-            marginBottom: "16px",
+            gap: "8px",
+            padding: "6px 14px",
+            borderRadius: "12px",
+            background: "linear-gradient(135deg, rgba(99, 102, 241, 0.15) 0%, rgba(17, 24, 39, 0.95) 100%)",
+            border: "1px solid rgba(99, 102, 241, 0.3)",
+            boxShadow: "0 4px 14px rgba(99, 102, 241, 0.2)",
+            marginBottom: "12px",
           }}
         >
-          <BrandMark size={28} />
-          <span style={{ fontSize: "1.1rem", fontWeight: 800, color: "var(--text-main)" }}>
+          <BrandMark size={24} />
+          <span style={{ fontSize: "1rem", fontWeight: 700, color: "var(--text-main)", letterSpacing: "-0.01em" }}>
             Algo<span style={{ color: "var(--primary)" }}>Path</span>
           </span>
         </div>
 
-        <h2 style={{ fontSize: "1.35rem", fontWeight: 700, color: "var(--text-main)", letterSpacing: "-0.015em" }}>
+        <h2 style={{ fontSize: "1.25rem", fontWeight: 700, color: "var(--text-main)", letterSpacing: "-0.015em" }}>
           {activeTab === "login" && "Sign In to Your Workspace"}
           {activeTab === "signup" && "Create AlgoPath Account"}
           {activeTab === "2fa" && "Two-Factor Verification"}
           {activeTab === "forgot_request" && "Reset Password"}
           {activeTab === "forgot_confirm" && "Set New Password"}
         </h2>
-        <p style={{ color: "var(--text-secondary)", fontSize: "0.825rem", marginTop: "4px" }}>
+        <p style={{ color: "var(--text-secondary)", fontSize: "0.8rem", marginTop: "4px", lineHeight: "1.4" }}>
           {activeTab === "login" && "Enter your credentials to access your algorithm environment"}
           {activeTab === "signup" && "Join thousands of developers mastering algorithms & system design"}
           {activeTab === "2fa" && "Enter the 6-digit OTP code to complete sign in"}
@@ -276,26 +288,26 @@ export const AuthModal: FC = () => {
       </div>
 
       {errorMsg && (
-        <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px 14px", backgroundColor: "rgba(239, 68, 68, 0.1)", border: "1px solid rgba(239, 68, 68, 0.3)", borderRadius: "8px", color: "var(--error)", fontSize: "0.825rem", marginBottom: "18px" }}>
-          <AlertCircle size={16} style={{ flexShrink: 0 }} />
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 12px", backgroundColor: "rgba(239, 68, 68, 0.1)", border: "1px solid rgba(239, 68, 68, 0.3)", borderRadius: "8px", color: "var(--error)", fontSize: "0.8rem", marginBottom: "14px" }}>
+          <AlertCircle size={15} style={{ flexShrink: 0 }} />
           <span>{errorMsg}</span>
         </div>
       )}
       {successMsg && (
-        <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px 14px", backgroundColor: "rgba(34, 197, 94, 0.1)", border: "1px solid rgba(34, 197, 94, 0.3)", borderRadius: "8px", color: "var(--success)", fontSize: "0.825rem", marginBottom: "18px" }}>
-          <Info size={16} style={{ flexShrink: 0 }} />
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 12px", backgroundColor: "rgba(34, 197, 94, 0.1)", border: "1px solid rgba(34, 197, 94, 0.3)", borderRadius: "8px", color: "var(--success)", fontSize: "0.8rem", marginBottom: "14px" }}>
+          <Info size={15} style={{ flexShrink: 0 }} />
           <span>{successMsg}</span>
         </div>
       )}
 
-      <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
+      <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
         {activeTab === "signup" && (
           <div>
-            <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+            <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "4px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
               Full Name
             </label>
             <div style={{ position: "relative" }}>
-              <UserIcon size={18} style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
+              <UserIcon size={16} style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
               <input
                 type="text"
                 value={name}
@@ -304,17 +316,23 @@ export const AuthModal: FC = () => {
                 required
                 style={{
                   width: "100%",
-                  padding: "11px 12px 11px 40px",
+                  padding: "9px 12px 9px 36px",
                   backgroundColor: "var(--bg-secondary)",
                   border: "1px solid var(--border-subtle)",
                   borderRadius: "8px",
                   color: "var(--text-main)",
-                  fontSize: "0.9rem",
+                  fontSize: "0.875rem",
                   outline: "none",
-                  transition: "border-color 0.2s",
+                  transition: "all 0.2s ease",
                 }}
-                onFocus={(e) => (e.target.style.borderColor = "var(--primary)")}
-                onBlur={(e) => (e.target.style.borderColor = "var(--border-subtle)")}
+                onFocus={(e) => {
+                  e.target.style.borderColor = "var(--primary)";
+                  e.target.style.boxShadow = "0 0 0 2px var(--primary-glow)";
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = "var(--border-subtle)";
+                  e.target.style.boxShadow = "none";
+                }}
               />
             </div>
           </div>
@@ -322,11 +340,11 @@ export const AuthModal: FC = () => {
 
         {(activeTab === "login" || activeTab === "signup" || activeTab === "forgot_request" || activeTab === "forgot_confirm") && (
           <div>
-            <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+            <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "4px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
               Email Address
             </label>
             <div style={{ position: "relative" }}>
-              <Mail size={18} style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
+              <Mail size={16} style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
               <input
                 type="email"
                 value={email}
@@ -336,17 +354,23 @@ export const AuthModal: FC = () => {
                 disabled={activeTab === "forgot_confirm"}
                 style={{
                   width: "100%",
-                  padding: "11px 12px 11px 40px",
+                  padding: "9px 12px 9px 36px",
                   backgroundColor: "var(--bg-secondary)",
                   border: "1px solid var(--border-subtle)",
                   borderRadius: "8px",
                   color: "var(--text-main)",
-                  fontSize: "0.9rem",
+                  fontSize: "0.875rem",
                   outline: "none",
-                  transition: "border-color 0.2s",
+                  transition: "all 0.2s ease",
                 }}
-                onFocus={(e) => (e.target.style.borderColor = "var(--primary)")}
-                onBlur={(e) => (e.target.style.borderColor = "var(--border-subtle)")}
+                onFocus={(e) => {
+                  e.target.style.borderColor = "var(--primary)";
+                  e.target.style.boxShadow = "0 0 0 2px var(--primary-glow)";
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = "var(--border-subtle)";
+                  e.target.style.boxShadow = "none";
+                }}
               />
             </div>
           </div>
@@ -354,11 +378,11 @@ export const AuthModal: FC = () => {
 
         {(activeTab === "2fa" || activeTab === "forgot_confirm") && (
           <div>
-            <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+            <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "4px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
               6-Digit OTP Code
             </label>
             <div style={{ position: "relative" }}>
-              <KeyRound size={18} style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
+              <KeyRound size={16} style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
               <input
                 type="text"
                 value={otp}
@@ -367,19 +391,25 @@ export const AuthModal: FC = () => {
                 required
                 style={{
                   width: "100%",
-                  padding: "11px 12px 11px 40px",
+                  padding: "9px 12px 9px 36px",
                   backgroundColor: "var(--bg-secondary)",
                   border: "1px solid var(--border-subtle)",
                   borderRadius: "8px",
                   color: "var(--text-main)",
-                  fontSize: "0.95rem",
+                  fontSize: "0.9rem",
                   letterSpacing: "0.15em",
-                  fontFamily: "'Fira Code', monospace",
+                  fontFamily: "var(--font-technical)",
                   outline: "none",
-                  transition: "border-color 0.2s",
+                  transition: "all 0.2s ease",
                 }}
-                onFocus={(e) => (e.target.style.borderColor = "var(--primary)")}
-                onBlur={(e) => (e.target.style.borderColor = "var(--border-subtle)")}
+                onFocus={(e) => {
+                  e.target.style.borderColor = "var(--primary)";
+                  e.target.style.boxShadow = "0 0 0 2px var(--primary-glow)";
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = "var(--border-subtle)";
+                  e.target.style.boxShadow = "none";
+                }}
               />
             </div>
           </div>
@@ -388,25 +418,26 @@ export const AuthModal: FC = () => {
         {/* Password */}
         {(activeTab === "login" || activeTab === "signup" || activeTab === "forgot_confirm") && (
           <div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
-              <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+              <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
                 {activeTab === "forgot_confirm" ? "New Password" : "Password"}
               </label>
               {activeTab === "login" && (
-                <span
+                <button
+                  type="button"
                   onClick={() => {
                     setErrorMsg("");
                     setSuccessMsg("");
                     setActiveTab("forgot_request");
                   }}
-                  style={{ fontSize: "0.775rem", color: "var(--primary-hover)", cursor: "pointer", fontWeight: 500 }}
+                  style={{ background: "none", border: "none", padding: 0, fontSize: "0.75rem", color: "var(--primary-hover)", cursor: "pointer", fontWeight: 500 }}
                 >
                   Forgot Password?
-                </span>
+                </button>
               )}
             </div>
             <div style={{ position: "relative" }}>
-              <Lock size={18} style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
+              <Lock size={16} style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
               <input
                 type="password"
                 value={password}
@@ -415,17 +446,23 @@ export const AuthModal: FC = () => {
                 required
                 style={{
                   width: "100%",
-                  padding: "11px 12px 11px 40px",
+                  padding: "9px 12px 9px 36px",
                   backgroundColor: "var(--bg-secondary)",
                   border: "1px solid var(--border-subtle)",
                   borderRadius: "8px",
                   color: "var(--text-main)",
-                  fontSize: "0.9rem",
+                  fontSize: "0.875rem",
                   outline: "none",
-                  transition: "border-color 0.2s",
+                  transition: "all 0.2s ease",
                 }}
-                onFocus={(e) => (e.target.style.borderColor = "var(--primary)")}
-                onBlur={(e) => (e.target.style.borderColor = "var(--border-subtle)")}
+                onFocus={(e) => {
+                  e.target.style.borderColor = "var(--primary)";
+                  e.target.style.boxShadow = "0 0 0 2px var(--primary-glow)";
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = "var(--border-subtle)";
+                  e.target.style.boxShadow = "none";
+                }}
               />
             </div>
           </div>
@@ -434,58 +471,91 @@ export const AuthModal: FC = () => {
         <button
           type="submit"
           disabled={loading}
-          className="btn-primary-advanced"
-          style={{ marginTop: "6px" }}
+          style={{
+            marginTop: "4px",
+            width: "100%",
+            padding: "10px 16px",
+            backgroundColor: "var(--primary)",
+            color: "#ffffff",
+            border: "none",
+            borderRadius: "8px",
+            fontSize: "0.875rem",
+            fontWeight: 600,
+            cursor: loading ? "not-allowed" : "pointer",
+            opacity: loading ? 0.7 : 1,
+            transition: "all 0.2s ease",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            boxShadow: "0 2px 8px rgba(99, 102, 241, 0.35)",
+          }}
+          onMouseEnter={(e) => {
+            if (!loading) (e.currentTarget.style.backgroundColor = "var(--primary-hover)");
+          }}
+          onMouseLeave={(e) => {
+            if (!loading) (e.currentTarget.style.backgroundColor = "var(--primary)");
+          }}
+          onFocus={(e) => {
+            e.currentTarget.style.outline = "2px solid var(--primary-bright)";
+            e.currentTarget.style.outlineOffset = "2px";
+          }}
+          onBlur={(e) => {
+            e.currentTarget.style.outline = "none";
+          }}
         >
           {loading ? (
             "Processing..."
           ) : (
-            <>
-              <span>
-                {activeTab === "login" && "Sign In"}
-                {activeTab === "signup" && "Create Account"}
-                {activeTab === "2fa" && "Verify OTP"}
-                {activeTab === "forgot_request" && "Send Reset Code"}
-                {activeTab === "forgot_confirm" && "Update Password"}
-              </span>
-              <ArrowRight size={18} />
-            </>
+            <span>
+              {activeTab === "login" && "Sign In"}
+              {activeTab === "signup" && "Create Account"}
+              {activeTab === "2fa" && "Verify OTP"}
+              {activeTab === "forgot_request" && "Send Reset Code"}
+              {activeTab === "forgot_confirm" && "Update Password"}
+            </span>
           )}
         </button>
       </form>
 
-      <div style={{ marginTop: "24px", paddingTop: "18px", borderTop: "1px solid var(--border-subtle)", textAlign: "center", fontSize: "0.825rem", color: "var(--text-secondary)" }}>
-        {activeTab === "login" && (
+      <div style={{ marginTop: "18px", paddingTop: "14px", borderTop: "1px solid var(--border-subtle)", textAlign: "center", fontSize: "0.8rem", color: "var(--text-secondary)" }}>
+        {activeTab === "login" && registrationOpen && (
           <>
             Don't have an account?{" "}
-            <span
+            <button
+              type="button"
               onClick={() => {
                 setActiveTab("signup");
                 setErrorMsg("");
                 setSuccessMsg("");
               }}
-              style={{ color: "var(--primary-hover)", fontWeight: 600, cursor: "pointer", marginLeft: "4px" }}
+              style={{ background: "none", border: "none", padding: 0, color: "var(--primary-hover)", fontWeight: 600, cursor: "pointer", marginLeft: "4px", fontSize: "0.8rem" }}
             >
               Sign Up now
-            </span>
+            </button>
           </>
         )}
+        {activeTab === "login" && !registrationOpen && (
+          <span style={{ color: "var(--text-muted)" }}>
+            New registrations are currently closed.
+          </span>
+        )}
         {activeTab !== "login" && (
-          <span
+          <button
+            type="button"
             onClick={() => {
               setActiveTab("login");
               setErrorMsg("");
               setSuccessMsg("");
             }}
-            style={{ color: "var(--primary-hover)", fontWeight: 600, cursor: "pointer" }}
+            style={{ background: "none", border: "none", padding: 0, color: "var(--primary-hover)", fontWeight: 600, cursor: "pointer", fontSize: "0.8rem" }}
           >
             ← Back to Sign In
-          </span>
+          </button>
         )}
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", marginTop: "18px", color: "var(--text-muted)", fontSize: "0.75rem", fontFamily: "'Poppins', sans-serif" }}>
-        <ShieldCheck size={14} color="var(--primary)" />
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", marginTop: "14px", color: "var(--text-muted)", fontSize: "0.725rem", fontFamily: "var(--font-primary)" }}>
+        <ShieldCheck size={13} color="var(--primary)" />
         <span>Protected by AlgoPath Security & 256-bit JWT Encryption</span>
       </div>
     </div>

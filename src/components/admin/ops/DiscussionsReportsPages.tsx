@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type FC } from "react";
+import { Flag, MessagesSquare } from "lucide-react";
 import { PermissionGuard } from "../shared/PermissionGuard";
 import { DataTable } from "../shared/DataTable";
 import { StatusBadge } from "../shared/StatusBadge";
@@ -77,7 +78,9 @@ export const DiscussionsAdminPage: FC = () => {
       {error ? <p className="admin-error">{error}</p> : null}
       <DataTable
         loading={loading}
-        emptyTitle="No discussions found."
+        emptyTitle="No discussions found"
+        emptyDescription="Try a different search or status filter."
+        emptyIcon={<MessagesSquare size={18} strokeWidth={1.75} />}
         columns={[
           {
             key: "title",
@@ -196,7 +199,9 @@ export const ReportsAdminPage: FC = () => {
       {error ? <p className="admin-error">{error}</p> : null}
       <DataTable
         loading={loading}
-        emptyTitle="No reports in queue."
+        emptyTitle="No reports in queue"
+        emptyDescription="User reports awaiting moderation will show up here."
+        emptyIcon={<Flag size={18} strokeWidth={1.75} />}
         columns={[
           { key: "type", header: "Target", render: (r) => `${r.targetType}:${r.targetId.slice(0, 8)}` },
           { key: "reason", header: "Reason", render: (r) => r.reason },

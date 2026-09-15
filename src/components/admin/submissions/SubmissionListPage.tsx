@@ -1,4 +1,5 @@
 import { useEffect, useState, type FC } from "react";
+import { FileCode2 } from "lucide-react";
 import { adminSubmissionApi } from "../../../api/adminSubmissionApi";
 import type { Submission } from "../../../api/submissionApi";
 import { DataTable } from "../shared/DataTable";
@@ -81,6 +82,9 @@ export const SubmissionListPage: FC<Props> = ({ onOpen }) => {
         totalPages={meta.totalPages}
         total={meta.total}
         onPageChange={setPage}
+        emptyTitle="No submissions found"
+        emptyDescription="Try a different status or language filter."
+        emptyIcon={<FileCode2 size={18} strokeWidth={1.75} />}
         columns={[
           {
             key: "id",

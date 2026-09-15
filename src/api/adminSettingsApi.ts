@@ -2,6 +2,27 @@ import { authClient } from "./authClient";
 
 export type JudgeLanguage = "cpp" | "python" | "javascript" | "java";
 
+export type FeatureFlags = {
+  contests: boolean;
+  discussions: boolean;
+  submissions: boolean;
+  registration: boolean;
+  maintenance: boolean;
+  newEditor: boolean;
+  notifications: boolean;
+};
+
+/** UI defaults when a settings payload omits individual flags. */
+export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
+  contests: true,
+  discussions: true,
+  submissions: true,
+  registration: true,
+  maintenance: false,
+  newEditor: true,
+  notifications: true,
+};
+
 export interface PlatformSettings {
   platformName: string;
   logoUrl: string;
@@ -28,6 +49,7 @@ export interface PlatformSettings {
   emailNotificationsEnabled: boolean;
   announceNewSheets: boolean;
   announceMaintenance: boolean;
+  featureFlags?: FeatureFlags;
   updatedBy?: string | null;
   updatedAt?: string | null;
 }
@@ -41,6 +63,10 @@ export type PublicPlatformSettings = Pick<
   | "supportEmail"
   | "defaultLanguage"
   | "supportedLanguages"
+  | "maxSubmissionsPerHour"
+  | "maxRunPerHour"
+  | "maxCodeLength"
+  | "concurrentSubmissionCap"
   | "maintenanceMode"
   | "maintenanceMessage"
   | "allowAdminBypass"
@@ -48,7 +74,9 @@ export type PublicPlatformSettings = Pick<
   | "requireEmailVerification"
   | "discussionsEnabled"
   | "requireAuthToPost"
->;
+> & {
+  featureFlags?: PlatformSettings["featureFlags"];
+};
 
 export const adminSettingsApi = {
   get: async () => {

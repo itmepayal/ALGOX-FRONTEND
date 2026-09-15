@@ -1,0 +1,403 @@
+/* System Health — service monitoring dashboard */
+
+.sh-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.sh-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.sh-header h2 {
+  margin: 0;
+  font-family: var(--admin-display, "Poppins", sans-serif);
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--admin-text);
+}
+
+.sh-header-sub {
+  margin: 4px 0 0;
+  font-size: 0.82rem;
+  color: var(--admin-muted);
+  max-width: 52ch;
+  line-height: 1.45;
+}
+
+.sh-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.sh-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--admin-text-2);
+}
+
+.sh-live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--chart-4, #22c55e);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--chart-4, #22c55e) 25%, transparent);
+}
+
+.sh-live-dot.paused {
+  background: var(--muted-foreground);
+  box-shadow: none;
+}
+
+.sh-checked {
+  font-size: 0.72rem;
+  color: var(--admin-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.sh-note {
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--admin-muted);
+}
+
+.sh-queue-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.sh-queue-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  border-radius: var(--admin-radius);
+  border: 1px solid var(--admin-border);
+  background: var(--admin-surface);
+  box-shadow: var(--admin-shadow);
+  min-width: 0;
+}
+
+.sh-queue-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sh-queue-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--admin-radius-sm);
+  display: grid;
+  place-items: center;
+  background: var(--admin-accent-soft);
+  color: var(--admin-accent-fg);
+}
+
+.sh-queue-label {
+  font-size: 0.68rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--admin-muted);
+}
+
+.sh-queue-value {
+  font-family: var(--admin-display, "Poppins", sans-serif);
+  font-size: 1.55rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  color: var(--admin-text);
+  line-height: 1.1;
+}
+
+.sh-queue-desc {
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--admin-muted);
+  line-height: 1.35;
+}
+
+.sh-queue-card.tone-danger .sh-queue-icon {
+  background: color-mix(in srgb, var(--destructive) 15%, transparent);
+  color: var(--destructive);
+}
+
+.sh-queue-card.tone-primary .sh-queue-icon {
+  background: color-mix(in srgb, var(--primary) 15%, transparent);
+  color: var(--primary);
+}
+
+.sh-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sh-section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.sh-section-head h3 {
+  margin: 0;
+  font-family: var(--admin-display, "Poppins", sans-serif);
+  font-size: 0.95rem;
+  font-weight: 650;
+  color: var(--admin-text);
+}
+
+.sh-section-desc {
+  margin: 2px 0 0;
+  font-size: 0.75rem;
+  color: var(--admin-muted);
+}
+
+.sh-summary-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.sh-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--admin-border);
+  background: var(--admin-surface-2);
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--admin-text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.sh-chip.ok {
+  border-color: color-mix(in srgb, var(--chart-4, #22c55e) 35%, transparent);
+  color: var(--chart-4, #16a34a);
+  background: color-mix(in srgb, var(--chart-4, #22c55e) 10%, transparent);
+}
+
+.sh-chip.bad {
+  border-color: color-mix(in srgb, var(--destructive) 35%, transparent);
+  color: var(--destructive);
+  background: color-mix(in srgb, var(--destructive) 10%, transparent);
+}
+
+.sh-service-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.sh-service-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border-radius: var(--admin-radius);
+  border: 1px solid var(--admin-border);
+  background: var(--admin-surface);
+  box-shadow: var(--admin-shadow);
+  min-width: 0;
+}
+
+.sh-service-card.infra {
+  border-color: color-mix(in srgb, var(--primary) 28%, var(--admin-border));
+  background: color-mix(in srgb, var(--primary) 4%, var(--admin-surface));
+}
+
+.sh-service-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.sh-service-identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.sh-service-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--admin-radius-sm);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  background: var(--admin-accent-soft);
+  color: var(--admin-accent-fg);
+}
+
+.sh-service-card.infra .sh-service-icon {
+  background: color-mix(in srgb, var(--primary) 18%, transparent);
+}
+
+.sh-service-name {
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 650;
+  color: var(--admin-text);
+  letter-spacing: -0.01em;
+}
+
+.sh-service-kind {
+  margin: 2px 0 0;
+  font-size: 0.68rem;
+  color: var(--admin-muted);
+}
+
+.sh-service-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.75rem;
+  color: var(--admin-text-2);
+}
+
+.sh-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sh-meta-label {
+  color: var(--admin-muted);
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.sh-meta-value {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sh-endpoint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: var(--admin-radius-sm);
+  border: 1px solid var(--admin-border);
+  background: var(--admin-surface-2);
+}
+
+.sh-endpoint a,
+.sh-endpoint code {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-code, ui-monospace, monospace);
+  font-size: 0.68rem;
+  color: var(--admin-muted);
+  text-decoration: none;
+}
+
+.sh-endpoint a:hover {
+  color: var(--admin-accent-fg);
+}
+
+.sh-endpoint-copy {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--admin-border);
+  border-radius: 6px;
+  background: var(--admin-surface);
+  color: var(--admin-text-2);
+  cursor: pointer;
+}
+
+.sh-endpoint-copy:hover {
+  color: var(--admin-text);
+  border-color: var(--admin-border-strong);
+}
+
+.sh-endpoint-copy:focus-visible {
+  outline: 2px solid var(--admin-accent);
+  outline-offset: 2px;
+}
+
+.sh-skel {
+  border-radius: var(--admin-radius-sm);
+  background: linear-gradient(
+    90deg,
+    var(--admin-surface-2) 0%,
+    var(--admin-border) 50%,
+    var(--admin-surface-2) 100%
+  );
+  background-size: 200% 100%;
+  animation: sh-shimmer 1.2s ease-in-out infinite;
+}
+
+@keyframes sh-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sh-skel {
+    animation: none;
+  }
+  .sh-live-dot {
+    box-shadow: none;
+  }
+}
+
+.sh-empty-wrap {
+  grid-column: 1 / -1;
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-radius);
+  background: var(--admin-surface);
+  padding: 12px;
+}
+
+@media (max-width: 1100px) {
+  .sh-service-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .sh-queue-grid,
+  .sh-service-grid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,6 +1,14 @@
-import { useEffect, useRef, useState, type FC } from "react";
+import { useEffect, useRef, useState, type FC, type KeyboardEvent } from "react";
 import ReactMarkdown from "react-markdown";
-import { ArrowLeft, Eye, Save, Send, AlertTriangle } from "lucide-react";
+import {
+  ArrowLeft,
+  Eye,
+  Save,
+  Send,
+  AlertTriangle,
+  X,
+  Plus,
+} from "lucide-react";
 import { adminProblemApi, type AdminProblem } from "../../../api/adminProblemApi";
 import { TestCaseManager, type TestCaseDraft } from "./TestCaseManager";
 import { PermissionGuard } from "../shared/PermissionGuard";
@@ -39,6 +47,12 @@ const emptyForm = (): Partial<AdminProblem> & { testcases: TestCaseDraft[] } => 
   testcases: [{ input: "[]", output: "[]", isHidden: false, weight: 1 }],
 });
 
+const DIFFICULTIES: Array<{ id: AdminProblem["difficulty"]; label: string }> = [
+  { id: "easy", label: "Easy" },
+  { id: "medium", label: "Medium" },
+  { id: "hard", label: "Hard" },
+];
+
 export const ProblemEditorPage: FC<Props> = ({ problemId, onBack }) => {
   const { user } = useAuth();
   const toast = useToast();
@@ -49,6 +63,7 @@ export const ProblemEditorPage: FC<Props> = ({ problemId, onBack }) => {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [id, setId] = useState<string | null>(problemId);
   const [previewTab, setPreviewTab] = useState<"problem" | "editorial">("problem");
+  const [tagDraft, setTagDraft] = useState("");
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loaded = useRef(false);
 
@@ -89,6 +104,42 @@ export const ProblemEditorPage: FC<Props> = ({ problemId, onBack }) => {
 
   const patch = (partial: Partial<typeof form>) => {
     setForm((prev) => ({ ...prev, ...partial }));
+  };
+
+  const tagsList: string[] = Array.isArray(form.tags)
+    ? form.tags.map(String)
+    : String(form.tags || "")
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean);
+
+  const addTagsFromText = (raw: string) => {
+    const parts = raw
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean);
+    if (!parts.length) return;
+    const next = [...tagsList];
+    for (const p of parts) {
+      if (!next.some((t) => t.toLowerCase() === p.toLowerCase())) next.push(p);
+    }
+    patch({ tags: next as any });
+    setTagDraft("");
+  };
+
+  const removeTag = (tag: string) => {
+    patch({
+      tags: tagsList.filter((t) => t !== tag) as any,
+    });
+  };
+
+  const onTagKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" || e.key === ",") {
+      e.preventDefault();
+      addTagsFromText(tagDraft);
+    } else if (e.key === "Backspace" && !tagDraft && tagsList.length) {
+      removeTag(tagsList[tagsList.length - 1]);
+    }
   };
 
   const buildPayload = () => {
@@ -193,9 +244,7 @@ export const ProblemEditorPage: FC<Props> = ({ problemId, onBack }) => {
 
   const isEdit = Boolean(id);
   const status = String(form.status || "draft");
-  const tagText = Array.isArray(form.tags)
-    ? form.tags.join(", ")
-    : String(form.tags || "");
+  const difficulty = String(form.difficulty || "easy").toLowerCase();
 
   return (
     <PermissionGuard
@@ -206,16 +255,16 @@ export const ProblemEditorPage: FC<Props> = ({ problemId, onBack }) => {
         <header className="pe-topbar">
           <div className="pe-topbar-left">
             <button type="button" className="admin-btn" onClick={onBack}>
-              <ArrowLeft size={14} /> Back
+              <ArrowLeft size={14} strokeWidth={1.75} /> Back
             </button>
             <div>
               <h2 className="pe-title">
-                {isEdit ? "Edit problem" : "Create problem"}
+                {isEdit ? "Edit Problem" : "Create Problem"}
               </h2>
               <p className="pe-sub">
                 {isEdit
                   ? "Update statement, tests, and publishing settings."
-                  : "Configure statement, limits, tests, and publish when ready."}
+                  : "Configure statement, limits, and tests — publish when ready."}
               </p>
             </div>
           </div>
@@ -228,12 +277,12 @@ export const ProblemEditorPage: FC<Props> = ({ problemId, onBack }) => {
               disabled={saving}
               onClick={() => save(false)}
             >
-              <Save size={14} />
-              {saving ? "Saving…" : "Save draft"}
+              <Save size={14} strokeWidth={1.75} />
+              {saving ? "Saving…" : "Save Draft"}
             </button>
             {hasPermission(user?.role, "problems:publish") && id ? (
               <button type="button" className="admin-btn" onClick={publish}>
-                <Send size={14} /> Publish
+                <Send size={14} strokeWidth={1.75} /> Publish
               </button>
             ) : null}
           </div>
@@ -258,7 +307,7 @@ export const ProblemEditorPage: FC<Props> = ({ problemId, onBack }) => {
             <section className="pe-card">
               <div className="pe-card-head">
                 <h3>Problem Information</h3>
-                <p>Core identity and classification</p>
+                <p>Title, slug, and entry-point used by the judge</p>
               </div>
               <div className="pe-grid-2">
                 <div
@@ -286,7 +335,11 @@ export const ProblemEditorPage: FC<Props> = ({ problemId, onBack }) => {
                     <span className="admin-field-error">
                       ⚠ {fieldErrors.title}
                     </span>
-                  ) : null}
+                  ) : (
+                    <span className="pe-field-hint">
+                      Shown to solvers on the problem list and workspace
+                    </span>
+                  )}
                 </div>
                 <div className="admin-field">
                   <label htmlFor="pe-slug">Slug</label>
@@ -296,6 +349,7 @@ export const ProblemEditorPage: FC<Props> = ({ problemId, onBack }) => {
                     onChange={(e) => patch({ slug: e.target.value })}
                     placeholder="auto from title if empty"
                   />
+                  <span className="pe-field-hint">URL-safe identifier</span>
                 </div>
                 <div className="admin-field">
                   <label htmlFor="pe-fn">Function name</label>
@@ -303,81 +357,11 @@ export const ProblemEditorPage: FC<Props> = ({ problemId, onBack }) => {
                     id="pe-fn"
                     value={form.functionName || ""}
                     onChange={(e) => patch({ functionName: e.target.value })}
+                    placeholder="solution"
                   />
-                </div>
-                <div className="admin-field">
-                  <label htmlFor="pe-diff">Difficulty</label>
-                  <select
-                    id="pe-diff"
-                    value={String(form.difficulty || "easy").toLowerCase()}
-                    onChange={(e) =>
-                      patch({
-                        difficulty: e.target.value as AdminProblem["difficulty"],
-                      })
-                    }
-                  >
-                    <option value="easy">Easy</option>
-                    <option value="medium">Medium</option>
-                    <option value="hard">Hard</option>
-                  </select>
-                </div>
-                <div className="admin-field">
-                  <label htmlFor="pe-cat">Category</label>
-                  <input
-                    id="pe-cat"
-                    value={form.category || ""}
-                    onChange={(e) => patch({ category: e.target.value })}
-                  />
-                </div>
-                <div className="admin-field pe-span-2">
-                  <label htmlFor="pe-tags">Tags</label>
-                  <input
-                    id="pe-tags"
-                    value={tagText}
-                    onChange={(e) =>
-                      patch({
-                        tags: e.target.value
-                          .split(",")
-                          .map((t) => t.trim())
-                          .filter(Boolean) as any,
-                      })
-                    }
-                    placeholder="array, hash-map, two-pointers"
-                  />
-                  <span className="pe-field-hint">Comma-separated</span>
-                </div>
-              </div>
-            </section>
-
-            <section className="pe-card">
-              <div className="pe-card-head">
-                <h3>Execution Limits</h3>
-                <p>Judge resource bounds for submissions</p>
-              </div>
-              <div className="pe-grid-2">
-                <div className="admin-field">
-                  <label htmlFor="pe-tl">Time limit (ms)</label>
-                  <input
-                    id="pe-tl"
-                    type="number"
-                    min={100}
-                    value={form.timeLimitMs ?? 2000}
-                    onChange={(e) =>
-                      patch({ timeLimitMs: Number(e.target.value) || 2000 })
-                    }
-                  />
-                </div>
-                <div className="admin-field">
-                  <label htmlFor="pe-ml">Memory limit (MB)</label>
-                  <input
-                    id="pe-ml"
-                    type="number"
-                    min={16}
-                    value={form.memoryLimitMb ?? 256}
-                    onChange={(e) =>
-                      patch({ memoryLimitMb: Number(e.target.value) || 256 })
-                    }
-                  />
+                  <span className="pe-field-hint">
+                    Entry point expected by the judge
+                  </span>
                 </div>
               </div>
             </section>
@@ -387,13 +371,13 @@ export const ProblemEditorPage: FC<Props> = ({ problemId, onBack }) => {
                 <h3>Description</h3>
                 <p>Markdown problem statement shown to solvers</p>
               </div>
-              <div className="admin-field">
+              <div className="admin-field pe-editor-field">
                 <textarea
                   className="pe-md"
                   value={form.description || ""}
                   onChange={(e) => patch({ description: e.target.value })}
                   placeholder="Write the problem statement in Markdown…"
-                  rows={12}
+                  rows={14}
                 />
               </div>
             </section>
@@ -403,28 +387,12 @@ export const ProblemEditorPage: FC<Props> = ({ problemId, onBack }) => {
                 <h3>Constraints</h3>
                 <p>Input bounds and complexity expectations</p>
               </div>
-              <div className="admin-field">
+              <div className="admin-field pe-editor-field">
                 <textarea
                   className="pe-md"
                   value={form.constraints || ""}
                   onChange={(e) => patch({ constraints: e.target.value })}
                   placeholder={"1 <= nums.length <= 10^4\n-10^9 <= nums[i] <= 10^9"}
-                  rows={5}
-                />
-              </div>
-            </section>
-
-            <section className="pe-card">
-              <div className="pe-card-head">
-                <h3>Editorial / hints</h3>
-                <p>Optional guidance and solution notes</p>
-              </div>
-              <div className="admin-field">
-                <textarea
-                  className="pe-md"
-                  value={form.editorial || ""}
-                  onChange={(e) => patch({ editorial: e.target.value })}
-                  placeholder="Approach, complexity, edge cases…"
                   rows={6}
                 />
               </div>
@@ -432,10 +400,26 @@ export const ProblemEditorPage: FC<Props> = ({ problemId, onBack }) => {
 
             <section className="pe-card">
               <div className="pe-card-head">
-                <h3>Starter template</h3>
+                <h3>Editorial / Hints</h3>
+                <p>Optional guidance and solution notes</p>
+              </div>
+              <div className="admin-field pe-editor-field">
+                <textarea
+                  className="pe-md"
+                  value={form.editorial || ""}
+                  onChange={(e) => patch({ editorial: e.target.value })}
+                  placeholder="Approach, complexity analysis, edge cases…"
+                  rows={8}
+                />
+              </div>
+            </section>
+
+            <section className="pe-card">
+              <div className="pe-card-head">
+                <h3>Starter Template</h3>
                 <p>JavaScript user template for the workspace</p>
               </div>
-              <div className="admin-field">
+              <div className="admin-field pe-editor-field">
                 <textarea
                   className="pe-code"
                   value={form.codeStubs?.[0]?.userTemplate || ""}
@@ -450,15 +434,15 @@ export const ProblemEditorPage: FC<Props> = ({ problemId, onBack }) => {
                       ],
                     })
                   }
-                  rows={8}
+                  rows={10}
                   spellCheck={false}
                 />
               </div>
             </section>
 
-            <section className="pe-card">
+            <section className="pe-card pe-tc-section">
               <div className="pe-card-head">
-                <h3>Test cases</h3>
+                <h3>Test Cases</h3>
                 <p>Official judge cases — hidden cases never leak to clients</p>
               </div>
               <TestCaseManager
@@ -471,6 +455,135 @@ export const ProblemEditorPage: FC<Props> = ({ problemId, onBack }) => {
           <aside className="pe-side">
             <section className="pe-card pe-sticky">
               <div className="pe-card-head">
+                <h3>Difficulty</h3>
+                <p>Shown as a status badge to solvers</p>
+              </div>
+              <div className="pe-diff-seg" role="radiogroup" aria-label="Difficulty">
+                {DIFFICULTIES.map((d) => (
+                  <button
+                    key={d.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={difficulty === d.id}
+                    className={`pe-diff-btn pe-diff-${d.id} ${
+                      difficulty === d.id ? "active" : ""
+                    }`}
+                    onClick={() =>
+                      patch({
+                        difficulty: d.id as AdminProblem["difficulty"],
+                      })
+                    }
+                  >
+                    {d.label}
+                  </button>
+                ))}
+              </div>
+            </section>
+
+            <section className="pe-card">
+              <div className="pe-card-head">
+                <h3>Category</h3>
+                <p>Primary topic grouping</p>
+              </div>
+              <div className="admin-field">
+                <label htmlFor="pe-cat" className="sr-only">
+                  Category
+                </label>
+                <input
+                  id="pe-cat"
+                  value={form.category || ""}
+                  onChange={(e) => patch({ category: e.target.value })}
+                  placeholder="e.g. Arrays"
+                />
+              </div>
+            </section>
+
+            <section className="pe-card">
+              <div className="pe-card-head">
+                <h3>Tags</h3>
+                <p>Comma-separated or press Enter to add</p>
+              </div>
+              <div className="pe-tags">
+                <div className="pe-tag-list">
+                  {tagsList.map((tag) => (
+                    <span key={tag} className="pe-tag">
+                      {tag}
+                      <button
+                        type="button"
+                        className="pe-tag-remove"
+                        aria-label={`Remove ${tag}`}
+                        onClick={() => removeTag(tag)}
+                      >
+                        <X size={12} strokeWidth={2} />
+                      </button>
+                    </span>
+                  ))}
+                  <span className="pe-tag pe-tag-add" aria-hidden>
+                    <Plus size={12} strokeWidth={2} />
+                  </span>
+                </div>
+                <input
+                  id="pe-tags"
+                  className="pe-tag-input"
+                  value={tagDraft}
+                  onChange={(e) => setTagDraft(e.target.value)}
+                  onKeyDown={onTagKeyDown}
+                  onBlur={() => {
+                    if (tagDraft.trim()) addTagsFromText(tagDraft);
+                  }}
+                  placeholder="Arrays, Hash Map, Two Pointer"
+                  aria-label="Add tags"
+                />
+              </div>
+            </section>
+
+            <section className="pe-card">
+              <div className="pe-card-head">
+                <h3>Execution Limits</h3>
+                <p>Judge resource bounds</p>
+              </div>
+              <div className="pe-limits">
+                <div className="admin-field pe-limit-field">
+                  <label htmlFor="pe-tl">Time Limit</label>
+                  <div className="pe-limit-control">
+                    <input
+                      id="pe-tl"
+                      type="number"
+                      min={100}
+                      value={form.timeLimitMs ?? 2000}
+                      onChange={(e) =>
+                        patch({ timeLimitMs: Number(e.target.value) || 2000 })
+                      }
+                      aria-describedby="pe-tl-unit"
+                    />
+                    <span id="pe-tl-unit" className="pe-limit-unit">
+                      ms
+                    </span>
+                  </div>
+                </div>
+                <div className="admin-field pe-limit-field">
+                  <label htmlFor="pe-ml">Memory Limit</label>
+                  <div className="pe-limit-control">
+                    <input
+                      id="pe-ml"
+                      type="number"
+                      min={16}
+                      value={form.memoryLimitMb ?? 256}
+                      onChange={(e) =>
+                        patch({ memoryLimitMb: Number(e.target.value) || 256 })
+                      }
+                      aria-describedby="pe-ml-unit"
+                    />
+                    <span id="pe-ml-unit" className="pe-limit-unit">
+                      MB
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section className="pe-card">
+              <div className="pe-card-head">
                 <h3>Publishing</h3>
                 <p>Visibility and review status</p>
               </div>
@@ -480,9 +593,7 @@ export const ProblemEditorPage: FC<Props> = ({ problemId, onBack }) => {
               </div>
               <div className="pe-publish-row">
                 <span className="pe-muted-label">Difficulty</span>
-                <StatusBadge
-                  status={String(form.difficulty || "easy").toLowerCase()}
-                />
+                <StatusBadge status={difficulty} />
               </div>
               <div className="pe-publish-meta">
                 <div>
@@ -499,8 +610,8 @@ export const ProblemEditorPage: FC<Props> = ({ problemId, onBack }) => {
                 </div>
               </div>
               <p className="pe-side-note">
-                Drafts autosave while editing. Publish makes the problem
-                visible to users.
+                Drafts autosave while editing. Publish makes the problem visible
+                to users.
               </p>
             </section>
 
@@ -508,7 +619,7 @@ export const ProblemEditorPage: FC<Props> = ({ problemId, onBack }) => {
               <div className="pe-card-head pe-preview-head">
                 <div>
                   <h3>
-                    <Eye size={14} style={{ marginRight: 6 }} />
+                    <Eye size={14} strokeWidth={1.75} aria-hidden />
                     Live preview
                   </h3>
                 </div>
@@ -534,9 +645,7 @@ export const ProblemEditorPage: FC<Props> = ({ problemId, onBack }) => {
                   <>
                     <div className="pe-preview-title-row">
                       <h2>{form.title || "Untitled"}</h2>
-                      <StatusBadge
-                        status={String(form.difficulty || "easy").toLowerCase()}
-                      />
+                      <StatusBadge status={difficulty} />
                     </div>
                     {form.category ? (
                       <p className="pe-preview-cat">{form.category}</p>

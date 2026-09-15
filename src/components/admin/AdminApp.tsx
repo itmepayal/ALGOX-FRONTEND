@@ -10,34 +10,40 @@ import { ADMIN_TITLE, type AdminTab } from "./adminNav";
 import { AdminDashboardHome } from "./dashboard/AdminDashboardHome";
 import { ProblemListPage } from "./problems/ProblemListPage";
 import { ProblemEditorPage } from "./problems/ProblemEditorPage";
-import {
-  ProblemAnalyticsPage,
-  ProblemBulkImportPage,
-  ProblemTestCasesHub,
-} from "./problems/ProblemOpsPages";
+import { ProblemTestCasesHub } from "./problems/ProblemOpsPages";
+import { ProblemAnalyticsPage } from "./problems/ProblemAnalyticsPage";
+import { ProblemBulkImportPage } from "./problems/ProblemBulkImportPage";
 import { SubmissionListPage } from "./submissions/SubmissionListPage";
 import { SubmissionDetailPage } from "./submissions/SubmissionDetailPage";
 import { FailedExecutionsPage } from "./submissions/FailedExecutionsPage";
+import { SubmissionAnalyticsPage } from "./submissions/SubmissionAnalyticsPage";
 import { UserListPage } from "./users/UserListPage";
 import { UserDetailPage } from "./users/UserDetailPage";
+import { UserCreatePage } from "./users/UserCreatePage";
 import { AuditLogPage } from "./audit/AuditLogPage";
 import { SystemHealthPage } from "./health/SystemHealthPage";
 import { SettingsPage } from "./settings/SettingsPage";
+import { RolesPermissionsPage } from "./roles/RolesPermissionsPage";
 import { AnalyticsPage } from "./analytics/AnalyticsPage";
+import {
+  UserAnalyticsPage,
+  LanguageAnalyticsPage,
+} from "./analytics/UserLanguageAnalyticsPages";
 import { LeaderboardsPage } from "./leaderboards/LeaderboardsPage";
+import { ContestListPage } from "./contests/ContestListPage";
+import { ContestDetailPage } from "./contests/ContestDetailPage";
 import { LearningAdminPage } from "./learning/LearningAdminPage";
 import { CodeExecutionPage } from "./execution/CodeExecutionPage";
 import { RealtimeCenterPage } from "./realtime/RealtimeCenterPage";
-import {
-  SubmissionAnalyticsPage,
-  UserOpsPages,
-} from "./ops/OpsPlaceholderPages";
 import {
   DiscussionsAdminPage,
   ReportsAdminPage,
 } from "./ops/DiscussionsReportsPages";
 import { AnnouncementsAdminPage } from "./ops/AnnouncementsAdminPage";
+import { NotificationsAdminPage } from "./notifications/NotificationsAdminPage";
+import { ContentAdminPage } from "./content/ContentAdminPage";
 import { SuspiciousSubmissionsPage } from "./ops/SuspiciousSubmissionsPage";
+import { UserOpsPages } from "./ops/OpsPlaceholderPages";
 import { ToastProvider } from "../../context/ToastContext";
 
 interface AdminAppProps {
@@ -84,6 +90,9 @@ export const AdminApp: FC<AdminAppProps> = ({ onBackToUserView }) => {
   const [userId, setUserId] = useState<string | null>(
     initial.tab === "user-detail" ? initial.id : null
   );
+  const [contestId, setContestId] = useState<string | null>(
+    initial.tab === "contest-detail" ? initial.id : null
+  );
   const [refreshKey, setRefreshKey] = useState(0);
   const [lastUpdated, setLastUpdated] = useState(() => new Date());
 
@@ -105,11 +114,13 @@ export const AdminApp: FC<AdminAppProps> = ({ onBackToUserView }) => {
           ? submissionId
           : tab === "user-detail"
             ? userId
-            : null;
+            : tab === "contest-detail"
+              ? contestId
+              : null;
     writeAdminQuery(tab, id);
-  }, [tab, editProblemId, submissionId, userId]);
+  }, [tab, editProblemId, submissionId, userId, contestId]);
 
-  if (!canAccessAdmin(user?.role)) {
+  if (!canAccessAdmin(user?.role, user?.permissions)) {
     return (
       <div className="admin-root">
         <div className="admin-denied" style={{ margin: "auto" }}>
@@ -140,6 +151,11 @@ export const AdminApp: FC<AdminAppProps> = ({ onBackToUserView }) => {
     } else if (next !== "user-detail") {
       setUserId(null);
     }
+    if (next === "contest-detail" && id) {
+      setContestId(id);
+    } else if (next !== "contest-detail") {
+      setContestId(null);
+    }
   };
 
   const openSubmission = (id: string) => {
@@ -168,7 +184,10 @@ export const AdminApp: FC<AdminAppProps> = ({ onBackToUserView }) => {
     <AdminShell
       tab={tab}
       title={title}
-      canView={(perm) => !perm || hasPermission(user?.role, perm as Permission)}
+      canView={(perm) =>
+        !perm ||
+        hasPermission(user?.role, perm as Permission, user?.permissions)
+      }
       onNavigate={navigate}
       onBackToUserView={onBackToUserView}
       onSignOut={() => signout()}
@@ -224,6 +243,16 @@ export const AdminApp: FC<AdminAppProps> = ({ onBackToUserView }) => {
             setUserId(id);
             setTab("user-detail");
           }}
+          onCreate={() => navigate("user-create")}
+        />
+      )}
+      {tab === "user-create" && (
+        <UserCreatePage
+          onCancel={() => navigate("users")}
+          onCreated={(id) => {
+            setUserId(id);
+            setTab("user-detail");
+          }}
         />
       )}
       {tab === "user-detail" && userId && (
@@ -252,11 +281,36 @@ export const AdminApp: FC<AdminAppProps> = ({ onBackToUserView }) => {
       {tab === "realtime-events" && <RealtimeCenterPage mode="events" />}
       {tab === "realtime-broadcast" && <RealtimeCenterPage mode="broadcast" />}
 
-      {tab === "leaderboards" && <LeaderboardsPage period="global" />}
-      {tab === "leaderboards-daily" && <LeaderboardsPage period="daily" />}
-      {tab === "leaderboards-weekly" && <LeaderboardsPage period="weekly" />}
-      {tab === "leaderboards-monthly" && <LeaderboardsPage period="monthly" />}
-      {tab === "leaderboards-contest" && <LeaderboardsPage period="contest" />}
+      {tab === "leaderboards" && (
+        <LeaderboardsPage period="global" onNavigate={navigate} />
+      )}
+      {tab === "leaderboards-daily" && (
+        <LeaderboardsPage period="daily" onNavigate={navigate} />
+      )}
+      {tab === "leaderboards-weekly" && (
+        <LeaderboardsPage period="weekly" onNavigate={navigate} />
+      )}
+      {tab === "leaderboards-monthly" && (
+        <LeaderboardsPage period="monthly" onNavigate={navigate} />
+      )}
+      {tab === "leaderboards-contest" && (
+        <LeaderboardsPage period="contest" onNavigate={navigate} />
+      )}
+
+      {tab === "contests" && (
+        <ContestListPage
+          onOpen={(id) => {
+            setContestId(id);
+            setTab("contest-detail");
+          }}
+        />
+      )}
+      {tab === "contest-detail" && contestId && (
+        <ContestDetailPage
+          id={contestId}
+          onBack={() => navigate("contests")}
+        />
+      )}
 
       {tab === "learning-sheets" && <LearningAdminPage mode="sheets" />}
       {tab === "learning-topics" && <LearningAdminPage mode="topics" />}
@@ -267,10 +321,21 @@ export const AdminApp: FC<AdminAppProps> = ({ onBackToUserView }) => {
       {tab === "discussions" && <DiscussionsAdminPage />}
       {tab === "reports" && <ReportsAdminPage />}
       {tab === "announcements" && <AnnouncementsAdminPage />}
-      {tab === "analytics" && <AnalyticsPage />}
+      {tab === "notifications" && <NotificationsAdminPage />}
+      {tab === "content-articles" && <ContentAdminPage mode="articles" />}
+      {tab === "content-tutorials" && <ContentAdminPage mode="tutorials" />}
+      {tab === "content-study-plans" && (
+        <ContentAdminPage mode="study-plans" />
+      )}
+      {tab === "content-editorials" && <ContentAdminPage mode="editorials" />}
+      {tab === "content-notes" && <ContentAdminPage mode="notes" />}
+      {tab === "analytics" && <AnalyticsPage onNavigate={navigate} />}
+      {tab === "analytics-users" && <UserAnalyticsPage />}
+      {tab === "analytics-languages" && <LanguageAnalyticsPage />}
       {tab === "code-execution" && <CodeExecutionPage />}
       {tab === "health" && <SystemHealthPage />}
       {tab === "audit" && <AuditLogPage />}
+      {tab === "roles" && <RolesPermissionsPage />}
       {tab === "settings" && <SettingsPage />}
       </div>
     </AdminShell>

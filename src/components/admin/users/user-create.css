@@ -1,0 +1,185 @@
+/* Create User — balanced two-card layout (Create Problem visual language) */
+
+.uc-page {
+  width: 100%;
+  margin: 0 auto;
+  gap: 24px;
+}
+
+.uc-layout {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+  align-items: start;
+}
+
+.uc-card.pe-card {
+  padding: 24px;
+  min-height: 100%;
+}
+
+.uc-card .pe-card-head {
+  margin-bottom: 24px;
+}
+
+.uc-card .pe-card-head h3 {
+  font-family: var(--admin-display, "Poppins", sans-serif);
+  font-weight: 600;
+}
+
+.uc-card .pe-card-head p {
+  margin-top: 6px;
+  font-family: var(--admin-font, "Saira", sans-serif);
+  font-weight: 400;
+}
+
+.uc-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.uc-fields .admin-field,
+.uc-access-grid .admin-field {
+  margin-bottom: 0;
+  gap: 8px;
+}
+
+.uc-fields .admin-field label,
+.uc-access-grid .admin-field label {
+  font-family: var(--admin-font, "Saira", sans-serif);
+  font-weight: 500;
+}
+
+.uc-access-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px 20px;
+}
+
+.uc-access-hint {
+  margin: 16px 0 0;
+  font-size: 0.6875rem;
+  font-weight: 400;
+  line-height: 1.4;
+}
+
+.uc-fields .pe-field-hint,
+.uc-access-hint {
+  font-family: var(--admin-font, "Saira", sans-serif);
+  color: var(--muted-foreground);
+  opacity: 0.9;
+}
+
+.uc-fields .pe-field-hint {
+  margin-top: 0;
+  font-size: 0.6875rem;
+  font-weight: 400;
+}
+
+.uc-side {
+  position: sticky;
+  top: 72px;
+}
+
+.uc-password {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+}
+
+.uc-password input {
+  width: 100%;
+  padding-right: 44px;
+  font-family: var(--admin-font, "Saira", sans-serif);
+}
+
+.uc-password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: var(--admin-radius-sm, calc(var(--radius) - 2px));
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transition: color 160ms ease, background 160ms ease;
+}
+
+.uc-password-toggle:hover {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--foreground) 6%, transparent);
+}
+
+.uc-password-toggle:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+
+.uc-temp-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--chart-4) 35%, transparent);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--chart-4) 10%, transparent);
+  color: var(--foreground);
+}
+
+.uc-temp-banner strong {
+  display: block;
+  font-family: var(--admin-display, "Poppins", sans-serif);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.uc-temp-code {
+  font-family: var(--font-mono, "Fira Code", ui-monospace, monospace);
+  font-size: 0.8125rem;
+  letter-spacing: 0.02em;
+}
+
+@media (max-width: 900px) {
+  .uc-page {
+    max-width: 64rem; /* max-w-5xl */
+  }
+
+  .uc-layout {
+    gap: 20px;
+  }
+}
+
+@media (max-width: 768px) {
+  .uc-page {
+    max-width: none;
+    gap: 20px;
+  }
+
+  .uc-layout {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .uc-access-grid {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+
+  .uc-side {
+    position: static;
+  }  
+
+  .uc-card.pe-card {
+    padding: 20px;
+  }
+}

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type FC } from "react";
+import { ShieldAlert } from "lucide-react";
 import { PermissionGuard } from "../shared/PermissionGuard";
 import { DataTable } from "../shared/DataTable";
 import { StatusBadge } from "../shared/StatusBadge";
@@ -59,7 +60,9 @@ export const SuspiciousSubmissionsPage: FC = () => {
       {error ? <p className="admin-error">{error}</p> : null}
       <DataTable
         loading={loading}
-        emptyTitle="No flagged submissions."
+        emptyTitle="No flagged submissions"
+        emptyDescription="Heuristic flags for the selected status will appear here."
+        emptyIcon={<ShieldAlert size={18} strokeWidth={1.75} />}
         columns={[
           {
             key: "user",

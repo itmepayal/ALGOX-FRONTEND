@@ -1,9 +1,13 @@
 import type { Problem } from "../api/problemApi";
+import {
+  loadEditorSettings,
+  saveEditorSettings,
+  sanitizeEditorSettings,
+} from "./editorSettings";
 
 const CODE_PREFIX = "algox:code:";
 const BOOKMARK_PREFIX = "algox:bookmarks:";
 const NOTES_PREFIX = "algox:notes:";
-const FONT_KEY = "algox:editor-font-size";
 
 export function getProblemId(problem: Pick<Problem, "id" | "_id"> | null | undefined): string {
   return (problem?.id || problem?._id || "").toString();
@@ -161,20 +165,16 @@ export function getProblemResources(problem: Problem): Array<{
 }
 
 export function loadEditorFontSize(): number {
-  try {
-    const n = Number(localStorage.getItem(FONT_KEY));
-    return Number.isFinite(n) && n >= 12 && n <= 22 ? n : 14;
-  } catch {
-    return 14;
-  }
+  return loadEditorSettings().fontSize;
 }
 
 export function saveEditorFontSize(size: number): void {
-  try {
-    localStorage.setItem(FONT_KEY, String(size));
-  } catch {
-    // ignore
-  }
+  saveEditorSettings(
+    sanitizeEditorSettings({
+      ...loadEditorSettings(),
+      fontSize: size,
+    }),
+  );
 }
 
 /** Extract progressive hints from description / editorial text. */
