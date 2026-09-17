@@ -1,6 +1,6 @@
-import axios from "axios";
 import { PROBLEM_API_URL } from "./problemApi";
 import type { Problem } from "./problemApi";
+import { createServiceClient } from "./authClient";
 
 export type UserReaction = "like" | "dislike" | null;
 
@@ -106,18 +106,7 @@ export interface ApiResponse<T> {
   };
 }
 
-const engagementClient = axios.create({
-  baseURL: PROBLEM_API_URL,
-  headers: { "Content-Type": "application/json" },
-});
-
-engagementClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem("accessToken");
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
+const engagementClient = createServiceClient(PROBLEM_API_URL);
 
 export const engagementApi = {
   getEngagement: async (problemId: string) => {
@@ -163,14 +152,6 @@ export const engagementApi = {
     return res.data;
   },
 
-  /** Toggle favourite (alias of bookmark toggle). */
-  toggleFavourite: async (problemId: string) => {
-    const res = await engagementClient.post<ApiResponse<BookmarkMutationResult>>(
-      `/problems/${problemId}/favourite`
-    );
-    return res.data;
-  },
-
   /** Flat list — backward compatible with Dashboard sheet sync. */
   listMyBookmarks: async () => {
     const res = await engagementClient.get<ApiResponse<Problem[]>>(
@@ -210,13 +191,6 @@ export const engagementApi = {
     return res.data;
   },
 
-  getFavouriteAnalytics: async () => {
-    const res = await engagementClient.get<ApiResponse<FavouriteAnalytics>>(
-      `/problems/admin/favourite-analytics`
-    );
-    return res.data;
-  },
-
   toggleRevision: async (problemId: string) => {
     const res = await engagementClient.post<ApiResponse<RevisionMutationResult>>(
       `/problems/${problemId}/revision/toggle`
@@ -224,10 +198,17 @@ export const engagementApi = {
     return res.data;
   },
 
-  removeRevision: async (problemId: string) => {
-    const res = await engagementClient.delete<ApiResponse<RevisionMutationResult>>(
+  addRevision: async (problemId: string) => {
+    const res = await engagementClient.post<ApiResponse<RevisionMutationResult>>(
       `/problems/${problemId}/revision`
     );
+    return res.data;
+  },
+
+  removeRevision: async (problemId: string) => {
+    const res = await engagementClient.delete<
+      ApiResponse<RevisionMutationResult>
+    >(`/problems/${problemId}/revision`);
     return res.data;
   },
 

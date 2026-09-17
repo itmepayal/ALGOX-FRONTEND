@@ -1,21 +1,9 @@
-import axios from "axios";
+import { SERVICE_URLS } from "./serviceUrls";
+import { createServiceClient } from "./authClient";
 
-export const PROBLEM_API_URL = "http://localhost:3003/api/v1";
+export const PROBLEM_API_URL = SERVICE_URLS.problem;
 
-export const problemClient = axios.create({
-  baseURL: PROBLEM_API_URL,
-  headers: {
-    "Content-Type": "application/json",
-  },
-});
-
-problemClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem("accessToken");
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
+export const problemClient = createServiceClient(PROBLEM_API_URL);
 
 export interface Testcase {
   input?: any;
@@ -51,6 +39,12 @@ export interface Problem {
   status?: "draft" | "published" | "archived";
   category: string;
   tags: string[];
+  /** Problem-level classification from API (FREE=false / PREMIUM=true). */
+  isPremium?: boolean;
+  /** True when premium problem content was redacted (no entitlement). */
+  accessLocked?: boolean;
+  editorialLocked?: boolean;
+  hintsLocked?: boolean;
   editorial?: string;
   hints?: string[];
   examples?: Testcase[];
@@ -86,6 +80,8 @@ export interface ProblemQuery {
   search?: string;
   difficulty?: string;
   category?: string;
+  /** all | free | premium */
+  access?: "all" | "free" | "premium";
 }
 
 export interface ApiResponse<T> {
@@ -118,44 +114,6 @@ export const problemApi = {
   // Get problem by slug
   getProblemBySlug: async (slug: string) => {
     const response = await problemClient.get<ApiResponse<Problem>>(`/problems/slug/${slug}`);
-    return response.data;
-  },
-
-  // Search problems
-  searchProblems: async (q: string) => {
-    const response = await problemClient.get<ApiResponse<Problem[]>>("/problems/search", {
-      params: { q },
-    });
-    return response.data;
-  },
-
-  // Find by difficulty
-  findByDifficulty: async (difficulty: string) => {
-    const response = await problemClient.get<ApiResponse<Problem[]>>(`/problems/difficulty/${difficulty}`);
-    return response.data;
-  },
-
-  // Create a new problem
-  createProblem: async (problemData: Partial<Problem>) => {
-    const response = await problemClient.post<ApiResponse<Problem>>("/problems", problemData);
-    return response.data;
-  },
-
-  // Update a problem (Admin)
-  updateProblem: async (id: string, problemData: Partial<Problem>) => {
-    const response = await problemClient.put<ApiResponse<Problem>>(`/problems/${id}`, problemData);
-    return response.data;
-  },
-
-  // Delete a problem (Admin)
-  deleteProblem: async (id: string) => {
-    const response = await problemClient.delete<ApiResponse<null>>(`/problems/${id}`);
-    return response.data;
-  },
-
-  // Get internal problem details (Internal / Judge evaluation view with hidden testcases)
-  getInternalProblemById: async (id: string) => {
-    const response = await problemClient.get<ApiResponse<Problem>>(`/problems/internal/${id}`);
     return response.data;
   },
 };

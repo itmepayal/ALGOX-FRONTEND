@@ -35,12 +35,12 @@ import { Input } from "../../ui/input";
 import { ConfirmDialog } from "../../ConfirmDialog";
 import {
   adminAnnouncementApi,
+  announcementId,
   type AdminAnnouncement,
 } from "../../../api/adminAnnouncementApi";
 import { useToast } from "../../../context/ToastContext";
 import { normalizeApiError } from "../../../lib/apiError";
-import { hasPermission } from "../../../rbac/permissions";
-import { useAuth } from "../../../context/AuthContext";
+import { usePermission } from "../../../rbac/usePermission";
 import { cn } from "../../../lib/cn";
 import "../problems/problem-editor.css";
 
@@ -143,7 +143,9 @@ export const AnnouncementTypeBadge: FC<{ type?: string; className?: string }> = 
 const AnnouncementActions: FC<{
   row: AdminAnnouncement;
   canPublish: boolean;
+  canEdit: boolean;
   busy: boolean;
+  onEdit: () => void;
   onPublish: () => void;
   onExpire: () => void;
   onArchive: () => void;
@@ -151,7 +153,9 @@ const AnnouncementActions: FC<{
 }> = ({
   row,
   canPublish,
+  canEdit,
   busy,
+  onEdit,
   onPublish,
   onExpire,
   onArchive,
@@ -176,36 +180,47 @@ const AnnouncementActions: FC<{
     };
   }, [open]);
 
-  if (!canPublish) return null;
+  if (!canPublish && !canEdit) return null;
 
   const items = [
+    {
+      key: "edit",
+      label: "Edit",
+      icon: FilePenLine,
+      onClick: onEdit,
+      show: canEdit,
+    },
     {
       key: "publish",
       label: "Publish",
       icon: Send,
       onClick: onPublish,
-      show: row.status === "DRAFT" || row.status === "SCHEDULED",
+      show:
+        canPublish &&
+        (row.status === "DRAFT" || row.status === "SCHEDULED"),
     },
     {
       key: "schedule",
       label: "Schedule",
       icon: Clock,
       onClick: onSchedule,
-      show: row.status === "DRAFT",
+      show: canPublish && row.status === "DRAFT",
     },
     {
       key: "expire",
       label: "Expire",
       icon: Clock,
       onClick: onExpire,
-      show: row.status === "PUBLISHED" || row.status === "SCHEDULED",
+      show:
+        canPublish &&
+        (row.status === "PUBLISHED" || row.status === "SCHEDULED"),
     },
     {
       key: "archive",
       label: "Archive",
       icon: Archive,
       onClick: onArchive,
-      show: row.status !== "ARCHIVED",
+      show: canPublish && row.status !== "ARCHIVED",
     },
   ];
 
@@ -275,9 +290,9 @@ function toLocalInput(d: Date) {
 
 export const AnnouncementsAdminPage: FC = () => {
   const toast = useToast();
-  const { user } = useAuth();
-  const canCreate = hasPermission(user?.role, "announcements:create");
-  const canPublish = hasPermission(user?.role, "announcements:publish");
+  const { can } = usePermission();
+  const canCreate = can("announcements:create");
+  const canPublish = can("announcements:publish");
 
   const [rows, setRows] = useState<AdminAnnouncement[]>([]);
   const [loading, setLoading] = useState(true);
@@ -305,6 +320,7 @@ export const AnnouncementsAdminPage: FC = () => {
     useState<AdminAnnouncement | null>(null);
   const [scheduleAt, setScheduleAt] = useState("");
   const [confirming, setConfirming] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   useEffect(() => {
     const t = window.setTimeout(() => setDebouncedSearch(search.trim()), 300);
@@ -372,24 +388,46 @@ export const AnnouncementsAdminPage: FC = () => {
     return Object.keys(next).length === 0;
   };
 
+  const resetForm = () => {
+    setTitle("");
+    setMessage("");
+    setType("INFO");
+    setAudience("ALL_USERS");
+    setFieldErrors({});
+    setEditingId(null);
+  };
+
+  const startEdit = (row: AdminAnnouncement) => {
+    setEditingId(announcementId(row));
+    setTitle(row.title);
+    setMessage(row.message);
+    setType(row.type || "INFO");
+    setAudience(row.audience || "ALL_USERS");
+    setFieldErrors({});
+  };
+
   const create = async (e?: FormEvent) => {
     e?.preventDefault();
     if (!validate() || saving) return;
     try {
       setSaving(true);
-      await adminAnnouncementApi.create({
+      const payload = {
         title: title.trim(),
         message: message.trim(),
         type,
         audience,
-        status: "DRAFT",
-      });
-      setTitle("");
-      setMessage("");
-      setType("INFO");
-      setAudience("ALL_USERS");
-      setFieldErrors({});
-      toast.success("Announcement saved as draft.");
+      };
+      if (editingId) {
+        await adminAnnouncementApi.update(editingId, payload);
+        toast.success("Announcement updated.");
+      } else {
+        await adminAnnouncementApi.create({
+          ...payload,
+          status: "DRAFT",
+        });
+        toast.success("Announcement saved as draft.");
+      }
+      resetForm();
       await load(true);
     } catch (err: unknown) {
       toast.apiError(err, "Unable to save announcement. Please try again.");
@@ -502,9 +540,13 @@ export const AnnouncementsAdminPage: FC = () => {
               <div className="pe-card-head">
                 <h3>
                   <Megaphone size={15} strokeWidth={1.75} aria-hidden />
-                  New announcement
+                  {editingId ? "Edit announcement" : "New announcement"}
                 </h3>
-                <p>Saved as draft until you publish.</p>
+                <p>
+                  {editingId
+                    ? "Update fields and save changes."
+                    : "Saved as draft until you publish."}
+                </p>
               </div>
 
               <form
@@ -633,6 +675,17 @@ export const AnnouncementsAdminPage: FC = () => {
                 </fieldset>
 
                 <div className="flex flex-wrap justify-end gap-2 border-t border-border pt-4">
+                  {editingId ? (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      disabled={saving}
+                      onClick={resetForm}
+                    >
+                      Cancel edit
+                    </Button>
+                  ) : null}
                   <Button
                     type="submit"
                     variant="primary"
@@ -654,7 +707,11 @@ export const AnnouncementsAdminPage: FC = () => {
                         aria-hidden
                       />
                     )}
-                    {saving ? "Saving…" : "Save draft"}
+                    {saving
+                      ? "Saving…"
+                      : editingId
+                        ? "Save changes"
+                        : "Save draft"}
                   </Button>
                 </div>
               </form>
@@ -799,7 +856,7 @@ export const AnnouncementsAdminPage: FC = () => {
                 loading={loading}
                 minWidth="880px"
                 rows={rows}
-                rowKey={(r) => r._id}
+                rowKey={(r) => announcementId(r)}
                 emptyTitle={
                   hasActiveFilters
                     ? "No matching announcements"
@@ -902,16 +959,22 @@ export const AnnouncementsAdminPage: FC = () => {
                       <AnnouncementActions
                         row={r}
                         canPublish={canPublish}
-                        busy={actionId === r._id}
+                        canEdit={canCreate}
+                        busy={actionId === announcementId(r)}
+                        onEdit={() => startEdit(r)}
                         onPublish={() => setConfirmPublish(r)}
                         onExpire={() =>
-                          void runAction(r._id, "expire", "Announcement expired.")
+                          void runAction(
+                            announcementId(r),
+                            "expire",
+                            "Announcement expired."
+                          )
                         }
                         onArchive={() =>
                           void runAction(
-                            r._id,
+                            announcementId(r),
                             "archive",
-                            "Announcement archived.",
+                            "Announcement archived."
                           )
                         }
                         onSchedule={() => {
@@ -957,7 +1020,7 @@ export const AnnouncementsAdminPage: FC = () => {
           try {
             setConfirming(true);
             await runAction(
-              confirmPublish._id,
+              announcementId(confirmPublish),
               "publish",
               "Announcement published successfully.",
             );
@@ -1012,9 +1075,10 @@ export const AnnouncementsAdminPage: FC = () => {
           }
           try {
             setConfirming(true);
-            setActionId(confirmSchedule._id);
+            const id = announcementId(confirmSchedule);
+            setActionId(id);
             await adminAnnouncementApi.schedule(
-              confirmSchedule._id,
+              id,
               when.toISOString(),
             );
             toast.success("Announcement scheduled.");

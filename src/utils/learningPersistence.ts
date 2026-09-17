@@ -1,4 +1,13 @@
-/** Client-side learning state (planner / study sessions / goals). No secrets. */
+/**
+ * Learning planner / study sessions / goals.
+ *
+ * Server (ProblemService `/learning/*`) is authoritative for authenticated users.
+ * In-memory cache is a read-through optimization only — never treated as durable store.
+ * Guests get empty/default state; mutations require login and throw on network failure
+ * so callers cannot silently claim persistence succeeded.
+ */
+
+import { learningApi } from "../api/learningApi";
 
 export interface DailyGoalConfig {
   problemsPerDay: number;
@@ -14,7 +23,6 @@ export interface PlannerTask {
   problemId?: string;
   problemSlug?: string;
   completed: boolean;
-  /** Manual complete vs auto from ACCEPTED */
   completedSource?: "manual" | "submission";
   createdAt: number;
 }
@@ -33,20 +41,13 @@ export interface StudySession {
   topic: string;
   status: StudySessionStatus;
   startedAt: number;
-  /** Wall clock when current running segment started */
   segmentStartedAt: number | null;
-  /** Accumulated active ms while paused / before current segment */
   accumulatedMs: number;
   endedAt?: number;
   attemptedProblemIds: string[];
   solvedProblemIds: string[];
   updatedAt: number;
 }
-
-const GOALS_PREFIX = "algox:daily-goals:";
-const PLAN_PREFIX = "algox:daily-plan:";
-const SESSIONS_PREFIX = "algox:study-sessions:";
-const ACTIVE_SESSION_KEY = "algox:active-study-session:";
 
 export const DEFAULT_GOALS: DailyGoalConfig = {
   problemsPerDay: 8,
@@ -55,8 +56,29 @@ export const DEFAULT_GOALS: DailyGoalConfig = {
   sessionsPerDay: 1,
 };
 
+export class LearningPersistError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "LearningPersistError";
+  }
+}
+
 function uid(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function requireAuth(userId: string | undefined): asserts userId is string {
+  if (!userId) {
+    throw new LearningPersistError("Sign in to sync learning data across devices");
+  }
+}
+
+function apiErrorMessage(err: unknown, fallback: string): string {
+  const ax = err as {
+    response?: { data?: { message?: string } };
+    message?: string;
+  };
+  return ax?.response?.data?.message || ax?.message || fallback;
 }
 
 export function toDateKey(d: Date = new Date()): string {
@@ -71,73 +93,104 @@ export function parseDateKey(key: string): Date {
   return new Date(y, (m || 1) - 1, d || 1);
 }
 
-export function loadDailyGoals(userId: string | undefined): DailyGoalConfig {
+/** Ephemeral read-through cache (not durable / not authoritative). */
+const goalsCache = new Map<string, DailyGoalConfig>();
+const planCache = new Map<string, DailyPlan>();
+const sessionsCache = new Map<string, StudySession[]>();
+const activeCache = new Map<string, StudySession | null>();
+
+function planCacheKey(userId: string, dateKey: string) {
+  return `${userId}:${dateKey}`;
+}
+
+export async function loadDailyGoals(
+  userId: string | undefined
+): Promise<DailyGoalConfig> {
+  if (!userId) return { ...DEFAULT_GOALS };
   try {
-    const raw = localStorage.getItem(`${GOALS_PREFIX}${userId || "guest"}`);
-    if (!raw) return { ...DEFAULT_GOALS };
-    return { ...DEFAULT_GOALS, ...JSON.parse(raw) };
-  } catch {
-    return { ...DEFAULT_GOALS };
+    const res = await learningApi.getGoals();
+    const goals = { ...DEFAULT_GOALS, ...(res.data || {}) };
+    goalsCache.set(userId, goals);
+    return goals;
+  } catch (err) {
+    const cached = goalsCache.get(userId);
+    if (cached) return { ...cached };
+    throw new LearningPersistError(
+      apiErrorMessage(err, "Failed to load learning goals")
+    );
   }
 }
 
-export function saveDailyGoals(
+export async function saveDailyGoals(
   userId: string | undefined,
   goals: DailyGoalConfig
-): void {
+): Promise<DailyGoalConfig> {
+  requireAuth(userId);
   try {
-    localStorage.setItem(
-      `${GOALS_PREFIX}${userId || "guest"}`,
-      JSON.stringify(goals)
+    const res = await learningApi.putGoals(goals);
+    const saved = { ...DEFAULT_GOALS, ...(res.data || goals) };
+    goalsCache.set(userId, saved);
+    return saved;
+  } catch (err) {
+    throw new LearningPersistError(
+      apiErrorMessage(err, "Failed to save learning goals")
     );
-  } catch {
-    // ignore
   }
 }
 
-export function loadDailyPlan(
+export async function loadDailyPlan(
   userId: string | undefined,
   dateKey: string
-): DailyPlan {
+): Promise<DailyPlan> {
+  const empty: DailyPlan = { date: dateKey, tasks: [], updatedAt: Date.now() };
+  if (!userId) return empty;
   try {
-    const raw = localStorage.getItem(
-      `${PLAN_PREFIX}${userId || "guest"}:${dateKey}`
-    );
-    if (!raw) {
-      return { date: dateKey, tasks: [], updatedAt: Date.now() };
-    }
-    const parsed = JSON.parse(raw) as DailyPlan;
-    return {
+    const res = await learningApi.getPlan(dateKey);
+    const plan: DailyPlan = {
       date: dateKey,
-      tasks: Array.isArray(parsed.tasks) ? parsed.tasks : [],
-      notes: parsed.notes,
-      updatedAt: parsed.updatedAt || Date.now(),
+      tasks: Array.isArray(res.data?.tasks) ? res.data!.tasks : [],
+      notes: res.data?.notes,
+      updatedAt: res.data?.updatedAt || Date.now(),
     };
-  } catch {
-    return { date: dateKey, tasks: [], updatedAt: Date.now() };
+    planCache.set(planCacheKey(userId, dateKey), plan);
+    return plan;
+  } catch (err) {
+    const cached = planCache.get(planCacheKey(userId, dateKey));
+    if (cached) return cached;
+    throw new LearningPersistError(
+      apiErrorMessage(err, "Failed to load daily plan")
+    );
   }
 }
 
-export function saveDailyPlan(
+export async function saveDailyPlan(
   userId: string | undefined,
   plan: DailyPlan
-): void {
+): Promise<DailyPlan> {
+  requireAuth(userId);
   try {
-    localStorage.setItem(
-      `${PLAN_PREFIX}${userId || "guest"}:${plan.date}`,
-      JSON.stringify({ ...plan, updatedAt: Date.now() })
+    const res = await learningApi.putPlan(plan.date, plan);
+    const saved: DailyPlan = {
+      date: plan.date,
+      tasks: Array.isArray(res.data?.tasks) ? res.data!.tasks : plan.tasks,
+      notes: res.data?.notes ?? plan.notes,
+      updatedAt: res.data?.updatedAt || Date.now(),
+    };
+    planCache.set(planCacheKey(userId, plan.date), saved);
+    return saved;
+  } catch (err) {
+    throw new LearningPersistError(
+      apiErrorMessage(err, "Failed to save daily plan")
     );
-  } catch {
-    // ignore
   }
 }
 
-export function addPlannerProblem(
+export async function addPlannerProblem(
   userId: string | undefined,
   dateKey: string,
   problem: { id: string; title: string; slug?: string }
-): DailyPlan {
-  const plan = loadDailyPlan(userId, dateKey);
+): Promise<DailyPlan> {
+  const plan = await loadDailyPlan(userId, dateKey);
   if (plan.tasks.some((t) => t.problemId === problem.id)) return plan;
   plan.tasks.push({
     id: uid(),
@@ -148,59 +201,41 @@ export function addPlannerProblem(
     completed: false,
     createdAt: Date.now(),
   });
-  saveDailyPlan(userId, plan);
-  return plan;
+  return saveDailyPlan(userId, { ...plan, updatedAt: Date.now() });
 }
 
-export function loadAllSessions(userId: string | undefined): StudySession[] {
-  try {
-    const raw = localStorage.getItem(`${SESSIONS_PREFIX}${userId || "guest"}`);
-    if (!raw) return [];
-    const list = JSON.parse(raw) as StudySession[];
-    return Array.isArray(list) ? list : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveAllSessions(
-  userId: string | undefined,
-  sessions: StudySession[]
-): void {
-  try {
-    localStorage.setItem(
-      `${SESSIONS_PREFIX}${userId || "guest"}`,
-      JSON.stringify(sessions.slice(0, 200))
-    );
-  } catch {
-    // ignore
-  }
-}
-
-export function loadActiveSession(
+export async function loadAllSessions(
   userId: string | undefined
-): StudySession | null {
+): Promise<StudySession[]> {
+  if (!userId) return [];
   try {
-    const raw = localStorage.getItem(
-      `${ACTIVE_SESSION_KEY}${userId || "guest"}`
+    const res = await learningApi.listSessions(200);
+    const list = Array.isArray(res.data) ? res.data : [];
+    sessionsCache.set(userId, list);
+    return list;
+  } catch (err) {
+    const cached = sessionsCache.get(userId);
+    if (cached) return cached;
+    throw new LearningPersistError(
+      apiErrorMessage(err, "Failed to load study sessions")
     );
-    if (!raw) return null;
-    return JSON.parse(raw) as StudySession;
-  } catch {
-    return null;
   }
 }
 
-function saveActiveSession(
-  userId: string | undefined,
-  session: StudySession | null
-): void {
+export async function loadActiveSession(
+  userId: string | undefined
+): Promise<StudySession | null> {
+  if (!userId) return null;
   try {
-    const key = `${ACTIVE_SESSION_KEY}${userId || "guest"}`;
-    if (!session) localStorage.removeItem(key);
-    else localStorage.setItem(key, JSON.stringify(session));
-  } catch {
-    // ignore
+    const res = await learningApi.getActiveSession();
+    const session = res.data ?? null;
+    activeCache.set(userId, session);
+    return session;
+  } catch (err) {
+    if (activeCache.has(userId)) return activeCache.get(userId) ?? null;
+    throw new LearningPersistError(
+      apiErrorMessage(err, "Failed to load active study session")
+    );
   }
 }
 
@@ -217,113 +252,102 @@ export function getSessionActiveMs(
   return Math.max(0, session.accumulatedMs);
 }
 
-export function startStudySession(
+export async function startStudySession(
   userId: string | undefined,
   topic: string
-): StudySession {
-  const existing = loadActiveSession(userId);
-  if (existing && existing.status !== "completed") {
-    return existing;
+): Promise<StudySession> {
+  requireAuth(userId);
+  try {
+    const res = await learningApi.startSession(topic || "General");
+    if (!res.data) {
+      throw new LearningPersistError("Server did not return a study session");
+    }
+    activeCache.set(userId, res.data);
+    return res.data;
+  } catch (err) {
+    if (err instanceof LearningPersistError) throw err;
+    throw new LearningPersistError(
+      apiErrorMessage(err, "Failed to start study session")
+    );
   }
-  const now = Date.now();
-  const session: StudySession = {
-    id: uid(),
-    topic: topic || "General",
-    status: "running",
-    startedAt: now,
-    segmentStartedAt: now,
-    accumulatedMs: 0,
-    attemptedProblemIds: [],
-    solvedProblemIds: [],
-    updatedAt: now,
-  };
-  saveActiveSession(userId, session);
-  return session;
 }
 
-export function pauseStudySession(
+export async function pauseStudySession(
   userId: string | undefined
-): StudySession | null {
-  const s = loadActiveSession(userId);
-  if (!s || s.status !== "running") return s;
-  const now = Date.now();
-  const next: StudySession = {
-    ...s,
-    status: "paused",
-    accumulatedMs: getSessionActiveMs(s, now),
-    segmentStartedAt: null,
-    updatedAt: now,
-  };
-  saveActiveSession(userId, next);
-  return next;
+): Promise<StudySession | null> {
+  requireAuth(userId);
+  try {
+    const res = await learningApi.pauseSession();
+    const session = res.data ?? null;
+    activeCache.set(userId, session);
+    return session;
+  } catch (err) {
+    throw new LearningPersistError(
+      apiErrorMessage(err, "Failed to pause study session")
+    );
+  }
 }
 
-export function resumeStudySession(
+export async function resumeStudySession(
   userId: string | undefined
-): StudySession | null {
-  const s = loadActiveSession(userId);
-  if (!s || s.status !== "paused") return s;
-  const now = Date.now();
-  const next: StudySession = {
-    ...s,
-    status: "running",
-    segmentStartedAt: now,
-    updatedAt: now,
-  };
-  saveActiveSession(userId, next);
-  return next;
+): Promise<StudySession | null> {
+  requireAuth(userId);
+  try {
+    const res = await learningApi.resumeSession();
+    const session = res.data ?? null;
+    activeCache.set(userId, session);
+    return session;
+  } catch (err) {
+    throw new LearningPersistError(
+      apiErrorMessage(err, "Failed to resume study session")
+    );
+  }
 }
 
-export function endStudySession(
+export async function endStudySession(
   userId: string | undefined
-): StudySession | null {
-  const s = loadActiveSession(userId);
-  if (!s) return null;
-  const now = Date.now();
-  const completed: StudySession = {
-    ...s,
-    status: "completed",
-    accumulatedMs: getSessionActiveMs(s, now),
-    segmentStartedAt: null,
-    endedAt: now,
-    updatedAt: now,
-  };
-  const all = loadAllSessions(userId);
-  all.unshift(completed);
-  saveAllSessions(userId, all);
-  saveActiveSession(userId, null);
-  return completed;
+): Promise<StudySession | null> {
+  requireAuth(userId);
+  try {
+    const res = await learningApi.endSession();
+    activeCache.set(userId, null);
+    if (res.data) {
+      const prev = sessionsCache.get(userId) || [];
+      sessionsCache.set(userId, [res.data, ...prev].slice(0, 200));
+    }
+    return res.data ?? null;
+  } catch (err) {
+    throw new LearningPersistError(
+      apiErrorMessage(err, "Failed to end study session")
+    );
+  }
 }
 
-/** Record attempt/solve into active session (idempotent per problem id). */
-export function recordSessionProblemActivity(
+export async function recordSessionProblemActivity(
   userId: string | undefined,
   problemId: string,
   solved: boolean
-): StudySession | null {
-  const s = loadActiveSession(userId);
-  if (!s || s.status === "completed") return null;
-  const attempted = new Set(s.attemptedProblemIds);
-  const solvedSet = new Set(s.solvedProblemIds);
-  attempted.add(problemId);
-  if (solved) solvedSet.add(problemId);
-  const next: StudySession = {
-    ...s,
-    attemptedProblemIds: [...attempted],
-    solvedProblemIds: [...solvedSet],
-    updatedAt: Date.now(),
-  };
-  saveActiveSession(userId, next);
-  return next;
+): Promise<StudySession | null> {
+  if (!userId || !problemId) return null;
+  try {
+    const res = await learningApi.recordActivity(problemId, solved);
+    const session = res.data ?? null;
+    if (session) activeCache.set(userId, session);
+    return session;
+  } catch (err) {
+    throw new LearningPersistError(
+      apiErrorMessage(err, "Failed to record study session activity")
+    );
+  }
 }
 
 /** Mark planned problems complete when ACCEPTED submissions exist. */
-export function syncPlannerWithAccepted(
+export async function syncPlannerWithAccepted(
   userId: string | undefined,
   dateKey: string,
   acceptedProblemIds: Set<string>
-): DailyPlan {
-  const plan = loadDailyPlan(userId, dateKey);
+): Promise<DailyPlan> {
+  const plan = await loadDailyPlan(userId, dateKey);
   let changed = false;
   const tasks = plan.tasks.map((t) => {
     if (
@@ -342,9 +366,7 @@ export function syncPlannerWithAccepted(
     return t;
   });
   if (!changed) return plan;
-  const next = { ...plan, tasks, updatedAt: Date.now() };
-  saveDailyPlan(userId, next);
-  return next;
+  return saveDailyPlan(userId, { ...plan, tasks, updatedAt: Date.now() });
 }
 
 export function formatDurationMs(ms: number): string {
@@ -363,4 +385,21 @@ export function formatHMS(ms: number): string {
   const m = Math.floor((totalSec % 3600) / 60);
   const s = totalSec % 60;
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+/** Clear ephemeral caches (e.g. on logout). */
+export function clearLearningCache(userId?: string): void {
+  if (!userId) {
+    goalsCache.clear();
+    planCache.clear();
+    sessionsCache.clear();
+    activeCache.clear();
+    return;
+  }
+  goalsCache.delete(userId);
+  sessionsCache.delete(userId);
+  activeCache.delete(userId);
+  for (const key of [...planCache.keys()]) {
+    if (key.startsWith(`${userId}:`)) planCache.delete(key);
+  }
 }

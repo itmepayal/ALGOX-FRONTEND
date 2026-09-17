@@ -29,6 +29,7 @@ export type Permission =
   | "health:view"
   | "settings:view"
   | "settings:update"
+  | "roles:manage"
   | "discussions:view"
   | "discussions:moderate"
   | "discussions:delete"
@@ -84,6 +85,7 @@ export const ALL: Permission[] = [
   "health:view",
   "settings:view",
   "settings:update",
+  "roles:manage",
   "discussions:view",
   "discussions:moderate",
   "discussions:delete",

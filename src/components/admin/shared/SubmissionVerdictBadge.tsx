@@ -20,17 +20,17 @@ const VERDICTS: Record<
   WRONG_ANSWER: { label: "Wrong Answer", tone: "danger", Icon: XCircle },
   RUNTIME_ERROR: { label: "Runtime Error", tone: "danger", Icon: AlertTriangle },
   COMPILATION_ERROR: {
-    label: "Compile Error",
+    label: "Compilation Error",
     tone: "danger",
     Icon: AlertTriangle,
   },
   TIME_LIMIT_EXCEEDED: {
-    label: "TLE",
+    label: "Time Limit Exceeded",
     tone: "warning",
     Icon: Clock,
   },
   MEMORY_LIMIT_EXCEEDED: {
-    label: "MLE",
+    label: "Memory Limit Exceeded",
     tone: "warning",
     Icon: Clock,
   },

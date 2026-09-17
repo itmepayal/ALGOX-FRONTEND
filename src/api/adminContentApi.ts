@@ -1,18 +1,9 @@
-import axios from "axios";
+import { SERVICE_URLS } from "./serviceUrls";
+import { createServiceClient } from "./authClient";
 
-const CONTENT_API_URL =
-  import.meta.env.VITE_CONTENT_API_URL || "http://localhost:3009/api/v1";
+const CONTENT_API_URL = SERVICE_URLS.content;
 
-export const contentClient = axios.create({
-  baseURL: CONTENT_API_URL,
-  headers: { "Content-Type": "application/json" },
-});
-
-contentClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem("accessToken");
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  return config;
-});
+export const contentClient = createServiceClient(CONTENT_API_URL);
 
 export const adminContentApi = {
   listArticles: async (params?: Record<string, string | number | undefined>) => {
@@ -68,6 +59,53 @@ export const adminContentApi = {
   },
   deleteNote: async (id: string) => {
     const res = await contentClient.delete(`/content/admin/notes/${id}`);
+    return res.data;
+  },
+
+  // ── Companies ──────────────────────────────────────────────────────
+  listCompanies: async (params?: Record<string, string | number | undefined>) => {
+    const res = await contentClient.get("/content/admin/companies", { params });
+    return res.data;
+  },
+  createCompany: async (payload: Record<string, unknown>) => {
+    const res = await contentClient.post("/content/admin/companies", payload);
+    return res.data;
+  },
+  updateCompany: async (id: string, payload: Record<string, unknown>) => {
+    const res = await contentClient.patch(
+      `/content/admin/companies/${id}`,
+      payload
+    );
+    return res.data;
+  },
+  deleteCompany: async (id: string) => {
+    const res = await contentClient.delete(`/content/admin/companies/${id}`);
+    return res.data;
+  },
+  listCompanyQuestions: async (
+    companyId: string,
+    params?: Record<string, string | number | undefined>
+  ) => {
+    const res = await contentClient.get(
+      `/content/admin/companies/${companyId}/questions`,
+      { params }
+    );
+    return res.data;
+  },
+  createCompanyQuestion: async (
+    companyId: string,
+    payload: Record<string, unknown>
+  ) => {
+    const res = await contentClient.post(
+      `/content/admin/companies/${companyId}/questions`,
+      payload
+    );
+    return res.data;
+  },
+  deleteCompanyQuestion: async (companyId: string, questionId: string) => {
+    const res = await contentClient.delete(
+      `/content/admin/companies/${companyId}/questions/${questionId}`
+    );
     return res.data;
   },
 };

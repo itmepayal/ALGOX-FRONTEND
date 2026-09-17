@@ -11,8 +11,7 @@ import {
   type ContestParticipant,
 } from "../../../api/adminContestApi";
 import { adminProblemApi } from "../../../api/adminProblemApi";
-import { hasPermission } from "../../../rbac/permissions";
-import { useAuth } from "../../../context/AuthContext";
+import { usePermission } from "../../../rbac/usePermission";
 
 interface Props {
   id: string;
@@ -44,8 +43,8 @@ function problemLabel(row: {
 }
 
 export const ContestDetailPage: FC<Props> = ({ id, onBack }) => {
-  const { user } = useAuth();
-  const canManage = hasPermission(user?.role, "contests:manage");
+  const { can } = usePermission();
+  const canManage = can("contests:manage");
   const [contest, setContest] = useState<AdminContest | null>(null);
   const [tab, setTab] = useState<DetailTab>("overview");
   const [error, setError] = useState("");

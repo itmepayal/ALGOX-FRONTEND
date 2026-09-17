@@ -39,6 +39,9 @@ import { adminRealtimeApi } from "../../../api/adminRealtimeApi";
 import { LeaderboardsPage } from "../leaderboards/LeaderboardsPage";
 import { CodeExecutionPage } from "../execution/CodeExecutionPage";
 import { adminSubmissionApi } from "../../../api/adminSubmissionApi";
+import {
+  connectRealtimeSocket,
+} from "../../../realtime/socket";
 import { useToast } from "../../../context/ToastContext";
 import "../problems/problem-editor.css";
 import { cn } from "../../../lib/cn";
@@ -66,7 +69,7 @@ function metricDisplay(v: unknown): {
   if (v === null || v === undefined || Number.isNaN(v as number)) {
     return {
       tracked: false,
-      value: "Not tracked",
+      value: "Unavailable / Not tracked",
       hint: "Not measured by gateway",
     };
   }
@@ -97,6 +100,17 @@ function formatUptime(ms: number) {
   return `${sec}s`;
 }
 
+const NotTracked: FC = () => (
+  <span className="inline-flex flex-col items-end gap-0.5 text-right">
+    <strong className="font-primary text-sm font-medium text-muted-foreground">
+      Unavailable / Not tracked
+    </strong>
+    <span className="font-primary text-[0.6875rem] font-normal text-muted-foreground/80">
+      Not measured by gateway
+    </span>
+  </span>
+);
+
 export const RealtimeCenterPage: FC<RealtimePageProps> = ({
   mode,
   onOpenSubmission,
@@ -112,17 +126,6 @@ export const RealtimeCenterPage: FC<RealtimePageProps> = ({
   if (mode === "users") return <LiveUsers />;
   return <RealtimeOverview />;
 };
-
-const NotTracked: FC = () => (
-  <span className="inline-flex flex-col items-end gap-0.5 text-right">
-    <strong className="font-primary text-sm font-medium text-muted-foreground">
-      Not tracked
-    </strong>
-    <span className="font-primary text-[0.6875rem] font-normal text-muted-foreground/80">
-      Not measured by gateway
-    </span>
-  </span>
-);
 
 const KvRow: FC<{
   label: string;
@@ -187,18 +190,17 @@ const RealtimeOverview: FC = () => {
   const onlineUsers = pickFirst(data?.onlineUsers, analytics?.onlineUsers);
   const eventsPerSec = pickFirst(
     data?.eventsPerSecond,
-    analytics?.eventsPerSecond,
-    analytics?.eventsPerSec,
-    data?.eventsPerSec
+    analytics?.eventsPerSecond
   );
+  // Latency is not measured — never treat null as 0
   const avgLatency = pickFirst(
-    analytics?.avgLatencyMs,
     data?.avgLatencyMs,
+    analytics?.avgLatencyMs,
     data?.latencyP50Ms,
     analytics?.latencyP50Ms
   );
-  // Product “Active rooms” only when explicitly provided — never invent from adapter room map
-  const activeRooms = pickFirst(data?.activeRooms, analytics?.activeRooms);
+  // Named product rooms from overview (listRooms), not raw adapter map size
+  const activeRooms = pickFirst(data?.activeRooms);
 
   const historySeries = useMemo(() => {
     const raw =
@@ -225,8 +227,8 @@ const RealtimeOverview: FC = () => {
             <div>
               <h2 className="pe-title">WebSocket Dashboard</h2>
               <p className="pe-sub">
-                Monitor real-time connections, rooms, events, and gateway
-                health.
+                Gateway metrics from RealtimeService (HTTP snapshot · refreshes
+                every 5s).
               </p>
             </div>
           </div>
@@ -266,19 +268,31 @@ const RealtimeOverview: FC = () => {
           <StatsCard
             label="Active Connections"
             value={conn.value}
-            hint={conn.tracked ? "Open sockets right now" : conn.hint}
+            hint={
+              conn.tracked
+                ? "In-process socket count · overview API"
+                : conn.hint
+            }
             icon={<Cable size={16} strokeWidth={1.75} />}
           />
           <StatsCard
             label="Peak Connections"
             value={peak.value}
-            hint={peak.tracked ? "Highest since gateway start" : peak.hint}
+            hint={
+              peak.tracked
+                ? "Highest since gateway process start"
+                : peak.hint
+            }
             icon={<Activity size={16} strokeWidth={1.75} />}
           />
           <StatsCard
             label="Online Users"
             value={online.value}
-            hint={online.tracked ? "Authenticated presence" : online.hint}
+            hint={
+              online.tracked
+                ? "Authenticated presence (Redis or memory)"
+                : online.hint
+            }
             icon={<Users size={16} strokeWidth={1.75} />}
           />
         </div>
@@ -287,7 +301,7 @@ const RealtimeOverview: FC = () => {
           <section className="pe-card !p-6">
             <div className="pe-card-head !mb-5">
               <h3>Gateway Status</h3>
-              <p>Live health from the realtime service</p>
+              <p>HTTP overview snapshot · not a live socket subscription</p>
             </div>
             <dl className="m-0">
               <KvRow label="Operational status">
@@ -317,6 +331,22 @@ const RealtimeOverview: FC = () => {
                   </span>
                 </KvRow>
               ) : null}
+              <KvRow label="Broadcast logs">
+                {data?.broadcastPersistence?.mode === "mongo" ||
+                data?.mongoBroadcastLogs === true ? (
+                  <StatusBadge status="MONGO" />
+                ) : data?.broadcastPersistence ||
+                  data?.mongoBroadcastLogs === false ? (
+                  <span className="font-primary text-sm text-muted-foreground">
+                    Memory only
+                    {data?.broadcastPersistence?.reason
+                      ? ` · ${String(data.broadcastPersistence.reason).slice(0, 80)}`
+                      : ""}
+                  </span>
+                ) : (
+                  <NotTracked />
+                )}
+              </KvRow>
               {data?.uptimeMs != null ? (
                 <KvRow label="Uptime">
                   <span className="font-technical text-sm font-semibold tabular-nums text-foreground">
@@ -338,8 +368,8 @@ const RealtimeOverview: FC = () => {
 
           <section className="pe-card !p-6">
             <div className="pe-card-head !mb-5">
-              <h3>Realtime Activity</h3>
-              <p>Throughput and latency signals</p>
+              <h3>Activity signals</h3>
+              <p>Measured gateway counters · latency is not instrumented</p>
             </div>
             <dl className="m-0">
               <KvRow label="Events/sec">
@@ -375,8 +405,11 @@ const RealtimeOverview: FC = () => {
 
         <section className="pe-card !p-6">
           <div className="pe-card-head !mb-5">
-            <h3>Connection Activity</h3>
-            <p>Historical WebSocket throughput from the gateway</p>
+            <h3>Events/sec samples</h3>
+            <p>
+              In-process rolling history (~60s) from RealtimeService metrics —
+              refreshed with overview, not a live chart stream
+            </p>
           </div>
           {historySeries.length > 0 ? (
             <div className="h-[220px] w-full">
@@ -426,8 +459,8 @@ const RealtimeOverview: FC = () => {
             <EmptyState
               compact
               icon={<Activity size={18} strokeWidth={1.75} />}
-              title="No connection history"
-              description="Historical WebSocket activity will appear here once the gateway starts collecting it."
+              title="No events/sec samples yet"
+              description="Samples appear after the gateway records socket events."
             />
           )}
         </section>
@@ -467,28 +500,40 @@ const LiveUsers: FC = () => {
 
   return (
     <PermissionGuard permission="realtime:view">
+      <p className="admin-muted" style={{ marginBottom: 10 }}>
+        Authenticated presence from RealtimeService · HTTP snapshot · refreshes
+        every 4s (not a socket subscription).
+      </p>
       {error ? <p className="admin-error">{error}</p> : null}
       <DataTable
         loading={loading}
         emptyTitle="No online users"
-        emptyDescription="Socket-connected users will appear here when the realtime service is active."
+        emptyDescription="Users appear when authenticated sockets register presence."
         emptyIcon={<Users size={18} strokeWidth={1.75} />}
         columns={[
           { key: "user", header: "User", render: (r) => r.userId || r.id },
           {
             key: "status",
             header: "Status",
-            render: (r) => <StatusBadge status={r.status || "ONLINE"} />,
+            render: (r) => (
+              <StatusBadge status={r.status || "Unavailable / Not tracked"} />
+            ),
           },
           {
             key: "sockets",
             header: "Sockets",
-            render: (r) => r.socketCount ?? r.sockets?.length ?? "—",
+            render: (r) =>
+              r.connectionCount ??
+              r.socketIds?.length ??
+              r.socketCount ??
+              r.sockets?.length ??
+              "Unavailable / Not tracked",
           },
           {
             key: "page",
             header: "Page",
-            render: (r) => r.currentPage || "—",
+            render: (r) =>
+              r.currentPage || "Unavailable / Not tracked",
           },
           {
             key: "activity",
@@ -496,7 +541,7 @@ const LiveUsers: FC = () => {
             render: (r) =>
               r.lastActivity
                 ? new Date(r.lastActivity).toLocaleString()
-                : "—",
+                : "Unavailable / Not tracked",
           },
         ]}
         rows={rows}
@@ -543,6 +588,10 @@ const ConnectionsMonitor: FC = () => {
 
   return (
     <PermissionGuard permission="realtime:connections">
+      <p className="admin-muted" style={{ marginBottom: 10 }}>
+        Open sockets from RealtimeService presence · HTTP snapshot · refreshes
+        every 4s.
+      </p>
       {error ? <p className="admin-error">{error}</p> : null}
       <DataTable
         loading={loading}
@@ -559,18 +608,25 @@ const ConnectionsMonitor: FC = () => {
           {
             key: "status",
             header: "Status",
-            render: (r) => <StatusBadge status={r.status || "ONLINE"} />,
+            render: (r) => (
+              <StatusBadge
+                status={r.status || "Unavailable / Not tracked"}
+              />
+            ),
           },
           {
             key: "connected",
             header: "Connected",
             render: (r) =>
-              r.connectedAt ? new Date(r.connectedAt).toLocaleString() : "—",
+              r.connectedAt
+                ? new Date(r.connectedAt).toLocaleString()
+                : "Unavailable / Not tracked",
           },
           {
             key: "rooms",
             header: "Rooms",
-            render: (r) => (r.rooms || []).join(", ") || "—",
+            render: (r) =>
+              (r.rooms || []).join(", ") || "Unavailable / Not tracked",
           },
           {
             key: "actions",
@@ -625,6 +681,10 @@ const RoomsMonitor: FC = () => {
 
   return (
     <PermissionGuard permission="realtime:rooms">
+      <p className="admin-muted" style={{ marginBottom: 10 }}>
+        Named Socket.IO rooms from the gateway adapter · HTTP snapshot ·
+        refreshes every 5s.
+      </p>
       {error ? <p className="admin-error">{error}</p> : null}
       <DataTable
         loading={loading}
@@ -632,28 +692,32 @@ const RoomsMonitor: FC = () => {
         emptyDescription="Contest, problem, and presence rooms show up when users join."
         emptyIcon={<Radio size={18} strokeWidth={1.75} />}
         columns={[
-          { key: "id", header: "Room", render: (r) => r.roomId || r.id },
+          {
+            key: "id",
+            header: "Room",
+            render: (r) => r.room || r.roomId || r.id,
+          },
           {
             key: "type",
             header: "Type",
-            render: (r) => r.roomType || r.type || "—",
+            render: (r) => r.kind || r.roomType || r.type || "Unavailable / Not tracked",
           },
           {
             key: "users",
             header: "Connected",
-            render: (r) => r.connectedUsers ?? r.size ?? 0,
+            render: (r) =>
+              r.size ??
+              r.connectedUsers ??
+              "Unavailable / Not tracked",
           },
           {
             key: "activity",
             header: "Last activity",
-            render: (r) =>
-              r.lastActivity
-                ? new Date(r.lastActivity).toLocaleString()
-                : "—",
+            render: () => "Unavailable / Not tracked",
           },
         ]}
         rows={rows}
-        rowKey={(r) => r.roomId || r.id}
+        rowKey={(r) => r.room || r.roomId || r.id}
       />
     </PermissionGuard>
   );
@@ -816,7 +880,10 @@ const EventStream: FC = () => {
           <div className="pe-topbar-left">
             <div>
               <h2 className="pe-title">Event Stream</h2>
-              <p className="pe-sub">Live WebSocket events from the gateway</p>
+              <p className="pe-sub">
+                In-memory event buffer from RealtimeService · HTTP poll every 2s
+                (not a live socket feed)
+              </p>
             </div>
           </div>
           <div className="pe-topbar-actions">
@@ -838,7 +905,7 @@ const EventStream: FC = () => {
                 )}
                 aria-hidden
               />
-              {paused ? "Paused" : "Live"}
+              {paused ? "Paused" : "Refreshing"}
             </span>
             <span
               className="inline-flex h-8 min-w-8 items-center justify-center rounded-md border border-border bg-muted px-2.5 font-technical text-xs font-semibold tabular-nums text-foreground"
@@ -996,7 +1063,7 @@ const EventStream: FC = () => {
             emptyDescription={
               filtersActive && rows.length > 0
                 ? "No gateway events match your current filters."
-                : "Waiting for WebSocket activity..."
+                : "The gateway event buffer is empty until sockets emit events."
             }
             emptyIcon={<Activity size={18} strokeWidth={1.75} />}
             emptyAction={
@@ -1139,6 +1206,7 @@ const BroadcastCenter: FC = () => {
   const [history, setHistory] = useState<any[]>([]);
   const [metaLoading, setMetaLoading] = useState(true);
   const [lastBroadcastAt, setLastBroadcastAt] = useState<Date | null>(null);
+  const [logMode, setLogMode] = useState<"mongo" | "memory" | null>(null);
 
   const loadMeta = useCallback(async () => {
     try {
@@ -1149,6 +1217,14 @@ const BroadcastCenter: FC = () => {
       const data = ov.data || ov;
       const analytics = an.data || an;
       setGatewayOk(true);
+      const bp = data?.broadcastPersistence || analytics?.broadcastPersistence;
+      if (bp?.mode === "mongo" || data?.mongoBroadcastLogs === true) {
+        setLogMode("mongo");
+      } else if (bp || data?.mongoBroadcastLogs === false) {
+        setLogMode("memory");
+      } else {
+        setLogMode(null);
+      }
       const connections = pickFirst(
         data?.activeConnections,
         analytics?.activeConnections
@@ -1166,6 +1242,7 @@ const BroadcastCenter: FC = () => {
       setGatewayOk(false);
       setActiveConnections(null);
       setOnlineUsers(null);
+      setLogMode(null);
     } finally {
       setMetaLoading(false);
     }
@@ -1214,7 +1291,13 @@ const BroadcastCenter: FC = () => {
       const delivered = d.delivered ?? d.sent ?? 0;
       toast.success(
         "Broadcast sent successfully",
-        `${delivered} recipient${delivered === 1 ? "" : "s"} received the message.`
+        `${delivered} recipient${delivered === 1 ? "" : "s"} received the message` +
+          (d.persisted === "mongo"
+            ? " · logged to Mongo"
+            : d.persisted === "memory"
+              ? " · memory log only (Mongo unavailable)"
+              : "") +
+          "."
       );
       setMessage("");
       setTitle("");
@@ -1245,7 +1328,7 @@ const BroadcastCenter: FC = () => {
       id: "online",
       label: "Online users",
       hint: "Authenticated presence connections",
-      detail: `${typeof onlineUsers === "number" ? onlineUsers : "—"} online user${onlineUsers === 1 ? "" : "s"}`,
+      detail: `${typeof onlineUsers === "number" ? onlineUsers : "Unavailable / Not tracked"} online user${onlineUsers === 1 ? "" : "s"}`,
     },
   ];
 
@@ -1257,7 +1340,8 @@ const BroadcastCenter: FC = () => {
             <div>
               <h2 className="pe-title">Broadcast Center</h2>
               <p className="pe-sub">
-                Send real-time messages to connected users through the gateway.
+                Push messages through RealtimeService broadcast API to connected
+                sockets.
               </p>
             </div>
           </div>
@@ -1274,11 +1358,15 @@ const BroadcastCenter: FC = () => {
               <span
                 className={cn(
                   "h-1.5 w-1.5 rounded-full",
-                  gatewayOk ? "bg-primary admin-live-pulse" : "bg-muted-foreground",
+                  gatewayOk ? "bg-primary" : "bg-muted-foreground",
                 )}
                 aria-hidden
               />
-              {metaLoading ? "Connecting…" : gatewayOk ? "Live" : "Offline"}
+              {metaLoading
+                ? "Checking…"
+                : gatewayOk
+                  ? "Gateway reachable"
+                  : "Offline"}
             </span>
             <span
               className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-muted px-2.5 font-primary text-xs font-medium text-foreground"
@@ -1479,6 +1567,24 @@ const BroadcastCenter: FC = () => {
                 </div>
                 <div className="flex items-center justify-between gap-3 border-b border-border py-3">
                   <dt className="font-primary text-sm text-muted-foreground">
+                    Log storage
+                  </dt>
+                  <dd className="m-0">
+                    <StatusBadge
+                      status={
+                        metaLoading
+                          ? "PENDING"
+                          : logMode === "mongo"
+                            ? "MONGO"
+                            : logMode === "memory"
+                              ? "MEMORY"
+                              : "UNKNOWN"
+                      }
+                    />
+                  </dd>
+                </div>
+                <div className="flex items-center justify-between gap-3 border-b border-border py-3">
+                  <dt className="font-primary text-sm text-muted-foreground">
                     Status
                   </dt>
                   <dd className="m-0">
@@ -1510,7 +1616,10 @@ const BroadcastCenter: FC = () => {
           <section className="pe-card !p-6">
             <div className="pe-card-head !mb-5">
               <h3>Recent broadcasts</h3>
-              <p>Latest messages sent through this gateway session</p>
+              <p>
+                Durable Mongo logs when connected · otherwise this gateway
+                session only
+              </p>
             </div>
             <DataTable
               emptyTitle="No recent broadcasts"
@@ -1545,6 +1654,23 @@ const BroadcastCenter: FC = () => {
                       </time>
                     );
                   },
+                },
+                {
+                  key: "storage",
+                  header: "Storage",
+                  width: "100px",
+                  skeletonWidth: "3.5rem",
+                  render: (r) => (
+                    <StatusBadge
+                      status={
+                        r.source === "mongo"
+                          ? "MONGO"
+                          : r.source === "memory"
+                            ? "MEMORY"
+                            : "UNKNOWN"
+                      }
+                    />
+                  ),
                 },
                 {
                   key: "message",
@@ -1633,25 +1759,133 @@ const BroadcastCenter: FC = () => {
   );
 };
 
+const ADMIN_REALTIME_ROOM = "admin:realtime";
+const ROOM_JOIN = "room.join";
+const ROOM_LEAVE = "room.leave";
+
+/** Existing RealtimeEvents.submission.* names — must match ingest allowlist. */
+const SUBMISSION_SOCKET_EVENTS = [
+  "submission.created",
+  "submission.queued",
+  "submission.running",
+  "submission.completed",
+  "submission.failed",
+  "submission.updated",
+] as const;
+
+const POLL_INTERVAL_OPTIONS_MS = [5000, 8000, 15000, 30000] as const;
+const DEFAULT_POLL_MS = 8000;
+const MAX_LIVE_ROWS = 40;
+
+type LiveTransport = "connecting" | "socket" | "polling";
+
+type LiveSubmissionRow = {
+  id: string;
+  userId?: string;
+  problemId?: string;
+  language?: string;
+  status?: string;
+  source?: string;
+  updatedAt?: number;
+};
+
+function upsertLiveSubmission(
+  prev: LiveSubmissionRow[],
+  next: LiveSubmissionRow
+): LiveSubmissionRow[] {
+  const id = next.id;
+  if (!id) return prev;
+  const idx = prev.findIndex((r) => r.id === id);
+  let merged: LiveSubmissionRow;
+  if (idx >= 0) {
+    const cur = prev[idx];
+    merged = {
+      ...cur,
+      ...next,
+      language: next.language || cur.language,
+      problemId: next.problemId || cur.problemId,
+      userId: next.userId || cur.userId,
+      source: next.source || cur.source,
+    };
+    const rest = prev.filter((_, i) => i !== idx);
+    return [merged, ...rest].slice(0, MAX_LIVE_ROWS);
+  }
+  return [next, ...prev].slice(0, MAX_LIVE_ROWS);
+}
+
+function rowFromSocketPayload(payload: unknown): LiveSubmissionRow | null {
+  const p = (payload || {}) as Record<string, unknown>;
+  const id = String(p.submissionId || p.id || "").trim();
+  if (!id) return null;
+  return {
+    id,
+    userId: p.userId != null ? String(p.userId) : undefined,
+    problemId: p.problemId != null ? String(p.problemId) : undefined,
+    language: p.language != null ? String(p.language) : undefined,
+    status: p.status != null ? String(p.status) : undefined,
+    source: p.source != null ? String(p.source) : undefined,
+    updatedAt: Date.now(),
+  };
+}
+
+function rowFromApi(r: any): LiveSubmissionRow {
+  return {
+    id: String(r.id || r._id || ""),
+    userId: r.userId != null ? String(r.userId) : undefined,
+    problemId: r.problemId != null ? String(r.problemId) : undefined,
+    language: r.language != null ? String(r.language) : undefined,
+    status: r.status != null ? String(r.status) : undefined,
+    source: r.source != null ? String(r.source) : undefined,
+    updatedAt: Date.now(),
+  };
+}
+
 const LiveSubmissionsPulse: FC<{ onOpen?: (id: string) => void }> = ({
   onOpen,
 }) => {
-  const [rows, setRows] = useState<any[]>([]);
+  const [rows, setRows] = useState<LiveSubmissionRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tick, setTick] = useState(0);
+  const [transport, setTransport] = useState<LiveTransport>("connecting");
+  const [socketState, setSocketState] = useState({
+    connected: false,
+    reconnecting: false,
+    joinError: "" as string,
+  });
+  const [pollMs, setPollMs] = useState<number>(DEFAULT_POLL_MS);
+  const [lastEventAt, setLastEventAt] = useState<Date | null>(null);
+  const joinedRef = useRef(false);
+  const transportRef = useRef<LiveTransport>("connecting");
 
-  useEffect(() => {
-    const id = window.setInterval(() => setTick((t) => t + 1), 8000);
-    return () => window.clearInterval(id);
+  const seedFromApi = useCallback(async () => {
+    try {
+      const res = await adminSubmissionApi.list({ page: 1, limit: MAX_LIVE_ROWS });
+      const next = (res.data || [])
+        .map(rowFromApi)
+        .filter((r: LiveSubmissionRow) => r.id);
+      setRows(next);
+    } catch {
+      /* keep existing rows on refresh failure */
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
+  // Initial HTTP seed (history), then Socket.IO live updates when available.
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         setLoading(true);
-        const res = await adminSubmissionApi.list({ page: 1, limit: 40 });
-        if (!cancelled) setRows(res.data || []);
+        const res = await adminSubmissionApi.list({
+          page: 1,
+          limit: MAX_LIVE_ROWS,
+        });
+        if (cancelled) return;
+        setRows(
+          (res.data || [])
+            .map(rowFromApi)
+            .filter((r: LiveSubmissionRow) => r.id)
+        );
       } catch {
         if (!cancelled) setRows([]);
       } finally {
@@ -1661,21 +1895,232 @@ const LiveSubmissionsPulse: FC<{ onOpen?: (id: string) => void }> = ({
     return () => {
       cancelled = true;
     };
-  }, [tick]);
+  }, []);
+
+  // Prefer Socket.IO admin:realtime (ingest fan-out). Fall back to HTTP poll.
+  useEffect(() => {
+    let cancelled = false;
+    let pollTimer: number | null = null;
+    let softTimer: number | null = null;
+
+    const clearPoll = () => {
+      if (pollTimer != null) {
+        window.clearInterval(pollTimer);
+        pollTimer = null;
+      }
+    };
+
+    const clearSoft = () => {
+      if (softTimer != null) {
+        window.clearTimeout(softTimer);
+        softTimer = null;
+      }
+    };
+
+    const startPolling = (reason?: string) => {
+      if (cancelled) return;
+      clearSoft();
+      clearPoll();
+      transportRef.current = "polling";
+      setTransport("polling");
+      if (reason) {
+        setSocketState((s) => ({ ...s, joinError: reason }));
+      }
+      void seedFromApi();
+      pollTimer = window.setInterval(() => {
+        if (!cancelled && transportRef.current === "polling") {
+          void seedFromApi();
+        }
+      }, pollMs);
+    };
+
+    const applyEvent = (payload: unknown) => {
+      if (cancelled) return;
+      const row = rowFromSocketPayload(payload);
+      if (!row) return;
+      setLastEventAt(new Date());
+      setRows((prev) => upsertLiveSubmission(prev, row));
+    };
+
+    const socket = connectRealtimeSocket();
+    if (!socket) {
+      startPolling("No access token — using HTTP poll");
+      return () => {
+        cancelled = true;
+        clearPoll();
+        clearSoft();
+      };
+    }
+
+    const joinAdminRoom = () => {
+      socket.emit(
+        ROOM_JOIN,
+        { room: ADMIN_REALTIME_ROOM },
+        (ack: { ok?: boolean; error?: string; room?: string } | undefined) => {
+          if (cancelled) return;
+          if (ack?.ok) {
+            joinedRef.current = true;
+            clearSoft();
+            clearPoll();
+            transportRef.current = "socket";
+            setTransport("socket");
+            setSocketState({
+              connected: true,
+              reconnecting: false,
+              joinError: "",
+            });
+          } else {
+            joinedRef.current = false;
+            startPolling(
+              ack?.error ||
+                "Cannot join admin:realtime (requires realtime:view) — HTTP poll"
+            );
+          }
+        }
+      );
+    };
+
+    const onConnect = () => {
+      if (cancelled) return;
+      setSocketState((s) => ({
+        ...s,
+        connected: true,
+        reconnecting: false,
+      }));
+      joinAdminRoom();
+    };
+
+    const onDisconnect = () => {
+      if (cancelled) return;
+      joinedRef.current = false;
+      setSocketState((s) => ({ ...s, connected: false }));
+      if (transportRef.current === "socket") {
+        startPolling("Socket disconnected — HTTP poll until reconnect");
+      }
+    };
+
+    const onReconnectAttempt = () => {
+      if (cancelled) return;
+      setSocketState((s) => ({ ...s, reconnecting: true, connected: false }));
+    };
+
+    const onReconnect = () => {
+      if (cancelled) return;
+      setSocketState((s) => ({ ...s, reconnecting: false }));
+      onConnect();
+      void seedFromApi();
+    };
+
+    for (const ev of SUBMISSION_SOCKET_EVENTS) {
+      socket.on(ev, applyEvent);
+    }
+    socket.on("connect", onConnect);
+    socket.on("disconnect", onDisconnect);
+    // Manager-level reconnect (socket.io-client v4)
+    socket.io.on("reconnect_attempt", onReconnectAttempt);
+    socket.io.on("reconnect", onReconnect);
+
+    if (socket.connected) onConnect();
+    else {
+      transportRef.current = "connecting";
+      setTransport("connecting");
+      softTimer = window.setTimeout(() => {
+        if (
+          !cancelled &&
+          !socket.connected &&
+          transportRef.current === "connecting"
+        ) {
+          startPolling("Realtime socket unavailable — HTTP poll");
+        }
+      }, 4000);
+    }
+
+    return () => {
+      cancelled = true;
+      clearPoll();
+      clearSoft();
+      for (const ev of SUBMISSION_SOCKET_EVENTS) {
+        socket.off(ev, applyEvent);
+      }
+      socket.off("connect", onConnect);
+      socket.off("disconnect", onDisconnect);
+      socket.io.off("reconnect_attempt", onReconnectAttempt);
+      socket.io.off("reconnect", onReconnect);
+      if (joinedRef.current) {
+        socket.emit(ROOM_LEAVE, { room: ADMIN_REALTIME_ROOM });
+        joinedRef.current = false;
+      }
+      transportRef.current = "connecting";
+    };
+  }, [pollMs, seedFromApi]);
+
+  const transportLabel =
+    transport === "socket"
+      ? "Socket.IO · room admin:realtime (SubmissionService ingest)"
+      : transport === "polling"
+        ? `HTTP polling · every ${pollMs / 1000}s (Submission API)`
+        : "Connecting to RealtimeService…";
 
   return (
     <PermissionGuard
       permission="submissions:view"
       fallback={<div className="admin-denied">No permission.</div>}
     >
-      <p className="admin-muted" style={{ marginBottom: 10 }}>
-        Live submissions from SubmissionService (poll). Socket push can overlay
-        when clients join submission rooms.
-      </p>
+      <div
+        className="admin-toolbar"
+        style={{ marginBottom: 10, flexWrap: "wrap", gap: 8 }}
+      >
+        <p className="admin-muted" style={{ margin: 0, flex: "1 1 240px" }}>
+          {transportLabel}
+          {lastEventAt && transport === "socket" ? (
+            <>
+              {" "}
+              · last event {lastEventAt.toLocaleTimeString()}
+            </>
+          ) : null}
+          {socketState.reconnecting ? " · reconnecting…" : null}
+          {socketState.joinError && transport === "polling" ? (
+            <>
+              {" "}
+              · {socketState.joinError}
+            </>
+          ) : null}
+        </p>
+        {transport === "polling" ? (
+          <label className="admin-muted" style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+            Interval
+            <select
+              value={pollMs}
+              onChange={(e) => setPollMs(Number(e.target.value))}
+              aria-label="Polling interval"
+            >
+              {POLL_INTERVAL_OPTIONS_MS.map((ms) => (
+                <option key={ms} value={ms}>
+                  {ms / 1000}s
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          onClick={() => void seedFromApi()}
+          title="Refresh list from Submission API"
+        >
+          <RefreshCw size={14} strokeWidth={1.75} />
+          Refresh
+        </Button>
+      </div>
       <DataTable
         loading={loading}
         emptyTitle="No recent submissions"
-        emptyDescription="New submissions will appear as they arrive."
+        emptyDescription={
+          transport === "socket"
+            ? "Waiting for submission.* events on admin:realtime."
+            : "New submissions will appear on the next poll."
+        }
         emptyIcon={<FileCode2 size={18} strokeWidth={1.75} />}
         columns={[
           {
@@ -1685,9 +2130,9 @@ const LiveSubmissionsPulse: FC<{ onOpen?: (id: string) => void }> = ({
               <button
                 type="button"
                 className="admin-link"
-                onClick={() => onOpen?.(String(r.id || r._id))}
+                onClick={() => onOpen?.(String(r.id))}
               >
-                {String(r.id || r._id || "").slice(0, 8)}…
+                {String(r.id || "").slice(0, 8)}…
               </button>
             ),
           },
@@ -1701,11 +2146,11 @@ const LiveSubmissionsPulse: FC<{ onOpen?: (id: string) => void }> = ({
           {
             key: "status",
             header: "Status",
-            render: (r) => <StatusBadge status={r.status} />,
+            render: (r) => <StatusBadge status={r.status || "unknown"} />,
           },
         ]}
         rows={rows}
-        rowKey={(r) => String(r.id || r._id)}
+        rowKey={(r) => String(r.id)}
       />
     </PermissionGuard>
   );

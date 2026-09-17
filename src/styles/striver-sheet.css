@@ -605,6 +605,21 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+}
+
+.ax-row-lock {
+  opacity: 0.75;
+  flex-shrink: 0;
+}
+
+.ax-row-premium-badge {
+  font-size: 0.65rem;
+  padding: 1px 6px;
+  flex-shrink: 0;
 }
 
 .ax-row-title:hover {
@@ -891,6 +906,17 @@
   background: var(--bg-editor);
   color: var(--text-main);
   padding: 12px;
+  font: inherit;
+}
+
+.dsa-note-tags {
+  width: 100%;
+  margin-top: 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-editor);
+  color: var(--text-main);
+  padding: 10px 12px;
   font: inherit;
 }
 

@@ -64,9 +64,13 @@ function statusTone(status: string): StatusTone {
     s === "reconnecting" ||
     s === "paused" ||
     s === "scheduled" ||
-    s === "checking"
+    s === "checking" ||
+    s === "premium"
   ) {
     return "warning";
+  }
+  if (s === "free") {
+    return "default";
   }
   if (
     s.includes("run") ||

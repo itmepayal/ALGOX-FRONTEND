@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FC } from "react";
+import { useCallback, useEffect, useMemo, useState, type FC } from "react";
 import {
   Clock,
   Pause,
@@ -12,6 +12,7 @@ import {
   formatDurationMs,
   formatHMS,
   getSessionActiveMs,
+  LearningPersistError,
   loadActiveSession,
   loadAllSessions,
   pauseStudySession,
@@ -74,12 +75,38 @@ export const StudySessionsPanel: FC<Props> = ({
   const [topic, setTopic] = useState(topics[0] || "General");
   const [filter, setFilter] = useState<SessionFilter>("all");
   const [active, setActive] = useState<StudySession | null>(null);
+  const [history, setHistory] = useState<StudySession[]>([]);
   const [tick, setTick] = useState(0);
-  const [historyTick, setHistoryTick] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const reload = useCallback(async () => {
+    if (!userId) {
+      setActive(null);
+      setHistory([]);
+      setError("Sign in to sync study sessions across devices.");
+      return;
+    }
+    setError(null);
+    try {
+      const [a, h] = await Promise.all([
+        loadActiveSession(userId),
+        loadAllSessions(userId),
+      ]);
+      setActive(a);
+      setHistory(h);
+    } catch (err) {
+      setError(
+        err instanceof LearningPersistError
+          ? err.message
+          : "Failed to load sessions"
+      );
+    }
+  }, [userId]);
 
   useEffect(() => {
-    setActive(loadActiveSession(userId));
-  }, [userId, refreshKey]);
+    void reload();
+  }, [reload, refreshKey]);
 
   useEffect(() => {
     if (!active || active.status !== "running") return;
@@ -93,52 +120,44 @@ export const StudySessionsPanel: FC<Props> = ({
     }
   }, [topics, topic]);
 
-  const history = useMemo(() => {
-    void historyTick;
-    void refreshKey;
-    return loadAllSessions(userId).filter((s) => inFilter(s, filter));
-  }, [userId, filter, historyTick, refreshKey]);
+  const filtered = useMemo(
+    () => history.filter((s) => inFilter(s, filter)),
+    [history, filter]
+  );
 
   const grouped = useMemo(() => {
     const map = new Map<string, StudySession[]>();
-    for (const s of history) {
+    for (const s of filtered) {
       const label = groupLabel(s.endedAt || s.startedAt);
       if (!map.has(label)) map.set(label, []);
       map.get(label)!.push(s);
     }
     return [...map.entries()];
-  }, [history]);
+  }, [filtered]);
 
   void tick;
   const displayMs = active ? getSessionActiveMs(active) : 0;
 
   const bump = () => {
-    setHistoryTick((n) => n + 1);
     onSessionChange?.();
   };
 
-  const handleStart = () => {
-    const s = startStudySession(userId, topic);
-    setActive(s);
-    bump();
-  };
-
-  const handlePause = () => {
-    const s = pauseStudySession(userId);
-    setActive(s);
-    bump();
-  };
-
-  const handleResume = () => {
-    const s = resumeStudySession(userId);
-    setActive(s);
-    bump();
-  };
-
-  const handleEnd = () => {
-    endStudySession(userId);
-    setActive(null);
-    bump();
+  const run = async (fn: () => Promise<unknown>) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await fn();
+      await reload();
+      bump();
+    } catch (err) {
+      setError(
+        err instanceof LearningPersistError
+          ? err.message
+          : "Session action failed"
+      );
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -148,65 +167,85 @@ export const StudySessionsPanel: FC<Props> = ({
           <h1>
             <Timer size={22} /> Study Sessions
           </h1>
-          <p>Focused DSA sessions with a timer that survives navigation.</p>
+          <p>
+            Focused DSA sessions with a timer that survives navigation.{" "}
+            <span style={{ color: "var(--text-muted)" }}>
+              Synced to your account (multi-device).
+            </span>
+          </p>
         </div>
       </header>
 
+      {error ? (
+        <div className="learn-card" style={{ marginBottom: 12, color: "var(--danger, #b91c1c)" }}>
+          {error}
+        </div>
+      ) : null}
+
       <div className="learn-grid-2">
-        <section className="learn-card learn-session-active">
-          <h2>Active session</h2>
+        <section className="learn-card">
+          <div className="learn-card-head">
+            <h2>
+              <Clock size={16} /> Active timer
+            </h2>
+          </div>
           {active && active.status !== "completed" ? (
             <>
-              <div className="learn-session-topic">{active.topic} Session</div>
-              <div className="learn-session-timer" aria-live="polite">
-                {formatHMS(displayMs)}
-              </div>
-              <div className="learn-day-stats">
-                <div>
-                  <strong>{active.solvedProblemIds.length}</strong>
-                  <span>Solved</span>
-                </div>
-                <div>
-                  <strong>{active.attemptedProblemIds.length}</strong>
-                  <span>Attempted</span>
-                </div>
-                <div>
-                  <strong>
-                    {active.attemptedProblemIds.length
-                      ? Math.round(
-                          (active.solvedProblemIds.length /
-                            active.attemptedProblemIds.length) *
-                            100
-                        )
-                      : 0}
-                    %
-                  </strong>
-                  <span>Accuracy</span>
-                </div>
-              </div>
-              <div className="learn-session-actions">
+              <div className="learn-timer">{formatHMS(displayMs)}</div>
+              <p className="learn-muted">
+                {active.topic} · solved {active.solvedProblemIds.length} /{" "}
+                {active.attemptedProblemIds.length} attempted
+              </p>
+              <div className="learn-actions">
                 {active.status === "running" ? (
-                  <button type="button" onClick={handlePause}>
+                  <button
+                    type="button"
+                    className="learn-btn"
+                    disabled={busy}
+                    onClick={() =>
+                      void run(async () => {
+                        await pauseStudySession(userId);
+                      })
+                    }
+                  >
                     <Pause size={14} /> Pause
                   </button>
                 ) : (
-                  <button type="button" onClick={handleResume}>
+                  <button
+                    type="button"
+                    className="learn-btn"
+                    disabled={busy}
+                    onClick={() =>
+                      void run(async () => {
+                        await resumeStudySession(userId);
+                      })
+                    }
+                  >
                     <Play size={14} /> Resume
                   </button>
                 )}
-                <button type="button" className="danger" onClick={handleEnd}>
-                  <Square size={14} /> End Session
+                <button
+                  type="button"
+                  className="learn-btn danger"
+                  disabled={busy}
+                  onClick={() =>
+                    void run(async () => {
+                      await endStudySession(userId);
+                    })
+                  }
+                >
+                  <Square size={14} /> End
                 </button>
               </div>
             </>
           ) : (
             <>
-              <p className="learn-empty">No active session. Start one to track focus time.</p>
               <label className="learn-field">
                 Topic
                 <select
                   value={topic}
                   onChange={(e) => setTopic(e.target.value)}
+                  disabled={!userId || busy}
                 >
                   {(topics.length ? topics : ["General"]).map((t) => (
                     <option key={t} value={t}>
@@ -217,10 +256,15 @@ export const StudySessionsPanel: FC<Props> = ({
               </label>
               <button
                 type="button"
-                className="learn-primary-btn"
-                onClick={handleStart}
+                className="learn-btn primary"
+                disabled={!userId || busy}
+                onClick={() =>
+                  void run(async () => {
+                    await startStudySession(userId, topic);
+                  })
+                }
               >
-                <Play size={14} /> Start Session
+                <Play size={14} /> Start session
               </button>
             </>
           )}
@@ -228,78 +272,57 @@ export const StudySessionsPanel: FC<Props> = ({
 
         <section className="learn-card">
           <div className="learn-card-head">
-            <h2>Session History</h2>
-            <div className="learn-filter-pills">
-              {(
-                [
-                  ["today", "Today"],
-                  ["week", "This Week"],
-                  ["month", "This Month"],
-                  ["all", "All Time"],
-                ] as const
-              ).map(([id, label]) => (
-                <button
-                  key={id}
-                  type="button"
-                  className={filter === id ? "active" : ""}
-                  onClick={() => setFilter(id)}
-                >
-                  {label}
-                </button>
-              ))}
+            <h2>History</h2>
+            <div className="learn-filters">
+              {(["today", "week", "month", "all"] as SessionFilter[]).map(
+                (f) => (
+                  <button
+                    key={f}
+                    type="button"
+                    className={filter === f ? "active" : undefined}
+                    onClick={() => setFilter(f)}
+                  >
+                    {f}
+                  </button>
+                )
+              )}
             </div>
           </div>
-
           {grouped.length === 0 ? (
-            <p className="learn-empty">No sessions completed yet.</p>
+            <p className="learn-muted">No completed sessions yet.</p>
           ) : (
-            <div className="learn-session-history">
-              {grouped.map(([label, list]) => (
-                <div key={label} className="learn-session-group">
-                  <h3>{label}</h3>
-                  {list.map((s) => {
-                    const attempted = s.attemptedProblemIds.length;
-                    const solved = s.solvedProblemIds.length;
-                    const acc = attempted
-                      ? Math.round((solved / attempted) * 100)
-                      : 0;
-                    return (
-                      <article key={s.id} className="learn-session-row">
-                        <div>
-                          <strong>{s.topic}</strong>
-                          <span className="learn-muted">
-                            <Clock size={12} /> {formatDurationMs(s.accumulatedMs)}
-                          </span>
-                        </div>
-                        <div className="learn-session-meta">
-                          {attempted} problems · {solved} solved · {acc}%
-                        </div>
-                        {s.solvedProblemIds.length > 0 && onSelectProblem && (
-                          <div className="learn-topic-problems">
-                            {s.solvedProblemIds.slice(0, 4).map((pid) => {
-                              const p = problems.find(
-                                (x) => (x.id || x._id || "").toString() === pid
-                              );
-                              if (!p) return null;
-                              return (
-                                <button
-                                  key={pid}
-                                  type="button"
-                                  className="done"
-                                  onClick={() => onSelectProblem(p)}
-                                >
-                                  ✓ {p.title}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </article>
-                    );
-                  })}
-                </div>
-              ))}
-            </div>
+            grouped.map(([label, rows]) => (
+              <div key={label} className="learn-history-group">
+                <h3>{label}</h3>
+                <ul>
+                  {rows.map((s) => (
+                    <li key={s.id}>
+                      <strong>{s.topic}</strong>
+                      <span>{formatDurationMs(s.accumulatedMs)}</span>
+                      <span className="learn-muted">
+                        {s.solvedProblemIds.length} solved
+                      </span>
+                      {onSelectProblem && s.solvedProblemIds[0] ? (
+                        <button
+                          type="button"
+                          className="learn-link"
+                          onClick={() => {
+                            const p = problems.find(
+                              (x) =>
+                                String(x.id || x._id) ===
+                                String(s.solvedProblemIds[0])
+                            );
+                            if (p) onSelectProblem(p);
+                          }}
+                        >
+                          Open
+                        </button>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))
           )}
         </section>
       </div>

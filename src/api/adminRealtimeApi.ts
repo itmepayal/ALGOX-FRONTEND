@@ -1,20 +1,9 @@
-import axios from "axios";
+import { SERVICE_URLS } from "./serviceUrls";
+import { createServiceClient } from "./authClient";
 
-export const REALTIME_API_URL =
-  (typeof import.meta !== "undefined" &&
-    (import.meta as any).env?.VITE_REALTIME_URL) ||
-  "http://localhost:3010";
+export const REALTIME_API_URL = SERVICE_URLS.realtime;
 
-export const realtimeClient = axios.create({
-  baseURL: `${REALTIME_API_URL}/api/v1`,
-  headers: { "Content-Type": "application/json" },
-});
-
-realtimeClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem("accessToken");
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  return config;
-});
+export const realtimeClient = createServiceClient(`${REALTIME_API_URL}/api/v1`);
 
 function metricOrUnavailable(value: unknown): string | number {
   if (value === null || value === undefined || Number.isNaN(value)) {

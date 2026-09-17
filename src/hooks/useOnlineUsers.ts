@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { getAccessToken } from "../api/accessToken";
 import {
   connectRealtimeSocket,
   getRealtimeSocket,
@@ -46,7 +47,7 @@ export function useOnlineUsers(options?: {
   useEffect(() => {
     if (!enabled) return;
 
-    const token = localStorage.getItem("accessToken");
+    const token = getAccessToken();
     if (!token) {
       setUnavailable(true);
       setOnlineUsers(null);
@@ -104,10 +105,12 @@ export function useOnlineUsers(options?: {
 
     socket.on("connect", onConnect);
     socket.on("disconnect", onDisconnect);
-    socket.on("reconnect_attempt", onReconnectAttempt);
-    socket.on("reconnect", onReconnect);
     socket.on("connect_error", onConnectError);
     socket.on(PRESENCE_COUNT, onCount);
+
+    // Manager-level reconnect (socket.io-client v4) — not emitted on the Socket.
+    socket.io.on("reconnect_attempt", onReconnectAttempt);
+    socket.io.on("reconnect", onReconnect);
 
     if (socket.connected) onConnect();
     else {
@@ -122,10 +125,10 @@ export function useOnlineUsers(options?: {
       window.clearInterval(heartbeat);
       socket.off("connect", onConnect);
       socket.off("disconnect", onDisconnect);
-      socket.off("reconnect_attempt", onReconnectAttempt);
-      socket.off("reconnect", onReconnect);
       socket.off("connect_error", onConnectError);
       socket.off(PRESENCE_COUNT, onCount);
+      socket.io.off("reconnect_attempt", onReconnectAttempt);
+      socket.io.off("reconnect", onReconnect);
       if (joinedRoomRef.current) {
         socket.emit(ROOM_LEAVE, { room: joinedRoomRef.current });
         joinedRoomRef.current = null;

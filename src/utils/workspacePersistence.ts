@@ -102,6 +102,7 @@ export function loadNotes(userId: string | undefined, problemId: string): string
   }
 }
 
+/** Local cache only — ContentService ProblemNote is the source of truth when signed in. */
 export function saveNotes(
   userId: string | undefined,
   problemId: string,

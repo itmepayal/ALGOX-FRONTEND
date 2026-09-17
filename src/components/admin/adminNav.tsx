@@ -7,6 +7,7 @@ import {
   Radio,
   Trophy,
   Newspaper,
+  CalendarDays,
   MessagesSquare,
   Flag,
   Megaphone,
@@ -68,6 +69,7 @@ export type AdminTab =
   | "leaderboards-contest"
   | "contests"
   | "contest-detail"
+  | "challenges"
   | "learning-sheets"
   | "learning-topics"
   | "learning-difficulty"
@@ -80,6 +82,7 @@ export type AdminTab =
   | "content-articles"
   | "content-tutorials"
   | "content-study-plans"
+  | "content-companies"
   | "content-notes"
   | "content-editorials"
   | "analytics"
@@ -144,9 +147,14 @@ export const ADMIN_NAV: AdminNavGroup[] = [
     id: "users",
     label: "Users",
     icon: <Users size={16} strokeWidth={1.75} />,
-    tab: "users",
     permission: "users:view",
     section: "Users",
+    children: [
+      { id: "users", label: "All Users", permission: "users:view" },
+      { id: "user-activity", label: "Activity", permission: "users:view" },
+      { id: "user-progress", label: "Progress", permission: "users:view" },
+      { id: "user-sessions", label: "Sessions", permission: "users:view" },
+    ],
   },
   {
     id: "realtime",
@@ -195,6 +203,14 @@ export const ADMIN_NAV: AdminNavGroup[] = [
     section: "Competition",
   },
   {
+    id: "challenges",
+    label: "Daily Challenges",
+    icon: <CalendarDays size={16} strokeWidth={1.75} />,
+    tab: "challenges",
+    permission: "problems:view",
+    section: "Competition",
+  },
+  {
     id: "leaderboards",
     label: "Leaderboard",
     icon: <Trophy size={16} strokeWidth={1.75} />,
@@ -214,6 +230,11 @@ export const ADMIN_NAV: AdminNavGroup[] = [
       {
         id: "content-study-plans",
         label: "Study Plans",
+        permission: "content:view",
+      },
+      {
+        id: "content-companies",
+        label: "Companies",
         permission: "content:view",
       },
       {
@@ -331,6 +352,9 @@ export const ADMIN_SECONDARY_NAV: AdminNavLeaf[] = [
     permission: "suspicious:view",
   },
   { id: "user-create", label: "Create User", permission: "users:create" },
+  { id: "user-activity", label: "User Activity", permission: "users:view" },
+  { id: "user-progress", label: "User Progress", permission: "users:view" },
+  { id: "user-sessions", label: "User Sessions", permission: "users:view" },
   { id: "user-online", label: "Online Users", permission: "realtime:view" },
   { id: "leaderboards-daily", label: "Daily Leaderboard", permission: "analytics:view" },
   {
@@ -417,6 +441,7 @@ export const ADMIN_TITLE: Partial<Record<AdminTab, string>> = {
   "leaderboards-monthly": "Monthly Leaderboard",
   "leaderboards-contest": "Contest Leaderboard",
   contests: "Contests",
+  challenges: "Daily Challenges",
   "contest-detail": "Contest Detail",
   "learning-sheets": "Sheets",
   "learning-topics": "Topics",
@@ -430,6 +455,7 @@ export const ADMIN_TITLE: Partial<Record<AdminTab, string>> = {
   "content-articles": "Articles",
   "content-tutorials": "Tutorials",
   "content-study-plans": "Study Plans",
+  "content-companies": "Companies",
   "content-editorials": "Editorials",
   "content-notes": "Notes",
   analytics: "Analytics",

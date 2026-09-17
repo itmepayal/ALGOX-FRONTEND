@@ -1,5 +1,5 @@
-import axios from "axios";
 import { PROBLEM_API_URL } from "./problemApi";
+import { createServiceClient } from "./authClient";
 
 export interface ProgressImportPreview {
   totalSubmissions: number;
@@ -58,16 +58,8 @@ interface ApiResponse<T> {
   data: T;
 }
 
-const progressClient = axios.create({
-  baseURL: PROBLEM_API_URL,
-  headers: { "Content-Type": "application/json" },
+const progressClient = createServiceClient(PROBLEM_API_URL, {
   timeout: 90000,
-});
-
-progressClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem("accessToken");
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  return config;
 });
 
 export const progressApi = {

@@ -1,0 +1,17 @@
+export type FreeHomeNavTab =
+  | "home"
+  | "problems"
+  | "favourites"
+  | "companies"
+  | "interview"
+  | "ai"
+  | "analytics"
+  | "reviews"
+  | "calendar"
+  | "sessions"
+  | "planner"
+  | "contests"
+  | "discuss"
+  | "learn"
+  | "ranks"
+  | "profile";

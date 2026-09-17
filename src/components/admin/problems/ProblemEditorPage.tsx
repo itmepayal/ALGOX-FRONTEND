@@ -13,8 +13,7 @@ import { adminProblemApi, type AdminProblem } from "../../../api/adminProblemApi
 import { TestCaseManager, type TestCaseDraft } from "./TestCaseManager";
 import { PermissionGuard } from "../shared/PermissionGuard";
 import { StatusBadge } from "../shared/StatusBadge";
-import { hasPermission } from "../../../rbac/permissions";
-import { useAuth } from "../../../context/AuthContext";
+import { usePermission } from "../../../rbac/usePermission";
 import { useToast } from "../../../context/ToastContext";
 import { normalizeApiError } from "../../../lib/apiError";
 import "./problem-editor.css";
@@ -31,6 +30,7 @@ const emptyForm = (): Partial<AdminProblem> & { testcases: TestCaseDraft[] } => 
   difficulty: "easy",
   category: "Arrays",
   tags: [],
+  isPremium: false,
   editorial: "",
   hints: [],
   constraints: "",
@@ -54,7 +54,7 @@ const DIFFICULTIES: Array<{ id: AdminProblem["difficulty"]; label: string }> = [
 ];
 
 export const ProblemEditorPage: FC<Props> = ({ problemId, onBack }) => {
-  const { user } = useAuth();
+  const { can } = usePermission();
   const toast = useToast();
   const [form, setForm] = useState(emptyForm());
   const [saving, setSaving] = useState(false);
@@ -157,6 +157,7 @@ export const ProblemEditorPage: FC<Props> = ({ problemId, onBack }) => {
       difficulty: form.difficulty,
       category: form.category,
       tags,
+      isPremium: Boolean(form.isPremium),
       editorial: form.editorial,
       hints: form.hints,
       constraints: form.constraints,
@@ -177,8 +178,8 @@ export const ProblemEditorPage: FC<Props> = ({ problemId, onBack }) => {
   };
 
   const save = async (silent = false) => {
-    if (!hasPermission(user?.role, "problems:update") && id) return;
-    if (!hasPermission(user?.role, "problems:create") && !id) return;
+    if (!can("problems:update") && id) return;
+    if (!can("problems:create") && !id) return;
     try {
       setSaving(true);
       if (!silent) setMsg("");
@@ -280,7 +281,7 @@ export const ProblemEditorPage: FC<Props> = ({ problemId, onBack }) => {
               <Save size={14} strokeWidth={1.75} />
               {saving ? "Saving…" : "Save Draft"}
             </button>
-            {hasPermission(user?.role, "problems:publish") && id ? (
+            {can("problems:publish") && id ? (
               <button type="button" className="admin-btn" onClick={publish}>
                 <Send size={14} strokeWidth={1.75} /> Publish
               </button>
@@ -477,6 +478,35 @@ export const ProblemEditorPage: FC<Props> = ({ problemId, onBack }) => {
                     {d.label}
                   </button>
                 ))}
+              </div>
+            </section>
+
+            <section className="pe-card">
+              <div className="pe-card-head">
+                <h3>Access</h3>
+                <p>FREE or PREMIUM classification (enforced by API)</p>
+              </div>
+              <div className="pe-diff-seg" role="radiogroup" aria-label="Access">
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={!form.isPremium}
+                  className={`pe-diff-btn ${!form.isPremium ? "active" : ""}`}
+                  onClick={() => patch({ isPremium: false })}
+                >
+                  Free
+                </button>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={Boolean(form.isPremium)}
+                  className={`pe-diff-btn pe-diff-hard ${
+                    form.isPremium ? "active" : ""
+                  }`}
+                  onClick={() => patch({ isPremium: true })}
+                >
+                  Premium
+                </button>
               </div>
             </section>
 

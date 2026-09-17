@@ -1,19 +1,9 @@
-import axios from "axios";
+import { SERVICE_URLS } from "./serviceUrls";
+import { createServiceClient } from "./authClient";
 
-export const EVALUATION_API_URL = "http://localhost:3006/api/v1";
+export const EVALUATION_API_URL = SERVICE_URLS.evaluation;
 
-export const evaluationClient = axios.create({
-  baseURL: EVALUATION_API_URL,
-  headers: {
-    "Content-Type": "application/json",
-  },
-});
-
-evaluationClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem("accessToken");
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  return config;
-});
+export const evaluationClient = createServiceClient(EVALUATION_API_URL);
 
 export interface RunCodePayload {
   code: string;
@@ -27,6 +17,8 @@ export interface RunCodePayload {
   returnType?: string;
   parameters?: Array<{ name: string; type: string }>;
   problemId?: string;
+  /** Marks this run as a custom case (premium gated server-side). */
+  isCustomCase?: boolean;
 }
 
 export interface RunCodeResponseData {

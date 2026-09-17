@@ -66,6 +66,54 @@ export const adminProblemApi = {
     return res.data;
   },
 
+  /** Authoritative catalog aggregates (no client-side paging caps). */
+  internalStats: async (params?: { status?: string }) => {
+    const res = await problemClient.get<
+      ApiResponse<{
+        total: number;
+        draft: number;
+        published: number;
+        archived: number;
+        today: number;
+        catalogStatus?: string;
+        matchedProblems?: number;
+        byDifficulty: Record<string, number>;
+        byCategory?: Record<string, number>;
+        byTopic: Record<string, number>;
+      }>
+    >("/problems/admin/internal-stats", { params });
+    return res.data;
+  },
+
+  /**
+   * Batch title/difficulty lookup for exact problem IDs (dashboard enrichment).
+   * Max 100 IDs per request on the server.
+   */
+  lookupTitles: async (ids: string[]) => {
+    const unique = [...new Set(ids.map(String).filter(Boolean))];
+    if (unique.length === 0) {
+      return { success: true, message: "ok", data: [] as Array<{
+        id: string;
+        title: string;
+        difficulty?: string;
+        slug?: string;
+      }> };
+    }
+    const res = await problemClient.get<
+      ApiResponse<
+        Array<{
+          id: string;
+          title: string;
+          difficulty?: string;
+          slug?: string;
+        }>
+      >
+    >("/problems/admin/titles", {
+      params: { ids: unique.join(",") },
+    });
+    return res.data;
+  },
+
   update: async (id: string, payload: Partial<AdminProblem>) => {
     const res = await problemClient.put<ApiResponse<AdminProblem>>(
       `/problems/${id}`,

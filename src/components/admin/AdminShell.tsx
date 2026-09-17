@@ -84,6 +84,7 @@ export const AdminShell: FC<AdminShellProps> = ({
     [activeGroup]: true,
     realtime: true,
     content: true,
+    users: true,
   }));
 
   useEffect(() => {

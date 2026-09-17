@@ -36,8 +36,7 @@ import {
   type AdminNotification,
 } from "../../../api/adminNotificationApi";
 import { useToast } from "../../../context/ToastContext";
-import { hasPermission } from "../../../rbac/permissions";
-import { useAuth } from "../../../context/AuthContext";
+import { usePermission } from "../../../rbac/usePermission";
 import { cn } from "../../../lib/cn";
 import "../problems/problem-editor.css";
 
@@ -236,9 +235,9 @@ const RowActions: FC<{
 
 export const NotificationsAdminPage: FC = () => {
   const toast = useToast();
-  const { user } = useAuth();
-  const canCreate = hasPermission(user?.role, "notifications:create");
-  const canManage = hasPermission(user?.role, "notifications:manage");
+  const { can } = usePermission();
+  const canCreate = can("notifications:create");
+  const canManage = can("notifications:manage");
 
   const [rows, setRows] = useState<AdminNotification[]>([]);
   const [campaigns, setCampaigns] = useState<CampaignRow[]>([]);

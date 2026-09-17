@@ -1,21 +1,10 @@
-import axios from "axios";
+import { SERVICE_URLS } from "./serviceUrls";
+import { createServiceClient } from "./authClient";
 
-export const SUBMISSION_API_URL = "http://localhost:3004/api/v1";
+export const SUBMISSION_API_URL = SERVICE_URLS.submission;
 
-export const submissionClient = axios.create({
-  baseURL: SUBMISSION_API_URL,
+export const submissionClient = createServiceClient(SUBMISSION_API_URL, {
   timeout: 20000,
-  headers: {
-    "Content-Type": "application/json",
-  },
-});
-
-submissionClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem("accessToken");
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
 });
 
 export type SubmissionStatus =
@@ -58,17 +47,10 @@ export interface CreateSubmissionPayload {
   problemId: string;
   code: string;
   language: ProgrammingLanguage | string;
+  contestId?: string;
+  virtualContestSessionId?: string;
+  mockInterviewSessionId?: string;
   source?: SubmissionSource;
-  status?: SubmissionStatus;
-  output?: string;
-  error?: string;
-  executionTime?: number;
-  memory?: number;
-  testCasesPassed?: number;
-  totalTestCases?: number;
-}
-
-export interface UpdateSubmissionPayload {
   status?: SubmissionStatus;
   output?: string;
   error?: string;
@@ -125,6 +107,21 @@ export const submissionApi = {
     return response.data;
   },
 
+  /** Current user submissions (JWT-scoped). Prefer over getByUserId for product UI. */
+  getMySubmissions: async (query?: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    language?: string;
+    source?: string;
+  }) => {
+    const response = await submissionClient.get<ApiResponse<Submission[]>>(
+      "/submissions/me",
+      { params: query }
+    );
+    return response.data;
+  },
+
   getByStatus: async (status: string) => {
     const response = await submissionClient.get<ApiResponse<Submission[]>>(`/submissions/status/${status}`);
     return response.data;
@@ -140,18 +137,8 @@ export const submissionApi = {
     return response.data;
   },
 
-  updateSubmission: async (id: string, payload: UpdateSubmissionPayload) => {
-    const response = await submissionClient.put<ApiResponse<Submission>>(`/submissions/${id}`, payload);
-    return response.data;
-  },
-
   deleteSubmission: async (id: string) => {
     const response = await submissionClient.delete<ApiResponse<null>>(`/submissions/${id}`);
-    return response.data;
-  },
-
-  health: async () => {
-    const response = await submissionClient.get<ApiResponse<null>>("/health");
     return response.data;
   },
 };

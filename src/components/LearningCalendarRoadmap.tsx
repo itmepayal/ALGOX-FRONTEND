@@ -1,4 +1,4 @@
-import { useMemo, useState, type FC } from "react";
+import { useEffect, useMemo, useState, type FC } from "react";
 import {
   CalendarDays,
   Check,
@@ -11,10 +11,10 @@ import type { Problem } from "../api/problemApi";
 import type { Submission } from "../api/submissionApi";
 import {
   loadAllSessions,
-  loadDailyPlan,
   toDateKey,
   type StudySession,
 } from "../utils/learningPersistence";
+import { learningApi } from "../api/learningApi";
 import {
   buildDayActivityMap,
   buildRoadmap,
@@ -55,22 +55,51 @@ export const LearningCalendarRoadmap: FC<Props> = ({
     month: today.getMonth(),
   });
   const [selectedKey, setSelectedKey] = useState(toDateKey(today));
+  const [sessions, setSessions] = useState<StudySession[]>([]);
+  const [plannedByDate, setPlannedByDate] = useState<Record<string, number>>(
+    {}
+  );
 
-  const sessions: StudySession[] = useMemo(() => {
-    void refreshKey;
-    return loadAllSessions(userId);
-  }, [userId, refreshKey]);
-
-  const plannedByDate = useMemo(() => {
-    const map: Record<string, number> = {};
-    const daysInMonth = new Date(cursor.year, cursor.month + 1, 0).getDate();
-    for (let d = 1; d <= daysInMonth; d++) {
-      const key = toDateKey(new Date(cursor.year, cursor.month, d));
-      const plan = loadDailyPlan(userId, key);
-      map[key] = plan.tasks.filter((t) => t.type === "problem").length;
-    }
-    return map;
-  }, [userId, cursor.year, cursor.month, submissions, refreshKey]);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!userId) {
+        if (!cancelled) {
+          setSessions([]);
+          setPlannedByDate({});
+        }
+        return;
+      }
+      try {
+        const from = toDateKey(new Date(cursor.year, cursor.month, 1));
+        const to = toDateKey(
+          new Date(cursor.year, cursor.month + 1, 0)
+        );
+        const [listRes, plansRes] = await Promise.all([
+          loadAllSessions(userId),
+          learningApi.listPlans(from, to),
+        ]);
+        const map: Record<string, number> = {};
+        for (const plan of plansRes.data || []) {
+          map[plan.date] = (plan.tasks || []).filter(
+            (t) => t.type === "problem"
+          ).length;
+        }
+        if (!cancelled) {
+          setSessions(listRes);
+          setPlannedByDate(map);
+        }
+      } catch {
+        if (!cancelled) {
+          setSessions([]);
+          setPlannedByDate({});
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, cursor.year, cursor.month, refreshKey]);
 
   const activity = useMemo(
     () => buildDayActivityMap(submissions, sessions, plannedByDate),
@@ -116,7 +145,12 @@ export const LearningCalendarRoadmap: FC<Props> = ({
           <h1>
             <CalendarDays size={22} /> Calendar + Roadmap
           </h1>
-          <p>Track daily DSA activity from real submissions and study sessions.</p>
+          <p>
+            Track daily DSA activity from real submissions and study sessions.{" "}
+            <span style={{ color: "var(--text-muted)" }}>
+              Stored on this device (not synced to server).
+            </span>
+          </p>
         </div>
         <div className="learn-stat-pills">
           <span>

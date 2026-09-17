@@ -1,9 +1,8 @@
-import { useCallback, useMemo, type FC } from "react";
-import { AlertCircle, BookMarked, Layers, RotateCcw, Tags, TrendingUp } from "lucide-react";
+import { useMemo, type FC } from "react";
+import { AlertCircle, Layers, RotateCcw, Tags, TrendingUp } from "lucide-react";
 import { PermissionGuard } from "../shared/PermissionGuard";
 import { StatsCard } from "../shared/StatsCard";
 import { adminProblemApi } from "../../../api/adminProblemApi";
-import { adminSheetApi, type AdminSheet } from "../../../api/adminSheetApi";
 import {
   adminLearningApi,
   type RevisionSummary,
@@ -12,12 +11,13 @@ import {
 import { useEffect, useState } from "react";
 import { DataTable } from "../shared/DataTable";
 import { StatusBadge } from "../shared/StatusBadge";
+import { SheetsAdminPage } from "./SheetsAdminPage";
 
 type LearningMode = "sheets" | "topics" | "difficulty" | "revision" | "progress";
 
 export const LearningAdminPage: FC<{ mode: LearningMode }> = ({ mode }) => {
   if (mode === "sheets") {
-    return <SheetsCrudAdmin />;
+    return <SheetsAdminPage />;
   }
 
   if (mode === "topics") {
@@ -35,151 +35,42 @@ export const LearningAdminPage: FC<{ mode: LearningMode }> = ({ mode }) => {
   return <LearningProgressAdmin />;
 };
 
-const SheetsCrudAdmin: FC = () => {
-  const [rows, setRows] = useState<AdminSheet[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [preview, setPreview] = useState<any>(null);
-
-  const load = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError("");
-      const res = await adminSheetApi.list();
-      const data = res.data as any;
-      setRows(Array.isArray(data) ? data : data?.items || []);
-    } catch (err: any) {
-      setError(err?.response?.data?.message || err.message || "Sheets API failed");
-      setRows([]);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  return (
-    <PermissionGuard permission="sheets:manage">
-      <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
-        <button type="button" className="admin-btn" onClick={() => void load()}>
-          Refresh
-        </button>
-        <button
-          type="button"
-          className="admin-btn"
-          onClick={() =>
-            void adminSheetApi
-              .syncFromCatalog()
-              .then(load)
-              .catch((err: any) =>
-                setError(err?.response?.data?.message || "Sync failed")
-              )
-          }
-        >
-          Sync from catalog (striver-a2z)
-        </button>
-      </div>
-      {error ? <p className="admin-error">{error}</p> : null}
-      <DataTable
-        loading={loading}
-        emptyTitle="No sheets yet"
-        emptyDescription="Sync from catalog to load practice sheets into the database."
-        emptyIcon={<BookMarked size={18} strokeWidth={1.75} />}
-        columns={[
-          { key: "id", header: "Sheet ID", render: (r) => r.sheetId },
-          { key: "title", header: "Title", render: (r) => r.title },
-          {
-            key: "status",
-            header: "Status",
-            render: (r) => <StatusBadge status={r.status} />,
-          },
-          {
-            key: "actions",
-            header: "Actions",
-            render: (r) => (
-              <div style={{ display: "flex", gap: 6 }}>
-                <button
-                  type="button"
-                  className="admin-link"
-                  onClick={() =>
-                    void adminSheetApi
-                      .preview(r.sheetId)
-                      .then((res) => setPreview(res.data || res))
-                  }
-                >
-                  Preview
-                </button>
-                {r.status !== "PUBLISHED" ? (
-                  <button
-                    type="button"
-                    className="admin-link"
-                    onClick={() =>
-                      void adminSheetApi.publish(r.sheetId).then(load)
-                    }
-                  >
-                    Publish
-                  </button>
-                ) : null}
-                <button
-                  type="button"
-                  className="admin-link"
-                  onClick={() =>
-                    void adminSheetApi.archive(r.sheetId).then(load)
-                  }
-                >
-                  Archive
-                </button>
-              </div>
-            ),
-          },
-        ]}
-        rows={rows}
-        rowKey={(r) => r.sheetId}
-      />
-      {preview ? (
-        <pre
-          className="admin-muted"
-          style={{
-            marginTop: 16,
-            maxHeight: 320,
-            overflow: "auto",
-            fontSize: 12,
-          }}
-        >
-          {JSON.stringify(preview, null, 2)}
-        </pre>
-      ) : null}
-    </PermissionGuard>
-  );
-};
-
 const TopicsFromProblems: FC = () => {
   const [topics, setTopics] = useState<Array<{ name: string; count: number }>>(
     []
   );
+  const [status, setStatus] = useState<"all" | "published" | "draft" | "archived">(
+    "all"
+  );
+  const [matched, setMatched] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const res = await adminProblemApi.list({ page: 1, limit: 200 });
-        const map = new Map<string, number>();
-        for (const p of res.data || []) {
-          const cat = (p as any).category || "Uncategorized";
-          map.set(cat, (map.get(cat) || 0) + 1);
-          for (const tag of (p as any).tags || []) {
-            map.set(String(tag), (map.get(String(tag)) || 0) + 1);
-          }
-        }
-        const rows = [...map.entries()]
-          .map(([name, count]) => ({ name, count }))
+        setLoading(true);
+        setError("");
+        const res = await adminProblemApi.internalStats({ status });
+        const map = res.data?.byTopic || {};
+        const rows = Object.entries(map)
+          .map(([name, count]) => ({ name, count: Number(count) || 0 }))
           .sort((a, b) => b.count - a.count);
-        if (!cancelled) setTopics(rows);
-      } catch {
-        if (!cancelled) setTopics([]);
+        if (!cancelled) {
+          setTopics(rows);
+          setMatched(Number(res.data?.matchedProblems) || 0);
+        }
+      } catch (err: any) {
+        if (!cancelled) {
+          setTopics([]);
+          setMatched(0);
+          setError(
+            err?.response?.data?.message ||
+              err.message ||
+              "Failed to load topic totals"
+          );
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -187,10 +78,29 @@ const TopicsFromProblems: FC = () => {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [status]);
 
   return (
     <PermissionGuard permission="problems:view">
+      <div className="admin-toolbar">
+        <strong>Topics / tags</strong>
+        <select
+          value={status}
+          onChange={(e) =>
+            setStatus(e.target.value as typeof status)
+          }
+          aria-label="Problem status filter"
+        >
+          <option value="all">All statuses</option>
+          <option value="published">Published</option>
+          <option value="draft">Draft</option>
+          <option value="archived">Archived</option>
+        </select>
+        <span className="admin-muted">
+          {matched} problem{matched === 1 ? "" : "s"} in filter
+        </span>
+      </div>
+      {error ? <p className="admin-error">{error}</p> : null}
       <DataTable
         loading={loading}
         emptyTitle="No topics found"
@@ -208,35 +118,92 @@ const TopicsFromProblems: FC = () => {
 };
 
 const DifficultyInsights: FC = () => {
-  const [counts, setCounts] = useState<Record<string, number>>({});
+  const [counts, setCounts] = useState<Record<string, number>>({
+    easy: 0,
+    medium: 0,
+    hard: 0,
+  });
+  const [status, setStatus] = useState<"all" | "published" | "draft" | "archived">(
+    "all"
+  );
+  const [matched, setMatched] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
+    let cancelled = false;
     (async () => {
       try {
-        const res = await adminProblemApi.list({ page: 1, limit: 200 });
-        const c: Record<string, number> = { easy: 0, medium: 0, hard: 0 };
-        for (const p of res.data || []) {
-          const d = String((p as any).difficulty || "").toLowerCase();
-          if (d in c) c[d] += 1;
+        setLoading(true);
+        setError("");
+        const res = await adminProblemApi.internalStats({ status });
+        if (!cancelled) {
+          setCounts({
+            easy: Number(res.data?.byDifficulty?.easy) || 0,
+            medium: Number(res.data?.byDifficulty?.medium) || 0,
+            hard: Number(res.data?.byDifficulty?.hard) || 0,
+          });
+          setMatched(Number(res.data?.matchedProblems) || 0);
         }
-        setCounts(c);
-      } catch {
-        setCounts({});
+      } catch (err: any) {
+        if (!cancelled) {
+          setCounts({ easy: 0, medium: 0, hard: 0 });
+          setMatched(0);
+          setError(
+            err?.response?.data?.message ||
+              err.message ||
+              "Failed to load difficulty totals"
+          );
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     })();
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [status]);
 
   const cards = useMemo(
     () =>
       Object.entries(counts).map(([k, v]) => (
-        <StatsCard key={k} label={k} value={v} />
+        <StatsCard key={k} label={k} value={loading ? "…" : v} />
       )),
-    [counts]
+    [counts, loading]
   );
+
+  const empty =
+    !loading &&
+    !error &&
+    matched === 0 &&
+    counts.easy + counts.medium + counts.hard === 0;
 
   return (
     <PermissionGuard permission="analytics:view">
-      <div className="admin-stats-grid">{cards}</div>
+      <div className="admin-toolbar">
+        <strong>Difficulty distribution</strong>
+        <select
+          value={status}
+          onChange={(e) =>
+            setStatus(e.target.value as typeof status)
+          }
+          aria-label="Problem status filter"
+        >
+          <option value="all">All statuses</option>
+          <option value="published">Published</option>
+          <option value="draft">Draft</option>
+          <option value="archived">Archived</option>
+        </select>
+        <span className="admin-muted">
+          {matched} problem{matched === 1 ? "" : "s"} in filter
+        </span>
+      </div>
+      {error ? <p className="admin-error">{error}</p> : null}
+      {empty ? (
+        <p className="admin-muted">No problems match this filter.</p>
+      ) : (
+        <div className="admin-stats-grid">{cards}</div>
+      )}
     </PermissionGuard>
   );
 };

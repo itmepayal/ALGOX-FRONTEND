@@ -67,8 +67,8 @@
 .admin-root .admin-kpi-value,
 .admin-root .admin-stat-card .value,
 .admin-root .admin-metric-value,
-.admin-root .pe-title,
-.admin-root .pe-card-head h3,
+.admin-root .pe-title:not(.pe-title--tutorials),
+.admin-root .pe-card-head h3:not(.pe-title--tutorials),
 .admin-root h3.font-primary.text-base,
 .admin-root .font-technical.text-2xl,
 .admin-root .font-technical.text-xl {
@@ -80,6 +80,12 @@
 .admin-root .admin-dash-header h2,
 .admin-root .pe-title {
   font-weight: 700;
+}
+
+/* Tutorials page title: Saira (admin UI font), not Poppins */
+.admin-root .pe-title.pe-title--tutorials,
+.admin-root .pe-card-head h3.pe-title--tutorials {
+  font-family: var(--admin-font);
 }
 
 .admin-root .admin-panel-head h3,

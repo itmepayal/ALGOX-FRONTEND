@@ -176,7 +176,6 @@ const PermId: FC<{ perm: string }> = ({ perm }) => {
 export const RolesPermissionsPage: FC = () => {
   const { user, refreshPermissions } = useAuth();
   const toast = useToast();
-  const isSuper = user?.role === "super_admin";
 
   const [matrix, setMatrix] = useState<Record<string, string[]>>({});
   const [allPerms, setAllPerms] = useState<string[]>([]);
@@ -193,6 +192,12 @@ export const RolesPermissionsPage: FC = () => {
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [hoveredRole, setHoveredRole] = useState<string | null>(null);
+
+  const isSuper = user?.role === "super_admin";
+  const canManageRoles =
+    isSuper ||
+    Boolean(user?.permissions?.includes("roles:manage")) ||
+    myPerms.includes("roles:manage");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -700,7 +705,7 @@ export const RolesPermissionsPage: FC = () => {
           </section>
         )}
 
-        {isSuper ? (
+        {canManageRoles ? (
           <section
             className="rpm-card rpm-edit"
             aria-label="Edit role permissions"

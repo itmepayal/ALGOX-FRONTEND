@@ -1,5 +1,5 @@
-import axios from "axios";
 import { PROBLEM_API_URL } from "./problemApi";
+import { createServiceClient } from "./authClient";
 
 export const STRIVER_A2Z_SHEET_ID = "striver-a2z";
 export const STRIVER_A2Z_SHEET_NAME =
@@ -22,16 +22,7 @@ export interface ApiResponse<T> {
   data: T;
 }
 
-const sheetClient = axios.create({
-  baseURL: PROBLEM_API_URL,
-  headers: { "Content-Type": "application/json" },
-});
-
-sheetClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem("accessToken");
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  return config;
-});
+const sheetClient = createServiceClient(PROBLEM_API_URL);
 
 export const sheetProgressApi = {
   getProgress: async (sheetId: string) => {

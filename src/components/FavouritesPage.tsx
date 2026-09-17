@@ -34,6 +34,7 @@ import {
   normalizeDifficulty,
 } from "../utils/problemUtils";
 import "./favourites-page.css";
+import { hasAccessToken } from "../api/accessToken";
 
 interface FavouritesPageProps {
   submissions: Submission[];
@@ -113,7 +114,7 @@ export const FavouritesPage: FC<FavouritesPageProps> = ({
   }, [toast]);
 
   const fetchFavourites = useCallback(async () => {
-    if (!userId || !localStorage.getItem("accessToken")) {
+    if (!userId || !hasAccessToken()) {
       setItems([]);
       setStats(EMPTY_STATS);
       setLoading(false);
@@ -185,7 +186,7 @@ export const FavouritesPage: FC<FavouritesPageProps> = ({
     e.stopPropagation();
     const pid = normalizeProblemId(p.id || p._id);
     if (!pid || busyId) return;
-    if (!localStorage.getItem("accessToken")) {
+    if (!hasAccessToken()) {
       setToast({ type: "error", text: "Login to save favourite questions." });
       return;
     }

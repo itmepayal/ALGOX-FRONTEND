@@ -1,17 +1,9 @@
-import axios from "axios";
+import { SERVICE_URLS } from "./serviceUrls";
+import { createServiceClient } from "./authClient";
 
-const LEADERBOARD_URL = "http://localhost:3005/api/v1";
+const LEADERBOARD_URL = SERVICE_URLS.leaderboard;
 
-const client = axios.create({
-  baseURL: LEADERBOARD_URL,
-  headers: { "Content-Type": "application/json" },
-});
-
-client.interceptors.request.use((config) => {
-  const token = localStorage.getItem("accessToken");
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  return config;
-});
+const client = createServiceClient(LEADERBOARD_URL);
 
 export const adminLeaderboardApi = {
   rebuild: async () => {

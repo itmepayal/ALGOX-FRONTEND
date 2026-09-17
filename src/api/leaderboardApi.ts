@@ -1,17 +1,9 @@
-import axios from "axios";
+import { SERVICE_URLS } from "./serviceUrls";
+import { createServiceClient } from "./authClient";
 
-const LEADERBOARD_URL = "http://localhost:3005/api/v1";
+const LEADERBOARD_URL = SERVICE_URLS.leaderboard;
 
-const client = axios.create({
-  baseURL: LEADERBOARD_URL,
-  headers: { "Content-Type": "application/json" },
-});
-
-client.interceptors.request.use((config) => {
-  const token = localStorage.getItem("accessToken");
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  return config;
-});
+const client = createServiceClient(LEADERBOARD_URL);
 
 export type LeaderboardPeriod = "daily" | "weekly" | "monthly" | "all";
 
@@ -23,6 +15,17 @@ export interface LeaderboardEntry {
   score?: number;
   problemsSolved?: number;
   solvedCount?: number;
+}
+
+export interface UserLeaderboardStats {
+  userId?: string;
+  userName?: string;
+  solvedEasy?: number;
+  solvedMedium?: number;
+  solvedHard?: number;
+  totalSolved?: number;
+  rating?: number;
+  globalRank?: number | null;
 }
 
 export const leaderboardApi = {
@@ -45,6 +48,16 @@ export const leaderboardApi = {
         totalPages: number;
         period?: string;
       };
+    };
+  },
+
+  /** Own or public user stats — 404 when user has never been ranked. */
+  getUserStats: async (userId: string) => {
+    const res = await client.get(`/leaderboard/user/${encodeURIComponent(userId)}`);
+    return res.data as {
+      success: boolean;
+      message?: string;
+      data: UserLeaderboardStats;
     };
   },
 };

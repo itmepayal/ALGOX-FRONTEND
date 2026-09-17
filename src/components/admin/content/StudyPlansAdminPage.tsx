@@ -30,8 +30,7 @@ import { Input } from "../../ui/input";
 import { ConfirmDialog } from "../../ConfirmDialog";
 import { adminContentApi } from "../../../api/adminContentApi";
 import { useToast } from "../../../context/ToastContext";
-import { hasPermission } from "../../../rbac/permissions";
-import { useAuth } from "../../../context/AuthContext";
+import { usePermission } from "../../../rbac/usePermission";
 import { cn } from "../../../lib/cn";
 import "../problems/problem-editor.css";
 
@@ -41,6 +40,7 @@ const PLAN_CATEGORIES = [
   { value: "algorithm", label: "Algorithms" },
   { value: "data-structure", label: "Data Structures" },
   { value: "sql", label: "SQL" },
+  { value: "system-design", label: "System Design" },
 ] as const;
 
 type CategoryValue = (typeof PLAN_CATEGORIES)[number]["value"];
@@ -300,10 +300,10 @@ const PlanActions: FC<{
 
 export const StudyPlansAdmin: FC = () => {
   const toast = useToast();
-  const { user } = useAuth();
-  const canCreate = hasPermission(user?.role, "content:create");
-  const canUpdate = hasPermission(user?.role, "content:update");
-  const canDelete = hasPermission(user?.role, "content:delete");
+  const { can } = usePermission();
+  const canCreate = can("content:create");
+  const canUpdate = can("content:update");
+  const canDelete = can("content:delete");
 
   const [rows, setRows] = useState<StudyPlanRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -325,6 +325,15 @@ export const StudyPlansAdmin: FC = () => {
   const [description, setDescription] = useState("");
   const [formCategory, setFormCategory] = useState<CategoryValue>("interview");
   const [coverImage, setCoverImage] = useState("");
+  const [formDifficulty, setFormDifficulty] = useState<
+    "beginner" | "intermediate" | "advanced"
+  >("beginner");
+  const [formTopics, setFormTopics] = useState("");
+  const [formEstimatedMinutes, setFormEstimatedMinutes] = useState(0);
+  const [formEstimatedDays, setFormEstimatedDays] = useState(0);
+  const [formIsPremium, setFormIsPremium] = useState(false);
+  const [formIsPublished, setFormIsPublished] = useState(false);
+  const [formPrereqs, setFormPrereqs] = useState("");
   const [cards, setCards] = useState<StudyCard[]>([]);
   const [saving, setSaving] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -427,6 +436,13 @@ export const StudyPlansAdmin: FC = () => {
     setDescription("");
     setFormCategory("interview");
     setCoverImage("");
+    setFormDifficulty("beginner");
+    setFormTopics("");
+    setFormEstimatedMinutes(0);
+    setFormEstimatedDays(0);
+    setFormIsPremium(false);
+    setFormIsPublished(false);
+    setFormPrereqs("");
     setCards([]);
     setFieldErrors({});
     setFormError("");
@@ -461,6 +477,19 @@ export const StudyPlansAdmin: FC = () => {
         ? row.category
         : "interview") as CategoryValue,
     );
+    setFormDifficulty(
+      (["beginner", "intermediate", "advanced"].includes(
+        String((row as any).difficulty)
+      )
+        ? (row as any).difficulty
+        : "beginner") as "beginner" | "intermediate" | "advanced"
+    );
+    setFormTopics(((row as any).topics || []).join(", "));
+    setFormEstimatedMinutes(Number((row as any).estimatedMinutes) || 0);
+    setFormEstimatedDays(Number((row as any).estimatedDays) || 0);
+    setFormIsPremium(Boolean((row as any).isPremium || (row as any).access === "PREMIUM"));
+    setFormIsPublished(Boolean((row as any).isPublished));
+    setFormPrereqs(((row as any).prerequisiteSlugs || []).join(", "));
     setCards(
       (row.cards || []).map((c) => ({
         title: c.title || "",
@@ -533,6 +562,20 @@ export const StudyPlansAdmin: FC = () => {
       description: description.trim() || title.trim(),
       category: formCategory,
       coverImage: coverImage.trim() || undefined,
+      topics: formTopics
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean),
+      difficulty: formDifficulty,
+      estimatedMinutes: formEstimatedMinutes || 0,
+      estimatedDays: formEstimatedDays || undefined,
+      isPremium: formIsPremium,
+      access: formIsPremium ? "PREMIUM" : "FREE",
+      isPublished: formIsPublished,
+      prerequisiteSlugs: formPrereqs
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean),
       cards: normalizedCards,
       totalProblemsCount: recomputeProblemCount(normalizedCards),
     };
@@ -1119,6 +1162,103 @@ export const StudyPlansAdmin: FC = () => {
                       />
                     </div>
                   </div>
+
+                  <div className="admin-field">
+                    <label htmlFor="sp-diff">Difficulty</label>
+                    <select
+                      id="sp-diff"
+                      className={cn(selectClass, "w-full")}
+                      value={formDifficulty}
+                      disabled={editorReadOnly}
+                      onChange={(e) =>
+                        setFormDifficulty(
+                          e.target.value as
+                            | "beginner"
+                            | "intermediate"
+                            | "advanced"
+                        )
+                      }
+                    >
+                      <option value="beginner">Beginner</option>
+                      <option value="intermediate">Intermediate</option>
+                      <option value="advanced">Advanced</option>
+                    </select>
+                  </div>
+
+                  <div className="admin-field">
+                    <label htmlFor="sp-topics">Topics (comma-separated)</label>
+                    <Input
+                      id="sp-topics"
+                      value={formTopics}
+                      disabled={editorReadOnly}
+                      placeholder="Arrays, Trees, DP"
+                      onChange={(e) => setFormTopics(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="admin-field">
+                    <label htmlFor="sp-minutes">Estimated minutes</label>
+                    <Input
+                      id="sp-minutes"
+                      type="number"
+                      min={0}
+                      value={formEstimatedMinutes}
+                      disabled={editorReadOnly}
+                      onChange={(e) =>
+                        setFormEstimatedMinutes(Number(e.target.value) || 0)
+                      }
+                    />
+                  </div>
+
+                  <div className="admin-field">
+                    <label htmlFor="sp-days">Estimated days</label>
+                    <Input
+                      id="sp-days"
+                      type="number"
+                      min={0}
+                      value={formEstimatedDays}
+                      disabled={editorReadOnly}
+                      onChange={(e) =>
+                        setFormEstimatedDays(Number(e.target.value) || 0)
+                      }
+                    />
+                  </div>
+
+                  <div className="admin-field">
+                    <label htmlFor="sp-prereqs">
+                      Prerequisite plan slugs (comma-separated)
+                    </label>
+                    <Input
+                      id="sp-prereqs"
+                      value={formPrereqs}
+                      disabled={editorReadOnly}
+                      placeholder="dsa-fundamentals, arrays-mastery"
+                      onChange={(e) => setFormPrereqs(e.target.value)}
+                    />
+                  </div>
+
+                  <label
+                    style={{ display: "flex", gap: 8, alignItems: "center" }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={formIsPremium}
+                      disabled={editorReadOnly}
+                      onChange={(e) => setFormIsPremium(e.target.checked)}
+                    />
+                    Premium plan
+                  </label>
+                  <label
+                    style={{ display: "flex", gap: 8, alignItems: "center" }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={formIsPublished}
+                      disabled={editorReadOnly}
+                      onChange={(e) => setFormIsPublished(e.target.checked)}
+                    />
+                    Published
+                  </label>
 
                   <div
                     className={cn(

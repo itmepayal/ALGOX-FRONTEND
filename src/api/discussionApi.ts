@@ -92,4 +92,22 @@ export const discussionApi = {
     const res = await discussionClient.delete(`/discussions/comments/${id}`);
     return res.data;
   },
+
+  reportPost: async (payload: {
+    targetType: "DISCUSSION" | "COMMENT" | "USER" | "PROBLEM" | "SUBMISSION";
+    targetId: string;
+    reason:
+      | "SPAM"
+      | "ABUSE"
+      | "HARASSMENT"
+      | "INCORRECT_CONTENT"
+      | "BUG"
+      | "COPYRIGHT"
+      | "CHEATING"
+      | "OTHER";
+    description?: string;
+  }) => {
+    const res = await discussionClient.post("/discussions/reports", payload);
+    return res.data as { success: boolean; message?: string };
+  },
 };

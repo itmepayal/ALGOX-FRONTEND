@@ -26,6 +26,7 @@ import { ContestsPanel } from "./ContestsPanel";
 import { LeaderboardPanel } from "./LeaderboardPanel";
 import { ContentLibraryPanel } from "./ContentLibraryPanel";
 import { NotificationBell } from "./NotificationBell";
+import { SystemBroadcastListener } from "./SystemBroadcastListener";
 import { AnnouncementBanner } from "./AnnouncementBanner";
 import {
   formatJudgeInput,
@@ -50,6 +51,7 @@ import {
   startStudySession,
   syncPlannerWithAccepted,
   toDateKey,
+  type StudySession,
 } from "../utils/learningPersistence";
 import {
   buildDayActivityMap,
@@ -58,21 +60,40 @@ import {
 } from "../utils/learningStats";
 import { normalizeProblemId, updateIdSet } from "../utils/engagementIds";
 import type { RunCaseResult, RunResult } from "../types/judge";
+import { hasAccessToken } from "../api/accessToken";
 import {
+  BarChart3,
+  Briefcase,
+  Brain,
   CalendarDays,
+  RotateCcw,
   Flame,
   Home,
+  LayoutDashboard,
   ListTodo,
   Search,
   ShieldCheck,
   Star,
+  Swords,
   Timer,
   User as UserIcon,
 } from "lucide-react";
+import { FreeHomeDashboard } from "./home/FreeHomeDashboard";
+import { CompaniesPage } from "./companies/CompaniesPage";
+import { MockInterviewPanel } from "./MockInterviewPanel";
+import { AiAssistantPanel } from "./AiAssistantPanel";
+import { SubmissionAnalyticsPanel } from "./SubmissionAnalyticsPanel";
+import { SpacedRepetitionPanel } from "./SpacedRepetitionPanel";
 
 type PlatformTab =
+  | "home"
   | "problems"
   | "favourites"
+  | "companies"
+  | "interview"
+  | "ai"
+  | "analytics"
+  | "reviews"
   | "calendar"
   | "sessions"
   | "planner"
@@ -97,10 +118,12 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
   const platformName = settings?.platformName || "AlgoPath";
   const logoUrl = settings?.logoUrl;
   const supportedLanguages = settings?.supportedLanguages;
-  const [activeTab, setActiveTab] = useState<PlatformTab>("problems");
+  const [activeTab, setActiveTab] = useState<PlatformTab>("home");
   const [learningRefreshKey, setLearningRefreshKey] = useState(0);
+  const [studySessions, setStudySessions] = useState<StudySession[]>([]);
   const [favouritesRefreshKey, setFavouritesRefreshKey] = useState(0);
   const [selectedDifficulty, setSelectedDifficulty] = useState("All");
+  const [accessFilter, setAccessFilter] = useState<"all" | "free" | "premium">("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "solved" | "attempted" | "unsolved">("all");
   const [customTestCases, setCustomTestCases] = useState<Testcase[]>([]);
@@ -109,6 +132,14 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
 
   const [problems, setProblems] = useState<Problem[]>([]);
   const [loadingProblems, setLoadingProblems] = useState(true);
+  const [problemPage, setProblemPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [activeContestId, setActiveContestId] = useState<string | null>(null);
+  const [activeVirtualContestSessionId, setActiveVirtualContestSessionId] =
+    useState<string | null>(null);
+  const [activeMockInterviewSessionId, setActiveMockInterviewSessionId] =
+    useState<string | null>(null);
   const [selectedProblem, setSelectedProblem] = useState<Problem | null>(null);
   const [bookmarkedIds, setBookmarkedIds] = useState<Set<string>>(new Set());
   const [revisionIds, setRevisionIds] = useState<Set<string>>(new Set());
@@ -126,6 +157,7 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
   /** Sync locks — React busy state alone can miss rapid double-clicks. */
   const runLockRef = useRef(false);
   const submitLockRef = useRef(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const [dashTab, setDashTab] = useState<"overview" | "submissions" | "sessions" | "security">("overview");
   const [sessions, setSessions] = useState<any[]>([]);
@@ -145,32 +177,85 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
   const [updatingProfile, setUpdatingProfile] = useState(false);
   const [profileMsg, setProfileMsg] = useState("");
 
-  const fetchProblems = async () => {
+  const PROBLEM_PAGE_SIZE = 50;
+
+  const fetchProblems = useCallback(async () => {
     try {
       setLoadingProblems(true);
-      const res = await problemApi.getProblems({ limit: 500 });
+      const difficultyParam =
+        selectedDifficulty !== "All"
+          ? selectedDifficulty.toLowerCase()
+          : undefined;
+      const res = await problemApi.getProblems({
+        page: problemPage,
+        limit: PROBLEM_PAGE_SIZE,
+        search: debouncedSearch || undefined,
+        difficulty: difficultyParam,
+        access: accessFilter === "all" ? undefined : accessFilter,
+      });
       if (res?.data) setProblems(res.data);
+      setTotalPages(Math.max(1, res?.meta?.totalPages ?? 1));
     } catch (err) {
       console.warn("Fetch problems failed:", err);
     } finally {
       setLoadingProblems(false);
     }
-  };
+  }, [problemPage, debouncedSearch, selectedDifficulty, accessFilter]);
+
+  const handleOpenProblemFromContest = useCallback(
+    async (
+      ref: { id?: string; slug?: string; title?: string },
+      contestId?: string,
+      virtualSessionId?: string
+    ) => {
+      // Live contest and virtual session are mutually exclusive on submit.
+      if (virtualSessionId) {
+        setActiveVirtualContestSessionId(virtualSessionId);
+        setActiveContestId(null);
+        setActiveMockInterviewSessionId(null);
+      } else {
+        setActiveContestId(contestId ?? null);
+        if (contestId) {
+          setActiveVirtualContestSessionId(null);
+          setActiveMockInterviewSessionId(null);
+        }
+      }
+      try {
+        let problem: Problem | null = null;
+        if (ref.slug) {
+          const res = await problemApi.getProblemBySlug(ref.slug);
+          if (res?.data) problem = res.data;
+        } else if (ref.id) {
+          const res = await problemApi.getProblemById(ref.id);
+          if (res?.data) problem = res.data;
+        }
+        if (problem) {
+          setSelectedProblem(problem);
+          setProblemInLocation(problem.slug);
+          setActiveTab("problems");
+        }
+      } catch (err) {
+        console.warn("Open contest problem failed:", err);
+      }
+    },
+    []
+  );
 
   const fetchUserSubmissions = async () => {
     if (!user) return;
-    const userId = user.id || (user as any)._id;
-    if (!userId) return;
     try {
-      const res = await submissionApi.getByUserId(userId);
+      setLoadingSubmissions(true);
+      const res = await submissionApi.getMySubmissions();
       if (res?.data) setUserSubmissions(res.data);
     } catch (err) {
       console.warn("Fetch user submissions failed:", err);
+    } finally {
+      setLoadingSubmissions(false);
     }
   };
 
   const fetchBookmarks = async () => {
-    if (!user || !localStorage.getItem("accessToken")) {
+    if (!user || !hasAccessToken()) {
       setBookmarkedIds(new Set());
       return;
     }
@@ -206,7 +291,7 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
   };
 
   const fetchRevisions = async () => {
-    if (!user || !localStorage.getItem("accessToken")) {
+    if (!user || !hasAccessToken()) {
       setRevisionIds(new Set());
       return;
     }
@@ -264,16 +349,27 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
       let res;
       if (submissionSearch.trim()) {
         res = await submissionApi.searchSubmissions(submissionSearch.trim());
-      } else if (submissionStatusFilter !== "mine" && submissionStatusFilter !== "all") {
-        res = await submissionApi.getByStatus(submissionStatusFilter);
-      } else if (submissionLangFilter !== "all") {
-        res = await submissionApi.getByLanguage(submissionLangFilter);
       } else if (submissionStatusFilter === "all") {
         res = await submissionApi.getAllSubmissions({ page: 1, limit: 50 });
+      } else if (
+        submissionStatusFilter !== "mine" &&
+        submissionStatusFilter !== "all"
+      ) {
+        res = await submissionApi.getMySubmissions({
+          status: submissionStatusFilter,
+          language:
+            submissionLangFilter !== "all" ? submissionLangFilter : undefined,
+          limit: 50,
+          page: 1,
+        });
+      } else if (submissionLangFilter !== "all") {
+        res = await submissionApi.getMySubmissions({
+          language: submissionLangFilter,
+          limit: 50,
+          page: 1,
+        });
       } else {
-        const userId = user?.id || (user as any)?._id;
-        if (!userId) return;
-        res = await submissionApi.getByUserId(userId);
+        res = await submissionApi.getMySubmissions();
       }
       if (res?.data) setUserSubmissions(res.data);
     } catch (err) {
@@ -310,14 +406,18 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
               (selectedProblem ? getProblemId(selectedProblem) : "");
             const accepted = latest.data.status === "ACCEPTED";
             if (pid) {
-              recordSessionProblemActivity(userId, pid, accepted);
+              void recordSessionProblemActivity(userId, pid, accepted).catch(
+                () => undefined
+              );
               if (accepted) {
                 const ids = everAcceptedProblemIds([
                   ...userSubmissions,
                   latest.data,
                 ]);
                 ids.add(pid);
-                syncPlannerWithAccepted(userId, toDateKey(), ids);
+                void syncPlannerWithAccepted(userId, toDateKey(), ids).catch(
+                  () => undefined
+                );
               }
               setLearningRefreshKey((k) => k + 1);
             }
@@ -351,13 +451,50 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
   );
 
   useEffect(() => {
-    fetchProblems().then(() => {
-      void fetchBookmarks();
-      void fetchRevisions();
-    });
+    const t = window.setTimeout(() => setDebouncedSearch(searchQuery.trim()), 300);
+    return () => window.clearTimeout(t);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    setProblemPage(1);
+  }, [debouncedSearch, selectedDifficulty, accessFilter]);
+
+  useEffect(() => {
+    void fetchProblems();
+  }, [fetchProblems]);
+
+  useEffect(() => {
+    void fetchBookmarks();
+    void fetchRevisions();
     fetchUserSubmissions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
+
+  const handleSearchSubmit = () => {
+    setActiveTab("problems");
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return;
+    const match = problems.find(
+      (p) =>
+        p.title.toLowerCase().includes(q) ||
+        p.slug.toLowerCase().includes(q)
+    );
+    if (match) {
+      setSelectedProblem(match);
+      setProblemInLocation(match.slug);
+    }
+  };
 
   // Deep-link: ?problem=slug (or pending slug after login)
   useEffect(() => {
@@ -475,7 +612,11 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
   };
 
   const executeCases = async (
-    casesToRun: Array<Pick<Testcase, "input" | "output" | "expectedOutput">>
+    casesToRun: Array<
+      Pick<Testcase, "input" | "output" | "expectedOutput"> & {
+        isCustomCase?: boolean;
+      }
+    >
   ) => {
     if (!selectedProblem) return;
     setIsRunning(true);
@@ -507,6 +648,7 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
           functionName: selectedProblem.functionName,
           className: selectedProblem.className || "Solution",
           problemId: selectedProblem._id || (selectedProblem as { id?: string }).id,
+          isCustomCase: Boolean(tc.isCustomCase),
         });
 
         if (!res?.data) {
@@ -658,7 +800,9 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
       if (res?.data) {
         setProblemSubmissions((prev) => [res.data, ...prev]);
         setUserSubmissions((prev) => [res.data, ...prev]);
-        recordSessionProblemActivity(userId, problemId.toString(), false);
+        recordSessionProblemActivity(userId, problemId.toString(), false).catch(
+          () => undefined
+        );
         setLearningRefreshKey((k) => k + 1);
       }
     } catch (err) {
@@ -680,7 +824,14 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
     setSelectedSubmission(null);
     try {
       const official = selectedProblem.testcases?.filter((tc) => !tc.isHidden) || [];
-      const allVisible = [...official, ...customTestCases];
+      const customs = customTestCases.map((tc) => ({
+        ...tc,
+        isCustomCase: true as const,
+      }));
+      const allVisible = [
+        ...official.map((tc) => ({ ...tc, isCustomCase: false as const })),
+        ...customs,
+      ];
       if (allVisible.length === 0) {
         setRunError("No test cases available to run.");
         return;
@@ -733,7 +884,7 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
         return;
       }
 
-      // Submit sends ONLY problemId + code + language (+ source=submit).
+      // Submit sends problemId + code + language (+ source=submit) and optional session ids.
       // Hidden/public suite is loaded server-side from ProblemService.
       const res = await submissionApi.createSubmission({
         userId: uid,
@@ -741,6 +892,13 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
         code: userCode,
         language: selectedLanguage as ProgrammingLanguage,
         source: "submit",
+        ...(activeMockInterviewSessionId
+          ? { mockInterviewSessionId: activeMockInterviewSessionId }
+          : activeVirtualContestSessionId
+            ? { virtualContestSessionId: activeVirtualContestSessionId }
+            : activeContestId
+              ? { contestId: activeContestId }
+              : {}),
       });
 
       if (res?.data) {
@@ -822,23 +980,35 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
   };
 
   useEffect(() => {
-    if (!userId || !userSubmissions.length) return;
-    syncPlannerWithAccepted(
-      userId,
-      toDateKey(),
-      everAcceptedProblemIds(userSubmissions)
-    );
-    setLearningRefreshKey((k) => k + 1);
-    // Only when submissions list identity changes meaningfully
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId, userSubmissions.length]);
+    if (!userId) {
+      setStudySessions([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        if (userSubmissions.length) {
+          await syncPlannerWithAccepted(
+            userId,
+            toDateKey(),
+            everAcceptedProblemIds(userSubmissions)
+          );
+        }
+        const list = await loadAllSessions(userId);
+        if (!cancelled) setStudySessions(list);
+      } catch {
+        /* streak falls back to submissions-only activity */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, userSubmissions.length, learningRefreshKey]);
 
   const streakInfo = useMemo(() => {
-    void learningRefreshKey;
-    const sessions = loadAllSessions(userId);
-    const activity = buildDayActivityMap(userSubmissions, sessions);
+    const activity = buildDayActivityMap(userSubmissions, studySessions);
     return computeStreaks(activity);
-  }, [userId, userSubmissions, learningRefreshKey]);
+  }, [userSubmissions, studySessions]);
 
   const roadmapTopics = useMemo(() => {
     const cats = new Set<string>();
@@ -897,8 +1067,14 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
   }, [settings?.defaultLanguage, settings?.supportedLanguages, selectedLanguage]);
 
   const topNavItems = [
+    { id: "home" as const, label: "Home" },
     { id: "problems" as const, label: "Sheets" },
     { id: "favourites" as const, label: "My Favourites" },
+    { id: "companies" as const, label: "Companies" },
+    { id: "interview" as const, label: "Interview" },
+    { id: "ai" as const, label: "AI" },
+    { id: "analytics" as const, label: "Analytics" },
+    { id: "reviews" as const, label: "Reviews" },
     { id: "calendar" as const, label: "Roadmap" },
     { id: "sessions" as const, label: "Sessions" },
     { id: "planner" as const, label: "Planner" },
@@ -913,8 +1089,14 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
   ];
 
   const railItems = [
+    { id: "home" as const, icon: LayoutDashboard, label: "Home" },
     { id: "problems" as const, icon: Home, label: "Sheet" },
     { id: "favourites" as const, icon: Star, label: "My Favourites" },
+    { id: "companies" as const, icon: Briefcase, label: "Companies" },
+    { id: "interview" as const, icon: Swords, label: "Interview" },
+    { id: "ai" as const, icon: Brain, label: "AI" },
+    { id: "analytics" as const, icon: BarChart3, label: "Analytics" },
+    { id: "reviews" as const, icon: RotateCcw, label: "Reviews" },
     { id: "calendar" as const, icon: CalendarDays, label: "Calendar" },
     { id: "sessions" as const, icon: Timer, label: "Sessions" },
     { id: "planner" as const, icon: ListTodo, label: "Planner" },
@@ -927,7 +1109,7 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
         <button
           type="button"
           className="platform-brand"
-          onClick={() => setActiveTab("problems")}
+          onClick={() => setActiveTab("home")}
           aria-label={`${platformName} home`}
         >
           {logoUrl ? (
@@ -959,15 +1141,38 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
         </nav>
 
         <div className="platform-navbar-right">
-          <div className="platform-navbar-search" aria-hidden>
-            <Search size={14} />
-            <span>Search problems…</span>
+          <label className="platform-navbar-search">
+            <Search size={14} aria-hidden />
+            <input
+              ref={searchInputRef}
+              type="search"
+              placeholder="Search problems…"
+              value={searchQuery}
+              aria-label="Search problems"
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  handleSearchSubmit();
+                }
+              }}
+              style={{
+                flex: 1,
+                minWidth: 0,
+                border: "none",
+                background: "transparent",
+                color: "inherit",
+                font: "inherit",
+                outline: "none",
+              }}
+            />
             <kbd>⌘K</kbd>
-          </div>
+          </label>
           <span className="platform-chip platform-chip-streak" title="Current streak">
             <Flame size={14} fill="currentColor" /> {streakInfo.current}d
           </span>
           <NotificationBell enabled={notificationsEnabled} />
+          <SystemBroadcastListener enabled={notificationsEnabled} />
           {onOpenAdmin && (
             <button
               type="button"
@@ -1032,7 +1237,14 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
 
         <div className="platform-main">
           <AnnouncementBanner />
-          {activeTab !== "problems" && activeTab !== "favourites" && (
+          {activeTab !== "problems" &&
+            activeTab !== "favourites" &&
+            activeTab !== "companies" &&
+            activeTab !== "interview" &&
+            activeTab !== "ai" &&
+            activeTab !== "analytics" &&
+            activeTab !== "reviews" &&
+            activeTab !== "home" && (
             <header className="platform-topbar">
               <span className="platform-topbar-title">
                 {activeTab === "calendar" && "Calendar + Roadmap"}
@@ -1043,6 +1255,21 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
                 {activeTab === "learn" && "Learn"}
                 {activeTab === "ranks" && "Leaderboard"}
                 {activeTab === "profile" && "Profile & Settings"}
+                {(activeTab === "calendar" ||
+                  activeTab === "sessions" ||
+                  activeTab === "planner") && (
+                  <span
+                    style={{
+                      display: "block",
+                      fontSize: "0.75rem",
+                      fontWeight: 400,
+                      color: "var(--text-muted)",
+                      marginTop: 2,
+                    }}
+                  >
+                    Stored on this device (not synced to server).
+                  </span>
+                )}
               </span>
               <div className="platform-topbar-actions">
                 <span className="platform-chip platform-chip-streak">
@@ -1053,6 +1280,24 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
           )}
 
           <main className={`platform-content ${activeTab === "problems" ? "platform-content-sheet" : ""}`}>
+            {activeTab === "home" && (
+              <FreeHomeDashboard
+                userName={user?.name || ""}
+                userId={userId || ""}
+                problems={problems}
+                submissions={userSubmissions}
+                studySessions={studySessions}
+                loadingProblems={loadingProblems}
+                loadingSubmissions={loadingSubmissions}
+                refreshKey={learningRefreshKey}
+                onSelectProblem={(p) => {
+                  setActiveContestId(null);
+                  setSelectedProblem(p);
+                }}
+                onNavigate={(tab) => setActiveTab(tab)}
+              />
+            )}
+
             {activeTab === "problems" && (
               <ProblemsSheet
                 problems={problems}
@@ -1060,16 +1305,24 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
                 submissions={userSubmissions}
                 searchQuery={searchQuery}
                 selectedDifficulty={selectedDifficulty}
+                accessFilter={accessFilter}
                 statusFilter={statusFilter}
                 bookmarkedIds={bookmarkedIds}
                 revisionIds={revisionIds}
                 userId={userId}
                 userName={user?.name}
                 learningRefreshKey={learningRefreshKey}
+                problemPage={problemPage}
+                totalPages={totalPages}
+                onProblemPageChange={setProblemPage}
                 onSearchChange={setSearchQuery}
                 onDifficultyChange={setSelectedDifficulty}
+                onAccessFilterChange={setAccessFilter}
                 onStatusFilterChange={setStatusFilter}
-                onSelectProblem={setSelectedProblem}
+                onSelectProblem={(p) => {
+                  setActiveContestId(null);
+                  setSelectedProblem(p);
+                }}
                 onRemoveBookmark={handleRemoveBookmark}
                 onBookmarkChange={handleBookmarkChange}
                 onRevisionChange={handleRevisionChange}
@@ -1093,6 +1346,86 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
               />
             )}
 
+            {activeTab === "companies" && (
+              <CompaniesPage
+                onSelectProblem={(ref) =>
+                  void handleOpenProblemFromContest(ref)
+                }
+              />
+            )}
+
+            {activeTab === "interview" && (
+              <MockInterviewPanel
+                refreshKey={learningRefreshKey}
+                lastSubmission={(() => {
+                  const official = [...userSubmissions]
+                    .filter((s) => s.source !== "run")
+                    .sort((a, b) => {
+                      const ta = new Date(a.createdAt || a.updatedAt || 0).getTime();
+                      const tb = new Date(b.createdAt || b.updatedAt || 0).getTime();
+                      return tb - ta;
+                    })[0];
+                  if (!official) return null;
+                  const id = String((official as any).id || (official as any)._id || "");
+                  const problemId = String(official.problemId || "");
+                  return id && problemId ? { id, problemId } : null;
+                })()}
+                onActiveSessionChange={(sid) => {
+                  setActiveMockInterviewSessionId(sid);
+                  if (sid) {
+                    setActiveContestId(null);
+                    setActiveVirtualContestSessionId(null);
+                  }
+                }}
+                onOpenProblem={(p, mockSid) => {
+                  setSelectedProblem(p);
+                  setProblemInLocation(p.slug);
+                  setActiveTab("problems");
+                  if (mockSid) {
+                    setActiveMockInterviewSessionId(mockSid);
+                    setActiveContestId(null);
+                    setActiveVirtualContestSessionId(null);
+                  }
+                }}
+              />
+            )}
+
+            {activeTab === "ai" && (
+              <AiAssistantPanel
+                refreshKey={learningRefreshKey}
+                problemId={
+                  selectedProblem
+                    ? String(
+                        (selectedProblem as any).id ||
+                          (selectedProblem as any)._id ||
+                          ""
+                      ) || null
+                    : null
+                }
+                problemTitle={selectedProblem?.title || null}
+              />
+            )}
+
+            {activeTab === "analytics" && (
+              <SubmissionAnalyticsPanel refreshKey={learningRefreshKey} />
+            )}
+
+            {activeTab === "reviews" && (
+              <SpacedRepetitionPanel
+                refreshKey={learningRefreshKey}
+                onOpenProblem={(pid) => {
+                  const p = problems.find(
+                    (x: any) =>
+                      String(x.id || x._id) === String(pid)
+                  );
+                  if (p) {
+                    setSelectedProblem(p);
+                    setActiveTab("problems");
+                  }
+                }}
+              />
+            )}
+
             {activeTab === "calendar" && (
               <LearningCalendarRoadmap
                 problems={problems}
@@ -1101,8 +1434,9 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
                 refreshKey={learningRefreshKey}
                 onSelectProblem={setSelectedProblem}
                 onStartSession={(topic) => {
-                  startStudySession(userId, topic);
-                  handleStartSessionNav(topic);
+                  void startStudySession(userId, topic)
+                    .then(() => handleStartSessionNav(topic))
+                    .catch(() => undefined);
                 }}
               />
             )}
@@ -1131,14 +1465,28 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
             )}
 
             {activeTab === "contests" && (
-              <ContestsPanel authenticated={Boolean(user && localStorage.getItem("accessToken"))} />
+              <ContestsPanel
+                authenticated={Boolean(user && hasAccessToken())}
+                onOpenProblem={handleOpenProblemFromContest}
+                onVirtualSessionChange={(sessionId) => {
+                  setActiveVirtualContestSessionId(sessionId);
+                  if (sessionId) setActiveContestId(null);
+                }}
+              />
             )}
 
             {activeTab === "discuss" && (
-              <DiscussionsPanel authenticated={Boolean(user && localStorage.getItem("accessToken"))} />
+              <DiscussionsPanel authenticated={Boolean(user && hasAccessToken())} />
             )}
 
-            {activeTab === "learn" && <ContentLibraryPanel />}
+            {activeTab === "learn" && (
+              <ContentLibraryPanel
+                onOpenProblem={(ref) => void handleOpenProblemFromContest(ref)}
+                onRequireAuth={() =>
+                  window.alert("Sign in required to enroll in study plans.")
+                }
+              />
+            )}
 
             {activeTab === "ranks" && <LeaderboardPanel />}
 
@@ -1251,6 +1599,7 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
           userId={userId}
           onBack={() => {
             setSelectedProblem(null);
+            setActiveContestId(null);
             setProblemInLocation(null);
           }}
           onCodeChange={setUserCode}

@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useRef, useState, type FC } from "react";
 import { Bell, Loader2 } from "lucide-react";
 import { authApi } from "../api/authApi";
+import { connectRealtimeSocket } from "../realtime/socket";
+import { hasAccessToken } from "../api/accessToken";
+
+const NOTIFICATION_CREATED = "notification.created";
 
 interface NotificationItem {
   id?: string;
@@ -23,7 +27,7 @@ export const NotificationBell: FC<Props> = ({ enabled = true }) => {
   const ref = useRef<HTMLDivElement>(null);
 
   const loadUnread = useCallback(async () => {
-    if (!enabled || !localStorage.getItem("accessToken")) return;
+    if (!enabled || !hasAccessToken()) return;
     try {
       const res = await authApi.unreadNotificationCount();
       const count = (res.data as { count?: number })?.count ?? 0;
@@ -34,7 +38,7 @@ export const NotificationBell: FC<Props> = ({ enabled = true }) => {
   }, [enabled]);
 
   const loadList = useCallback(async () => {
-    if (!enabled || !localStorage.getItem("accessToken")) return;
+    if (!enabled || !hasAccessToken()) return;
     setLoading(true);
     try {
       const res = await authApi.listNotifications({ page: 1, limit: 20 });
@@ -51,6 +55,22 @@ export const NotificationBell: FC<Props> = ({ enabled = true }) => {
     const id = window.setInterval(() => void loadUnread(), 60_000);
     return () => window.clearInterval(id);
   }, [loadUnread]);
+
+  useEffect(() => {
+    if (!enabled || !hasAccessToken()) return;
+    const socket = connectRealtimeSocket();
+    if (!socket) return;
+
+    const refresh = () => {
+      void loadUnread();
+      if (open) void loadList();
+    };
+
+    socket.on(NOTIFICATION_CREATED, refresh);
+    return () => {
+      socket.off(NOTIFICATION_CREATED, refresh);
+    };
+  }, [enabled, loadUnread, loadList, open]);
 
   useEffect(() => {
     if (!open) return;

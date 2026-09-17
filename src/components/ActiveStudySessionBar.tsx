@@ -1,9 +1,10 @@
-import { useEffect, useState, type FC } from "react";
+import { useCallback, useEffect, useState, type FC } from "react";
 import { Pause, Play, Square, Timer } from "lucide-react";
 import {
   endStudySession,
   formatHMS,
   getSessionActiveMs,
+  LearningPersistError,
   loadActiveSession,
   pauseStudySession,
   resumeStudySession,
@@ -17,7 +18,7 @@ interface Props {
   onOpenSessions?: () => void;
 }
 
-/** Floating compact timer — survives problem workspace / tab changes via localStorage. */
+/** Floating compact timer — active session state is server-authoritative. */
 export const ActiveStudySessionBar: FC<Props> = ({
   userId,
   refreshKey = 0,
@@ -26,10 +27,29 @@ export const ActiveStudySessionBar: FC<Props> = ({
 }) => {
   const [session, setSession] = useState<StudySession | null>(null);
   const [tick, setTick] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    if (!userId) {
+      setSession(null);
+      return;
+    }
+    try {
+      const s = await loadActiveSession(userId);
+      setSession(s);
+      setError(null);
+    } catch (err) {
+      setError(
+        err instanceof LearningPersistError
+          ? err.message
+          : "Failed to load session"
+      );
+    }
+  }, [userId]);
 
   useEffect(() => {
-    setSession(loadActiveSession(userId));
-  }, [userId, refreshKey]);
+    void refresh();
+  }, [refresh, refreshKey]);
 
   useEffect(() => {
     if (!session || session.status !== "running") return;
@@ -42,9 +62,19 @@ export const ActiveStudySessionBar: FC<Props> = ({
   void tick;
   const ms = getSessionActiveMs(session);
 
-  const refresh = () => {
-    setSession(loadActiveSession(userId));
-    onChange?.();
+  const act = async (fn: () => Promise<unknown>) => {
+    setError(null);
+    try {
+      await fn();
+      await refresh();
+      onChange?.();
+    } catch (err) {
+      setError(
+        err instanceof LearningPersistError
+          ? err.message
+          : "Session action failed"
+      );
+    }
   };
 
   return (
@@ -56,16 +86,14 @@ export const ActiveStudySessionBar: FC<Props> = ({
         <span className="learn-muted">
           {session.solvedProblemIds.length}/{session.attemptedProblemIds.length}
         </span>
+        {error ? <span className="learn-muted"> · {error}</span> : null}
       </button>
       <div className="learn-session-bar-actions">
         {session.status === "running" ? (
           <button
             type="button"
             aria-label="Pause session"
-            onClick={() => {
-              pauseStudySession(userId);
-              refresh();
-            }}
+            onClick={() => void act(() => pauseStudySession(userId))}
           >
             <Pause size={14} />
           </button>
@@ -73,10 +101,7 @@ export const ActiveStudySessionBar: FC<Props> = ({
           <button
             type="button"
             aria-label="Resume session"
-            onClick={() => {
-              resumeStudySession(userId);
-              refresh();
-            }}
+            onClick={() => void act(() => resumeStudySession(userId))}
           >
             <Play size={14} />
           </button>
@@ -84,10 +109,7 @@ export const ActiveStudySessionBar: FC<Props> = ({
         <button
           type="button"
           aria-label="End session"
-          onClick={() => {
-            endStudySession(userId);
-            refresh();
-          }}
+          onClick={() => void act(() => endStudySession(userId))}
         >
           <Square size={14} />
         </button>

@@ -1,4 +1,7 @@
 import { authClient } from "./authClient";
+import { clearAccessToken, setAccessToken } from "./accessToken";
+import type { AccessTier, PublicSubscription } from "../access/accessModel";
+import type { FeatureId } from "../access/features";
 
 export interface User {
   id?: string;
@@ -12,6 +15,12 @@ export interface User {
   twoFactorEnabled?: boolean;
   /** Live permissions from GET /auth/admin/me/permissions when available. */
   permissions?: string[];
+  /** Safe entitlement snapshot from AuthService (read-only). */
+  subscription?: PublicSubscription;
+  /** Server-derived access tier for authenticated users (FREE | PREMIUM). */
+  accessTier?: AccessTier;
+  /** Server-resolved feature ids for UI (advisory). */
+  features?: FeatureId[] | string[];
 }
 
 export interface AuthResponse {
@@ -28,38 +37,35 @@ export interface AuthResponse {
   };
 }
 
+function persistSessionFromAuthResponse(data: AuthResponse["data"] | undefined) {
+  const token = data?.token || data?.accessToken;
+  if (typeof token === "string" && token) {
+    setAccessToken(token);
+  }
+  if (data?.user) {
+    localStorage.setItem("user", JSON.stringify(data.user));
+  }
+}
+
 export const authApi = {
   // Sign Up / Register
   signup: async (userData: { name: string; email: string; password: string }) => {
     const response = await authClient.post<AuthResponse>("/auth/signup", userData);
-    if (response.data.data?.token || response.data.data?.accessToken) {
-      const token = response.data.data.token || response.data.data.accessToken;
-      localStorage.setItem("accessToken", token!);
-      localStorage.setItem("user", JSON.stringify(response.data.data.user));
-    }
+    persistSessionFromAuthResponse(response.data.data);
     return response.data;
   },
 
   // Sign In / Login
   signin: async (credentials: { email: string; password: string }) => {
     const response = await authClient.post<AuthResponse>("/auth/login", credentials);
-    if (response.data.data?.token || response.data.data?.accessToken) {
-      const token = response.data.data.token || response.data.data.accessToken;
-      localStorage.setItem("accessToken", token!);
-      localStorage.setItem("user", JSON.stringify(response.data.data.user));
-    }
-    console.log(response);
+    persistSessionFromAuthResponse(response.data.data);
     return response.data;
   },
 
   // Verify 2FA Login
   verify2FA: async (userId: string, otp: string) => {
     const response = await authClient.post<AuthResponse>("/auth/login/2fa", { userId, otp });
-    if (response.data.data?.token || response.data.data?.accessToken) {
-      const token = response.data.data.token || response.data.data.accessToken;
-      localStorage.setItem("accessToken", token!);
-      localStorage.setItem("user", JSON.stringify(response.data.data.user));
-    }
+    persistSessionFromAuthResponse(response.data.data);
     return response.data;
   },
 
@@ -140,7 +146,7 @@ export const authApi = {
     try {
       await authClient.post("/auth/logout");
     } finally {
-      localStorage.removeItem("accessToken");
+      clearAccessToken();
       localStorage.removeItem("user");
     }
   },

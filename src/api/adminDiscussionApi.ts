@@ -1,17 +1,9 @@
-import axios from "axios";
+import { SERVICE_URLS } from "./serviceUrls";
+import { createServiceClient } from "./authClient";
 
-export const DISCUSSION_API_URL = "http://localhost:3008/api/v1";
+export const DISCUSSION_API_URL = SERVICE_URLS.discussion;
 
-export const discussionClient = axios.create({
-  baseURL: DISCUSSION_API_URL,
-  headers: { "Content-Type": "application/json" },
-});
-
-discussionClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem("accessToken");
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  return config;
-});
+export const discussionClient = createServiceClient(DISCUSSION_API_URL);
 
 export interface AdminDiscussionPost {
   _id: string;
@@ -39,6 +31,7 @@ export interface AdminReport {
   priority: string;
   status: string;
   resolution?: string;
+  assignedTo?: string | null;
   createdAt: string;
 }
 
@@ -68,6 +61,20 @@ export const adminDiscussionApi = {
       data: AdminReport[];
       meta: { total: number; page: number; limit: number; totalPages: number };
     };
+  },
+
+  getReport: async (id: string) => {
+    const res = await discussionClient.get(`/discussions/admin/reports/${id}`);
+    return res.data as { success: boolean; data: AdminReport; message?: string };
+  },
+
+  /** Assign report to current admin (or optional assignedTo userId). */
+  assignReport: async (id: string, assignedTo?: string) => {
+    const res = await discussionClient.post(
+      `/discussions/admin/reports/${id}/assign`,
+      assignedTo ? { assignedTo } : {}
+    );
+    return res.data as { success: boolean; data: AdminReport; message?: string };
   },
 
   reviewReport: async (id: string) => {

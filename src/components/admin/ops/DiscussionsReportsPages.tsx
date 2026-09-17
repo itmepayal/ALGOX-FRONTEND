@@ -163,9 +163,10 @@ export const ReportsAdminPage: FC = () => {
 
   const act = async (
     id: string,
-    kind: "review" | "resolve" | "dismiss" | "reopen"
+    kind: "assign" | "review" | "resolve" | "dismiss" | "reopen"
   ) => {
     try {
+      if (kind === "assign") await adminDiscussionApi.assignReport(id);
       if (kind === "review") await adminDiscussionApi.reviewReport(id);
       if (kind === "resolve")
         await adminDiscussionApi.resolveReport(id, "Resolved by admin");
@@ -216,6 +217,14 @@ export const ReportsAdminPage: FC = () => {
             render: (r) => <StatusBadge status={r.status} />,
           },
           {
+            key: "assignee",
+            header: "Assignee",
+            render: (r) =>
+              r.assignedTo
+                ? String(r.assignedTo).slice(0, 8)
+                : "—",
+          },
+          {
             key: "at",
             header: "Created",
             render: (r) => new Date(r.createdAt).toLocaleString(),
@@ -226,6 +235,13 @@ export const ReportsAdminPage: FC = () => {
             render: (r) => (
               <PermissionGuard permission="reports:review">
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                  <button
+                    type="button"
+                    className="admin-link"
+                    onClick={() => void act(r._id, "assign")}
+                  >
+                    Assign me
+                  </button>
                   <button type="button" className="admin-link" onClick={() => void act(r._id, "review")}>
                     Review
                   </button>

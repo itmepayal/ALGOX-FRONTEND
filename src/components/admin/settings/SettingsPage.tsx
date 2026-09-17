@@ -32,8 +32,7 @@ import {
   type JudgeLanguage,
   type PlatformSettings,
 } from "../../../api/adminSettingsApi";
-import { useAuth } from "../../../context/AuthContext";
-import { hasPermission } from "../../../rbac/permissions";
+import { usePermission } from "../../../rbac/usePermission";
 import { ConfirmDialog } from "../../ConfirmDialog";
 import { PermissionGuard } from "../shared/PermissionGuard";
 import { useToast } from "../../../context/ToastContext";
@@ -235,10 +234,10 @@ const SettingCard: FC<{
 );
 
 export const SettingsPage: FC = () => {
-  const { user } = useAuth();
+  const { can, role } = usePermission();
   const toast = useToast();
-  const canUpdate = hasPermission(user?.role, "settings:update");
-  const isSuper = user?.role === "super_admin";
+  const canUpdate = can("settings:update");
+  const isSuper = role === "super_admin";
 
   const [section, setSection] = useState<SettingsSection>("branding");
   const [draft, setDraft] = useState<PlatformSettings | null>(null);
@@ -1072,7 +1071,7 @@ export const SettingsPage: FC = () => {
               >
                 <SettingRow
                   label="Email notifications"
-                  hint="Allow the platform to send email notifications."
+                  hint="Enforced: when off, outbound OTP and email notifications are not sent."
                   control={
                     <Toggle
                       label="Email notifications enabled"
@@ -1084,7 +1083,7 @@ export const SettingsPage: FC = () => {
                 />
                 <SettingRow
                   label="Announce new sheets"
-                  hint="Notify users when new problem sheets are published."
+                  hint="Enforced: publishes a platform announcement when a sheet is published."
                   control={
                     <Toggle
                       label="Announce new sheets"
@@ -1096,7 +1095,7 @@ export const SettingsPage: FC = () => {
                 />
                 <SettingRow
                   label="Announce maintenance"
-                  hint="Notify users about maintenance windows."
+                  hint="Enforced: publishes a maintenance announcement when maintenance mode is enabled."
                   control={
                     <Toggle
                       label="Announce maintenance"

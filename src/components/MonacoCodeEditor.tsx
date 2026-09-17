@@ -8,6 +8,7 @@ import Editor, { type OnMount } from "@monaco-editor/react";
 import type { editor as MonacoEditor } from "monaco-editor";
 import type { EditorSettings } from "../utils/editorSettings";
 import { registerMonacoFormatters } from "../utils/monacoFormatters";
+import { registerPremiumCompletions } from "../utils/monacoPremiumCompletions";
 import {
   languageSupportsFormatting,
   toMonacoLanguage,
@@ -23,6 +24,14 @@ export interface MonacoCodeEditorProps {
   onChange?: (value: string) => void;
   className?: string;
   style?: CSSProperties;
+  /** Premium: register signature-aware completions (client-only). */
+  enablePremiumCompletions?: boolean;
+  signatureHints?: {
+    functionName?: string;
+    className?: string;
+    parameters?: Array<{ name: string; type: string }>;
+    returnType?: string;
+  };
 }
 
 /**
@@ -37,6 +46,8 @@ export const MonacoCodeEditor: FC<MonacoCodeEditorProps> = ({
   onChange,
   className,
   style,
+  enablePremiumCompletions = false,
+  signatureHints,
 }) => {
   const editorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -48,10 +59,21 @@ export const MonacoCodeEditor: FC<MonacoCodeEditorProps> = ({
   const onMount: OnMount = (ed, monaco) => {
     editorRef.current = ed;
     registerMonacoFormatters(monaco);
+    if (enablePremiumCompletions) {
+      registerPremiumCompletions(monaco, monacoLanguage, signatureHints || {});
+    }
     ed.updateOptions(buildOptions(settings, readOnly, canFormat));
-    // Ensure layout fills flex container
     requestAnimationFrame(() => ed.layout());
   };
+
+  // Re-register premium completions when language / hints change
+  useEffect(() => {
+    if (!enablePremiumCompletions) return;
+    const monaco = (window as unknown as { monaco?: typeof import("monaco-editor") })
+      .monaco;
+    if (!monaco) return;
+    registerPremiumCompletions(monaco as any, monacoLanguage, signatureHints || {});
+  }, [enablePremiumCompletions, monacoLanguage, signatureHints]);
 
   // Sync options when settings / readonly change — no remount
   useEffect(() => {

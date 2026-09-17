@@ -18,12 +18,18 @@ import {
 
 type AuthTab = "login" | "signup" | "2fa" | "forgot_request" | "forgot_confirm";
 
-export const AuthModal: FC = () => {
+export const AuthModal: FC<{
+  initialTab?: AuthTab;
+  /** Compact card for overlays — hide large brand chrome slightly. */
+  embed?: boolean;
+  onSuccess?: () => void;
+}> = ({ initialTab = "login", embed = false, onSuccess }) => {
   const { user, signin, signup, signout, setUser } = useAuth();
   const { isEnabled } = usePlatformSettings();
   const registrationOpen = isEnabled("registration");
-  const [activeTab, setActiveTab] = useState<AuthTab>("login");
-  const [name, setName] = useState("");
+  const [activeTab, setActiveTab] = useState<AuthTab>(
+    initialTab === "signup" && registrationOpen ? "signup" : initialTab === "signup" ? "login" : initialTab
+  );  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [otp, setOtp] = useState("");
@@ -37,6 +43,16 @@ export const AuthModal: FC = () => {
   const [securityLogs, setSecurityLogs] = useState<any[]>([]);
   const [loadingSessions, setLoadingSessions] = useState(false);
   const [loadingLogs, setLoadingLogs] = useState(false);
+
+  useEffect(() => {
+    if (initialTab === "signup" && !registrationOpen) {
+      setActiveTab("login");
+      return;
+    }
+    if (initialTab === "login" || initialTab === "signup") {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab, registrationOpen]);
 
   useEffect(() => {
     if (!registrationOpen && activeTab === "signup") {
@@ -117,6 +133,8 @@ export const AuthModal: FC = () => {
           setPendingUserId(res.data.userId);
           setActiveTab("2fa");
           if (res.data.otp) setSuccessMsg(`[Dev Mode OTP]: ${res.data.otp}`);
+        } else {
+          onSuccess?.();
         }
       } else if (activeTab === "signup") {
         if (!registrationOpen) {
@@ -124,10 +142,12 @@ export const AuthModal: FC = () => {
           return;
         }
         await signup({ name, email, password });
+        onSuccess?.();
       } else if (activeTab === "2fa") {
         await authApi.verify2FA(pendingUserId, otp);
         const profile = await authApi.getProfile();
         setUser(profile.data as any);
+        onSuccess?.();
       } else if (activeTab === "forgot_request") {
         const res = await authApi.requestPasswordReset(email);
         setSuccessMsg(res.message || "OTP sent to your email!");
@@ -146,6 +166,7 @@ export const AuthModal: FC = () => {
   };
 
   if (user) {
+    if (embed) return null;
     return (
       <div className="auth-card-responsive animate-fade-in" style={{ maxWidth: "580px", width: "100%", margin: "20px auto", padding: "32px 28px", backgroundColor: "var(--bg-card)", border: "1px solid var(--border-subtle)", borderRadius: "20px", boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.7)", fontFamily: "var(--font-primary)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "16px", marginBottom: "24px" }}>

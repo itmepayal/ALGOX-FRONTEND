@@ -9,21 +9,19 @@ import {
   Trophy,
   User as UserIcon,
 } from "lucide-react";
-import axios from "axios";
 import { DataTable } from "../shared/DataTable";
 import { PermissionGuard } from "../shared/PermissionGuard";
 import { problemClient } from "../../../api/problemApi";
 import { adminLeaderboardApi } from "../../../api/adminLeaderboardApi";
+import { leaderboardApi } from "../../../api/leaderboardApi";
 import { useToast } from "../../../context/ToastContext";
-import { useAuth } from "../../../context/AuthContext";
+import { usePermission } from "../../../rbac/usePermission";
 import { ConfirmDialog } from "../../ConfirmDialog";
 import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
 import type { AdminTab } from "../adminNav";
 import { cn } from "../../../lib/cn";
 import "../problems/problem-editor.css";
-
-const LEADERBOARD_URL = "http://localhost:3005/api/v1";
 
 type Period = "global" | "daily" | "weekly" | "monthly" | "contest";
 
@@ -112,8 +110,8 @@ export const LeaderboardsPage: FC<LeaderboardsPageProps> = ({
   onNavigate,
 }) => {
   const toast = useToast();
-  const { user } = useAuth();
-  const canAdmin = user?.role === "admin" || user?.role === "super_admin";
+  const { can } = usePermission();
+  const canAdmin = can("settings:update");
   const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -129,11 +127,13 @@ export const LeaderboardsPage: FC<LeaderboardsPageProps> = ({
   const [confirmSuspend, setConfirmSuspend] = useState(false);
 
   const reloadGlobal = async () => {
-    const res = await axios.get(`${LEADERBOARD_URL}/leaderboard/`, {
-      params: { page: 1, limit: 50, period: "global" },
+    const res = await leaderboardApi.getLeaderboard({
+      page: 1,
+      limit: 50,
+      period: "all",
     });
-    const data = res.data?.data || res.data || [];
-    setRows(Array.isArray(data) ? data : data.rankings || []);
+    const data = res.data || [];
+    setRows(Array.isArray(data) ? data : (data as any).rankings || []);
   };
 
   useEffect(() => {
@@ -174,16 +174,14 @@ export const LeaderboardsPage: FC<LeaderboardsPageProps> = ({
       try {
         setLoading(true);
         setError("");
-        const res = await axios.get(`${LEADERBOARD_URL}/leaderboard/`, {
-          params: {
-            page: 1,
-            limit: 50,
-            period: period === "global" ? "global" : period,
-          },
+        const res = await leaderboardApi.getLeaderboard({
+          page: 1,
+          limit: 50,
+          period: period === "global" ? "all" : period,
         });
-        const data = res.data?.data || res.data || [];
+        const data = res.data || [];
         if (!cancelled) {
-          setRows(Array.isArray(data) ? data : data.rankings || []);
+          setRows(Array.isArray(data) ? data : (data as any).rankings || []);
         }
       } catch (err: any) {
         if (!cancelled) {

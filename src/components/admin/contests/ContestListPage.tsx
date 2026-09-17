@@ -32,8 +32,7 @@ import {
   type AdminContest,
   type ContestStatus,
 } from "../../../api/adminContestApi";
-import { hasPermission } from "../../../rbac/permissions";
-import { useAuth } from "../../../context/AuthContext";
+import { usePermission } from "../../../rbac/usePermission";
 import { useToast } from "../../../context/ToastContext";
 import { ConfirmDialog } from "../../ConfirmDialog";
 import { Button } from "../../ui/button";
@@ -287,10 +286,10 @@ const ContestActions: FC<{
 };
 
 export const ContestListPage: FC<Props> = ({ onOpen }) => {
-  const { user } = useAuth();
+  const { can } = usePermission();
   const toast = useToast();
-  const canCreate = hasPermission(user?.role, "contests:create");
-  const canManage = hasPermission(user?.role, "contests:manage");
+  const canCreate = can("contests:create");
+  const canManage = can("contests:manage");
 
   const [rows, setRows] = useState<AdminContest[]>([]);
   const [loading, setLoading] = useState(true);

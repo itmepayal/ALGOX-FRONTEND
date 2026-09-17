@@ -1,9 +1,10 @@
 import { useEffect, useState, type FC } from "react";
 import { X } from "lucide-react";
 import { authApi } from "../api/authApi";
+import { hasAccessToken } from "../api/accessToken";
 
 interface Announcement {
-  _id: string;
+  id: string;
   title: string;
   message: string;
   type?: string;
@@ -16,7 +17,7 @@ export const AnnouncementBanner: FC = () => {
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
-    if (!localStorage.getItem("accessToken")) return;
+    if (!hasAccessToken()) return;
     let cancelled = false;
     const load = async () => {
       try {

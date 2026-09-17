@@ -12,8 +12,8 @@ import { PermissionGuard } from "../shared/PermissionGuard";
 import { ConfirmDialog } from "../../ConfirmDialog";
 import { DataTable } from "../shared/DataTable";
 import { EmptyState } from "../shared/EmptyState";
-import { hasPermission } from "../../../rbac/permissions";
-import { useAuth } from "../../../context/AuthContext";
+import { usePermission } from "../../../rbac/usePermission";
+import { resolveAccessTier } from "../../../access/accessModel";
 
 interface Props {
   id: string;
@@ -21,9 +21,18 @@ interface Props {
 }
 
 type DetailTab = "profile" | "activity" | "progress" | "sessions";
+type SubConfirm = "grant" | "revoke" | null;
+
+function defaultPremiumEndIso(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + 30);
+  // datetime-local value (local)
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 
 export const UserDetailPage: FC<Props> = ({ id, onBack }) => {
-  const { user } = useAuth();
+  const { can } = usePermission();
   const [row, setRow] = useState<AdminUser | null>(null);
   const [role, setRole] = useState("user");
   const [error, setError] = useState("");
@@ -33,6 +42,9 @@ export const UserDetailPage: FC<Props> = ({ id, onBack }) => {
     "suspended" | "banned" | "active" | null
   >(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmSub, setConfirmSub] = useState<SubConfirm>(null);
+  const [subBusy, setSubBusy] = useState(false);
+  const [periodEndLocal, setPeriodEndLocal] = useState(defaultPremiumEndIso);
   const [tempPassword, setTempPassword] = useState("");
   const [activity, setActivity] = useState<UserActivityItem[]>([]);
   const [progress, setProgress] = useState<UserProgress | null>(null);
@@ -83,8 +95,54 @@ export const UserDetailPage: FC<Props> = ({ id, onBack }) => {
     };
   }, [tab, id]);
 
-  const canUpdate = hasPermission(user?.role, "users:update");
-  const canDelete = hasPermission(user?.role, "users:delete");
+  const canUpdate = can("users:update");
+  const canDelete = can("users:delete");
+
+  const applySubscription = async (action: "grant" | "revoke") => {
+    setSubBusy(true);
+    setError("");
+    setMsg("");
+    try {
+      if (action === "grant") {
+        const end = periodEndLocal
+          ? new Date(periodEndLocal).toISOString()
+          : null;
+        if (end && Number.isNaN(Date.parse(end))) {
+          setError("Invalid period end datetime");
+          return;
+        }
+        const res = await adminAuthApi.updateSubscription(id, {
+          plan: "PREMIUM",
+          status: "active",
+          currentPeriodEnd: end,
+          source: "admin_grant",
+          cancelAtPeriodEnd: false,
+        });
+        setRow(res.data);
+        setMsg("Premium granted via admin override");
+      } else {
+        const res = await adminAuthApi.updateSubscription(id, {
+          plan: "FREE",
+          status: "none",
+          source: "admin_grant",
+        });
+        setRow(res.data);
+        setMsg("Premium revoked — user set to FREE");
+      }
+      setConfirmSub(null);
+    } catch (err: any) {
+      setError(err?.response?.data?.message || err.message);
+      setConfirmSub(null);
+    } finally {
+      setSubBusy(false);
+    }
+  };
+
+  const sub = row?.subscription;
+  const tier =
+    row?.accessTier ||
+    resolveAccessTier(row ? { subscription: row.subscription, accessTier: row.accessTier } : null);
+  const isPremiumNow = tier === "PREMIUM";
 
   return (
     <PermissionGuard
@@ -228,6 +286,81 @@ export const UserDetailPage: FC<Props> = ({ id, onBack }) => {
               ) : null}
             </div>
           )}
+
+          <section
+            className="admin-card"
+            style={{ marginTop: 24, padding: 16 }}
+            aria-labelledby="user-sub-heading"
+          >
+            <h3 id="user-sub-heading" style={{ marginTop: 0, fontSize: 15 }}>
+              Subscription
+            </h3>
+            <p className="admin-muted" style={{ marginTop: 0 }}>
+              Ledger override via existing admin API — does not change platform
+              role.
+            </p>
+            <div
+              style={{
+                display: "grid",
+                gap: 8,
+                fontSize: "0.875rem",
+                marginBottom: 12,
+              }}
+            >
+              <div>
+                Access tier:{" "}
+                <StatusBadge status={isPremiumNow ? "premium" : "free"} />
+              </div>
+              <div>
+                Plan: <strong>{sub?.plan || "FREE"}</strong>
+                {" · "}
+                Status: <StatusBadge status={sub?.status || "none"} />
+              </div>
+              <div className="admin-muted">
+                Source: {sub?.source || "—"}
+                {sub?.currentPeriodEnd
+                  ? ` · Period end: ${new Date(sub.currentPeriodEnd).toLocaleString()}`
+                  : null}
+              </div>
+            </div>
+
+            {canUpdate ? (
+              <>
+                <div className="admin-field">
+                  <label htmlFor="sub-period-end">Premium period end</label>
+                  <input
+                    id="sub-period-end"
+                    type="datetime-local"
+                    value={periodEndLocal}
+                    onChange={(e) => setPeriodEndLocal(e.target.value)}
+                    disabled={subBusy}
+                  />
+                </div>
+                <div className="admin-toolbar">
+                  <button
+                    type="button"
+                    className="admin-btn primary"
+                    disabled={subBusy}
+                    onClick={() => setConfirmSub("grant")}
+                  >
+                    Grant Premium
+                  </button>
+                  <button
+                    type="button"
+                    className="admin-btn"
+                    disabled={subBusy || !isPremiumNow}
+                    onClick={() => setConfirmSub("revoke")}
+                  >
+                    Revoke to Free
+                  </button>
+                </div>
+              </>
+            ) : (
+              <p className="admin-muted">
+                Requires <code>users:update</code> to grant or revoke.
+              </p>
+            )}
+          </section>
         </div>
       ) : tab === "activity" ? (
         loadingExtra ? (
@@ -446,6 +579,32 @@ export const UserDetailPage: FC<Props> = ({ id, onBack }) => {
             setConfirmDelete(false);
           }
         }}
+      />
+      <ConfirmDialog
+        open={confirmSub === "grant"}
+        title="Grant Premium?"
+        description="Writes the subscription ledger (admin_grant), updates entitlement snapshot, and audits the change. Does not change platform role."
+        confirmLabel="Grant Premium"
+        confirmVariant="primary"
+        confirming={subBusy}
+        confirmingLabel="Granting…"
+        onCancel={() => {
+          if (!subBusy) setConfirmSub(null);
+        }}
+        onConfirm={() => void applySubscription("grant")}
+      />
+      <ConfirmDialog
+        open={confirmSub === "revoke"}
+        title="Revoke Premium?"
+        description="Ends the live subscription and sets entitlement to FREE. Audited as user.subscription_change."
+        confirmLabel="Revoke"
+        confirmVariant="danger"
+        confirming={subBusy}
+        confirmingLabel="Revoking…"
+        onCancel={() => {
+          if (!subBusy) setConfirmSub(null);
+        }}
+        onConfirm={() => void applySubscription("revoke")}
       />
     </PermissionGuard>
   );

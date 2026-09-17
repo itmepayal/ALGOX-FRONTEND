@@ -5,13 +5,21 @@ import { DataTable } from "../shared/DataTable";
 import { adminContentApi } from "../../../api/adminContentApi";
 import { ArticlesAdmin } from "./ArticlesAdminPage";
 import { StudyPlansAdmin } from "./StudyPlansAdminPage";
+import { CompaniesAdmin } from "./CompaniesAdminPage";
 
-type ContentMode = "articles" | "tutorials" | "study-plans" | "notes" | "editorials";
+type ContentMode =
+  | "articles"
+  | "tutorials"
+  | "study-plans"
+  | "notes"
+  | "editorials"
+  | "companies";
 
 export const ContentAdminPage: FC<{ mode: ContentMode }> = ({ mode }) => {
   if (mode === "study-plans") return <StudyPlansAdmin />;
   if (mode === "notes") return <NotesAdmin />;
   if (mode === "editorials") return <EditorialsAdmin />;
+  if (mode === "companies") return <CompaniesAdmin />;
   // articles + tutorials share article model (category filter for tutorials)
   return <ArticlesAdmin category={mode === "tutorials" ? "tutorial" : undefined} />;
 };

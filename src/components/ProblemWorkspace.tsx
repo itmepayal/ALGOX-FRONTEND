@@ -27,6 +27,8 @@ import {
   CheckSquare,
   ChevronDown,
   ChevronUp,
+  Lock,
+  Sparkles,
 } from "lucide-react";
 import { TimeTracker } from "./TimeTracker";
 import { OnlineUsersIndicator } from "./presence/OnlineUsersIndicator";
@@ -61,6 +63,13 @@ import {
   saveNotes,
 } from "../utils/workspacePersistence";
 import { contentApi, type ProblemEditorial } from "../api/contentApi";
+import { getAccessToken, hasAccessToken } from "../api/accessToken";
+import { useAuth } from "../context/AuthContext";
+import { canAccess } from "../access/canAccess";
+import { UpgradePrompt } from "./access/UpgradePrompt";
+import { PremiumBadge } from "./access/PremiumBadge";
+import { PremiumEditorTools } from "./PremiumEditorTools";
+import { billingApi } from "../api/billingApi";
 
 interface ProblemWorkspaceProps {
   problem: Problem;
@@ -95,6 +104,8 @@ interface ProblemWorkspaceProps {
   onCloseSubmissionView: () => void;
   /** Called when an engagement action needs auth (token missing). */
   onRequireAuth?: () => void;
+  /** Premium upsell click (editorials / hints). */
+  onUpgradeClick?: () => void;
   /** Notify parent when bookmark state changes (for My Bookmarks list). */
   onBookmarkChange?: (problemId: string, isBookmarked: boolean) => void;
   /** When false, Submit is unavailable (feature flag). */
@@ -123,7 +134,10 @@ function formatCmsEditorial(editorial: ProblemEditorial | null | undefined): str
 }
 
 type LeftTab = "description" | "editorial" | "hints" | "notes" | "submissions";
-type EditorTab = "code" | "testcase" | "result";
+type EditorTab = "code" | "testcase" | "result" | "tools";
+
+/** Free users cannot add custom cases; premium.code_analysis unlocks up to this many. */
+const PREMIUM_CUSTOM_CASE_CAP = 12;
 
 const FormattedDescription: FC<{ text: string }> = ({ text }) => {
   if (!text) return null;
@@ -337,12 +351,16 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
   onLoadSubmission,
   onCloseSubmissionView,
   onRequireAuth,
+  onUpgradeClick,
   onBookmarkChange,
   submissionsEnabled = true,
   advancedEditorEnabled = true,
   supportedLanguages,
 }) => {
+  const { user } = useAuth();
   const problemId = getProblemId(problem);
+  const allowCustomCases = canAccess(user, "premium.code_analysis");
+  const accessLocked = Boolean(problem.accessLocked || (problem.isPremium && !canAccess(user, "premium.problems")));
   const [leftTab, setLeftTab] = useState<LeftTab>("description");
   const [activeEditorTab, setActiveEditorTab] = useState<EditorTab>("code");
   const [revealedHints, setRevealedHints] = useState(0);
@@ -437,6 +455,15 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
   const modKey = useMemo(() => shortcutModLabel(), []);
 
   const handleRunClick = () => {
+    if (accessLocked) {
+      setEngagementError("Upgrade to Premium to run this problem.");
+      return;
+    }
+    if (!hasAccessToken() || !userId) {
+      onRequireAuth?.();
+      setEngagementError("Sign in to run code.");
+      return;
+    }
     setActiveEditorTab("result");
     (onRun || onSubmit)();
   };
@@ -465,7 +492,16 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
   };
 
   const handleSubmitClick = () => {
+    if (accessLocked) {
+      setEngagementError("Upgrade to Premium to submit this problem.");
+      return;
+    }
     if (!submissionsEnabled) return;
+    if (!hasAccessToken() || !userId) {
+      onRequireAuth?.();
+      setEngagementError("Sign in to submit solutions.");
+      return;
+    }
     setActiveEditorTab("result");
     onSubmit();
   };
@@ -494,7 +530,7 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
     (problem.examples?.length ?? 0) > 0 ? problem.examples! : officialCases;
 
   const constraintsText = problem.constraints;
-  const editorialText = problem.editorial || cmsEditorial;
+  const editorialText = cmsEditorial || problem.editorial;
 
   const languageOptions = useMemo(() => {
     if (!supportedLanguages?.length) return LANGUAGE_OPTIONS;
@@ -548,17 +584,19 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
     };
     void load();
 
-    if (!problem.editorial && problemId) {
+    if (problemId) {
       void contentApi.getEditorialByProblemId(problemId).then((res) => {
         if (cancelled) return;
         setCmsEditorial(formatCmsEditorial(res.data));
       }).catch(() => {});
     }
 
-    if (userId && problemId && localStorage.getItem("accessToken")) {
+    if (userId && problemId && getAccessToken()) {
       void contentApi.getProblemNote(userId, problemId).then((res) => {
         if (cancelled) return;
-        if (res?.data?.noteText) setNotes(res.data.noteText);
+        const text = String(res.data?.noteText ?? "");
+        setNotes(text);
+        saveNotes(userId, problemId, text);
       }).catch(() => {});
     }
 
@@ -582,11 +620,17 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
     setNotes(value);
     if (notesTimerRef.current) clearTimeout(notesTimerRef.current);
     notesTimerRef.current = setTimeout(() => {
-      saveNotes(userId, problemId, value);
-      if (userId && problemId && localStorage.getItem("accessToken")) {
+      if (userId && problemId && getAccessToken()) {
         void contentApi
           .upsertProblemNote({ userId, problemId, content: value })
+          .then((res) => {
+            const text = String(res.data?.noteText ?? (value.trim() ? value : ""));
+            saveNotes(userId, problemId, text);
+          })
           .catch(() => {});
+      } else {
+        // Guest/local draft only — not permanent persistence.
+        saveNotes(userId, problemId, value);
       }
     }, 400);
   };
@@ -598,8 +642,8 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
   }, []);
 
   const requireAuthOrContinue = (): boolean => {
-    if (!localStorage.getItem("accessToken") || !userId) {
-      setEngagementError("Please sign in to like, dislike, or save favourites.");
+    if (!hasAccessToken() || !userId) {
+      setEngagementError("Sign in to save this problem.");
       onRequireAuth?.();
       return false;
     }
@@ -663,7 +707,10 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
     const reqId = ++engagementReqRef.current;
 
     try {
-      const res = await engagementApi.setReaction(problemId, reaction);
+      const res =
+        nextReaction === null
+          ? await engagementApi.clearReaction(problemId)
+          : await engagementApi.setReaction(problemId, reaction);
       if (reqId !== engagementReqRef.current) return;
       if (res?.data) applyEngagement(res.data);
     } catch (err: any) {
@@ -722,6 +769,11 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
   };
 
   const handleAddCase = () => {
+    if (!allowCustomCases) {
+      onUpgradeClick?.();
+      return;
+    }
+    if (customTestCases.length >= PREMIUM_CUSTOM_CASE_CAP) return;
     const empty: Testcase = { input: {}, output: "", expectedOutput: "" };
     const next = [...customTestCases, empty];
     onCustomTestCasesChange(next);
@@ -855,8 +907,12 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
             type="button"
             className="lc-action-btn lc-run-btn"
             onClick={handleRunClick}
-            disabled={busy || viewingHistory}
-            title={`Run (${modKey}+Enter)`}
+            disabled={busy || viewingHistory || accessLocked}
+            title={
+              accessLocked
+                ? "Premium problem — upgrade to run"
+                : `Run (${modKey}+Enter)`
+            }
           >
             {isRunning ? (
               <Loader2 size={14} className="animate-spin" strokeWidth={1.75} />
@@ -869,9 +925,11 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
             type="button"
             className="lc-action-btn lc-submit-btn"
             onClick={handleSubmitClick}
-            disabled={busy || viewingHistory || !submissionsEnabled}
+            disabled={busy || viewingHistory || !submissionsEnabled || accessLocked}
             title={
-              !submissionsEnabled
+              accessLocked
+                ? "Premium problem — upgrade to submit"
+                : !submissionsEnabled
                 ? "Submissions are currently disabled"
                 : `Submit (${modKey}+Shift+Enter)`
             }
@@ -1084,6 +1142,7 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
                   <div className="lc-description-wrapper">
                     <div className="lc-title-row">
                       <h1 className="lc-problem-title">{problem.title}</h1>
+                      {problem.isPremium ? <PremiumBadge /> : null}
                       {solved ? (
                         <span className="lc-status-tag solved" aria-label="Solved">
                           <span>Solved</span>
@@ -1106,6 +1165,29 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
                       ))}
                     </div>
 
+                    {accessLocked ? (
+                      <div className="lc-premium-lock" style={{ marginTop: 16 }}>
+                        <UpgradePrompt
+                          feature="premium.problems"
+                          title="Premium problem"
+                          description="This problem is locked. Upgrade to unlock the full statement, editor, and testcases."
+                          onUpgradeClick={
+                            onUpgradeClick ||
+                            (() => {
+                              void billingApi.createCheckout().then((s) => {
+                                const url = s.data?.url;
+                                if (url) window.location.assign(url);
+                              }).catch(() => undefined);
+                            })
+                          }
+                        />
+                        <p className="lc-muted" style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 6 }}>
+                          <Lock size={14} aria-hidden />
+                          Protected content is not sent to free clients.
+                        </p>
+                      </div>
+                    ) : (
+                      <>
                     <div className="lc-action-row">
                       <div className="lc-social-actions">
                         <button
@@ -1196,13 +1278,30 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
                         <FormattedDescription text={constraintsText} />
                       </div>
                     )}
+                      </>
+                    )}
                   </div>
                 )}
 
                 {leftTab === "editorial" && (
                   <div className="lc-description-wrapper">
                     <h3 className="lc-sub-title">Editorial</h3>
-                    {editorialText ? (
+                    {!hasAccessToken() || !userId ? (
+                      <UpgradePrompt
+                        feature="premium.editorial"
+                        title="Sign in to continue"
+                        description="Upgrade to Premium to access this editorial. Create an account first if you are new."
+                        ctaLabel="Sign in"
+                        onUpgradeClick={onUpgradeClick || onRequireAuth}
+                      />
+                    ) : !canAccess(user, "premium.editorial") ? (
+                      <UpgradePrompt
+                        feature="premium.editorial"
+                        title="Upgrade to Premium to access this editorial."
+                        description="Premium unlocks guided solutions and deep-dive writeups."
+                        onUpgradeClick={onUpgradeClick}
+                      />
+                    ) : editorialText ? (
                       <FormattedDescription text={editorialText} />
                     ) : (
                       <div className="lc-empty-state">
@@ -1216,7 +1315,21 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
                 {leftTab === "hints" && (
                   <div className="lc-description-wrapper">
                     <h3 className="lc-sub-title">Hints</h3>
-                    {hints.length === 0 ? (
+                    {!hasAccessToken() || !userId ? (
+                      <UpgradePrompt
+                        feature="premium.hints"
+                        title="Sign in to continue"
+                        description="Sign in to reveal guided hints for this problem."
+                        ctaLabel="Sign in"
+                        onUpgradeClick={onRequireAuth}
+                      />
+                    ) : !canAccess(user, "premium.hints") ? (
+                      <UpgradePrompt
+                        feature="premium.hints"
+                        title="Upgrade to Premium for guided hints."
+                        onUpgradeClick={onUpgradeClick}
+                      />
+                    ) : hints.length === 0 ? (
                       <div className="lc-empty-state">
                         <h4>No hints available</h4>
                         <p>No hints available for this problem.</p>
@@ -1376,6 +1489,19 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
                   <Loader2 size={12} className="animate-spin" />
                 )}
               </button>
+              <span className="lc-editor-tab-sep" aria-hidden>
+                |
+              </span>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeEditorTab === "tools"}
+                className={`lc-editor-tab ${activeEditorTab === "tools" ? "active" : ""}`}
+                onClick={() => setActiveEditorTab("tools")}
+              >
+                <Sparkles size={14} strokeWidth={1.75} />
+                <span>Tools</span>
+              </button>
             </div>
           )}
 
@@ -1449,6 +1575,13 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
                   language={selectedLanguage}
                   settings={editorSettings}
                   readOnly={viewingHistory}
+                  enablePremiumCompletions={allowCustomCases}
+                  signatureHints={{
+                    functionName: problem.functionName,
+                    className: problem.className || "Solution",
+                    parameters: (problem as any).parameters,
+                    returnType: (problem as any).returnType,
+                  }}
                   onChange={(next) => {
                     if (!viewingHistory) onCodeChange(next);
                   }}
@@ -1494,12 +1627,25 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
                     type="button"
                     className="lc-tc-add"
                     onClick={handleAddCase}
-                    disabled={busy}
-                    title="Add testcase"
+                    disabled={
+                      busy ||
+                      (allowCustomCases &&
+                        customTestCases.length >= PREMIUM_CUSTOM_CASE_CAP)
+                    }
+                    title={
+                      allowCustomCases
+                        ? "Add custom testcase (premium)"
+                        : "Custom testcases require premium.code_analysis"
+                    }
                     aria-label="Add testcase"
                   >
                     <Plus size={16} strokeWidth={2} />
                   </button>
+                  {!allowCustomCases ? (
+                    <span className="free-home-muted" style={{ fontSize: 12 }}>
+                      Custom cases: Premium
+                    </span>
+                  ) : null}
                   {isCustomSelected && (
                     <button
                       type="button"
@@ -1940,6 +2086,21 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
                     </div>
                   )}
               </div>
+            </div>
+          )}
+
+          {!viewingHistory && (
+            <div
+              className="lc-tab-pane"
+              role="tabpanel"
+              hidden={activeEditorTab !== "tools"}
+            >
+              <PremiumEditorTools
+                code={userCode}
+                language={selectedLanguage}
+                runResult={runResult}
+                caseResults={runResult?.cases}
+              />
             </div>
           )}
         </section>

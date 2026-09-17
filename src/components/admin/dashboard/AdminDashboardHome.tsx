@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type FC,
   type ReactNode,
@@ -38,6 +39,7 @@ import {
   Loader2,
   Megaphone,
   Pencil,
+  Play,
   Plus,
   Radio,
   RefreshCw,
@@ -69,8 +71,7 @@ import { DifficultyBadge } from "../shared/DifficultyBadge";
 import { SubmissionVerdictBadge } from "../shared/SubmissionVerdictBadge";
 import { DataTable } from "../shared/DataTable";
 import { EmptyState } from "../shared/EmptyState";
-import { hasPermission } from "../../../rbac/permissions";
-import { useAuth } from "../../../context/AuthContext";
+import { usePermission } from "../../../rbac/usePermission";
 import type { AdminTab } from "../adminNav";
 import { WidgetError } from "../shared/WidgetError";
 import { normalizeApiError } from "../../../lib/apiError";
@@ -152,6 +153,9 @@ const TOP_SORTS = [
 
 type TopSort = (typeof TOP_SORTS)[number]["id"];
 
+/** Client-side Live Activity page size (Dashboard feed only). */
+const LIVE_ACTIVITY_PAGE_SIZE = 5;
+
 function formatNumber(n: unknown): string {
   if (n === null || n === undefined || n === "") return "—";
   const num = Number(n);
@@ -164,11 +168,24 @@ function relativeTime(iso?: string): string {
   const t = new Date(iso).getTime();
   if (Number.isNaN(t)) return "—";
   const sec = Math.max(0, Math.floor((Date.now() - t) / 1000));
-  if (sec < 5) return "Just now";
-  if (sec < 60) return `${sec}s ago`;
-  if (sec < 3600) return `${Math.floor(sec / 60)}m ago`;
-  if (sec < 86400) return `${Math.floor(sec / 3600)}h ago`;
-  return new Date(iso).toLocaleString();
+  if (sec < 45) return "just now";
+  if (sec < 60) return "1 min ago";
+  if (sec < 3600) {
+    const m = Math.floor(sec / 60);
+    return m === 1 ? "1 min ago" : `${m} min ago`;
+  }
+  if (sec < 86400) {
+    const h = Math.floor(sec / 3600);
+    return h === 1 ? "1 hour ago" : `${h} hours ago`;
+  }
+  if (sec < 86400 * 7) {
+    const d = Math.floor(sec / 86400);
+    return d === 1 ? "1 day ago" : `${d} days ago`;
+  }
+  return new Date(iso).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
 }
 
 function formatDateTime(iso?: string): string {
@@ -215,6 +232,165 @@ function languageLabel(raw?: string | null): string {
   return map[s] || humanizeStatus(s);
 }
 
+/** Readable Live Activity titles for audit/contest actions (never raw dotted keys). */
+const ACTIVITY_ACTION_LABELS: Record<string, string> = {
+  "contest.start": "Contest Started",
+  "contest.publish": "Contest Published",
+  "contest.problem.add": "Problem Added",
+  "contest.create": "Contest Created",
+  "contest.update": "Contest Updated",
+  "contest.end": "Contest Ended",
+  "contest.delete": "Contest Deleted",
+  "contest.unpublish": "Contest Unpublished",
+};
+
+function humanizeActivityAction(action?: string | null): string {
+  const raw = String(action || "").trim();
+  if (!raw) return "Admin action";
+  const key = raw.toLowerCase();
+  if (ACTIVITY_ACTION_LABELS[key]) return ACTIVITY_ACTION_LABELS[key];
+
+  const parts = key.split(/[._]+/).filter(Boolean);
+  if (parts.length >= 2) {
+    const verb = parts[parts.length - 1];
+    const subjectParts = parts.slice(0, -1);
+    // Prefer the most specific noun: contest.problem.add → Problem
+    const subject =
+      subjectParts[subjectParts.length - 1] === "problem"
+        ? "Problem"
+        : subjectParts
+            .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
+            .join(" ");
+    const verbLabel: Record<string, string> = {
+      start: "Started",
+      publish: "Published",
+      unpublish: "Unpublished",
+      create: "Created",
+      add: "Added",
+      update: "Updated",
+      delete: "Deleted",
+      remove: "Removed",
+      end: "Ended",
+      finish: "Finished",
+    };
+    if (verbLabel[verb]) return `${subject} ${verbLabel[verb]}`;
+  }
+
+  return humanizeStatus(raw.replace(/[._]+/g, " "));
+}
+
+function humanizeActivityResource(resource?: string | null): string {
+  const raw = String(resource || "").trim();
+  if (!raw) return "—";
+  if (/^contest$/i.test(raw)) return "Contest";
+  if (/^problem$/i.test(raw)) return "Problem";
+  if (/^submission$/i.test(raw)) return "Submission";
+  if (/^user$/i.test(raw)) return "User";
+  return humanizeStatus(raw.replace(/[._]+/g, " "));
+}
+
+function isLikelyObjectId(value?: string | null): boolean {
+  return /^[a-f0-9]{24}$/i.test(String(value || "").trim());
+}
+
+function formatActivityEntity(
+  resource?: string | null,
+  resourceId?: string | null,
+): string {
+  const label = humanizeActivityResource(resource);
+  const id = String(resourceId || "").trim();
+  if (!id || isLikelyObjectId(id)) return label;
+  return `${label} · ${id}`;
+}
+
+function submissionActivityIcon(status: string): ReactNode {
+  const st = status.toUpperCase();
+  if (st === "ACCEPTED") {
+    return (
+      <CheckCircle2
+        size={14}
+        strokeWidth={2}
+        className="size-3.5 text-success"
+        aria-hidden
+      />
+    );
+  }
+  if (st === "WRONG_ANSWER") {
+    return (
+      <XCircle
+        size={14}
+        strokeWidth={2}
+        className="size-3.5 text-destructive"
+        aria-hidden
+      />
+    );
+  }
+  if (st === "COMPILATION_ERROR") {
+    return (
+      <Code2
+        size={14}
+        strokeWidth={2}
+        className="size-3.5 text-destructive"
+        aria-hidden
+      />
+    );
+  }
+  if (st === "RUNTIME_ERROR" || st === "SYSTEM_ERROR" || st === "FAILED") {
+    return (
+      <AlertTriangle
+        size={14}
+        strokeWidth={2}
+        className="size-3.5 text-destructive"
+        aria-hidden
+      />
+    );
+  }
+  if (st.includes("EXCEEDED") || st === "PENDING" || st === "RUNNING") {
+    return (
+      <Gauge
+        size={14}
+        strokeWidth={2}
+        className="size-3.5 text-chart-3"
+        aria-hidden
+      />
+    );
+  }
+  return (
+    <FileCode2
+      size={14}
+      strokeWidth={2}
+      className="size-3.5 text-chart-1"
+      aria-hidden
+    />
+  );
+}
+
+function auditActivityIcon(action: string): ReactNode {
+  const key = action.toLowerCase();
+  const cls = "size-3.5 text-chart-2";
+  if (key.includes("delete") || key.includes("remove")) {
+    return (
+      <Trash2 size={14} strokeWidth={2} className="size-3.5 text-destructive" aria-hidden />
+    );
+  }
+  if (key === "contest.start" || key.endsWith(".start")) {
+    return <Play size={14} strokeWidth={2} className={cls} aria-hidden />;
+  }
+  if (key === "contest.publish" || key.endsWith(".publish")) {
+    return <Send size={14} strokeWidth={2} className={cls} aria-hidden />;
+  }
+  if (key.includes("problem.add") || key.endsWith(".add")) {
+    return <Plus size={14} strokeWidth={2} className={cls} aria-hidden />;
+  }
+  if (key === "contest.create" || key.endsWith(".create")) {
+    return <Trophy size={14} strokeWidth={2} className={cls} aria-hidden />;
+  }
+  if (key.includes("update") || key.includes("edit")) {
+    return <Pencil size={14} strokeWidth={2} className={cls} aria-hidden />;
+  }
+  return <ShieldAlert size={14} strokeWidth={2} className={cls} aria-hidden />;
+}
+
 function initialsFrom(name?: string | null, email?: string | null): string {
   const base = String(name || email || "?").trim();
   const parts = base.split(/\s+/).filter(Boolean);
@@ -256,7 +432,7 @@ interface AdminDashboardHomeProps {
 export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
   onNavigate,
 }) => {
-  const { user } = useAuth();
+  const { can } = usePermission();
   const toast = useToast();
   const [range, setRange] = useState<DashboardRange>("30d");
   const [overview, setOverview] = useState<any>(null);
@@ -272,6 +448,7 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
   );
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const [tick, setTick] = useState(0);
+  const [liveActivityPage, setLiveActivityPage] = useState(1);
 
   const [submissions, setSubmissions] = useState<any[]>([]);
   const [subsMeta, setSubsMeta] = useState({
@@ -297,7 +474,29 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
   const [userSearchQ, setUserSearchQ] = useState("");
 
   const [problemMap, setProblemMap] = useState<Record<string, any>>({});
+  const problemMapRef = useRef(problemMap);
+  problemMapRef.current = problemMap;
   const [topSort, setTopSort] = useState<TopSort>("attempts");
+
+  /** Fetch titles only for IDs not already in the map (single batch request). */
+  const enrichProblemTitles = useCallback(async (ids: string[]) => {
+    const missing = [
+      ...new Set(ids.map(String).filter(Boolean)),
+    ].filter((id) => !problemMapRef.current[id]?.title);
+    if (!missing.length) return;
+    try {
+      const titles = await adminProblemApi.lookupTitles(missing);
+      const map: Record<string, any> = {};
+      for (const p of titles.data || []) {
+        map[String(p.id)] = p;
+      }
+      if (Object.keys(map).length) {
+        setProblemMap((prev) => ({ ...prev, ...map }));
+      }
+    } catch {
+      // Display-only enrichment; metrics remain from analytics/submissions APIs
+    }
+  }, []);
 
   const [execHealth, setExecHealth] = useState<any>(null);
   const [execError, setExecError] = useState<string | null>(null);
@@ -362,17 +561,11 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
         toast.warning("Partial analytics", (result as any).softWarning);
       }
 
-      // Enrich top problems with titles/difficulty when possible
-      try {
-        const list = await adminProblemApi.list({ page: 1, limit: 200 });
-        const map: Record<string, any> = {};
-        for (const p of list.data || []) {
-          const id = String(p.id || p._id);
-          map[id] = p;
-        }
-        setProblemMap(map);
-      } catch {
-      }
+      // Enrich only the problem IDs present in dashboard chart data (not first-N catalog page)
+      const topIds = (result.charts?.topProblems || [])
+        .map((r: any) => String(r.problemId || r._id || "").trim())
+        .filter(Boolean);
+      await enrichProblemTitles(topIds);
 
       try {
         const fav = await adminProblemApi.favouriteAnalytics();
@@ -395,7 +588,7 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
     } finally {
       setLoading(false);
     }
-  }, [range, toast]);
+  }, [range, toast, enrichProblemTitles]);
 
   const loadSubmissions = useCallback(async () => {
     setSubsLoading(true);
@@ -415,6 +608,11 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
         total: res.meta?.total || 0,
         totalPages: res.meta?.totalPages || 1,
       });
+
+      const subIds = (res.data || [])
+        .map((s: any) => String(s.problemId || "").trim())
+        .filter(Boolean);
+      await enrichProblemTitles(subIds);
     } catch (err: unknown) {
       const n = normalizeApiError(err);
       setSubsError({ title: n.title, message: n.message });
@@ -422,7 +620,7 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
     } finally {
       setSubsLoading(false);
     }
-  }, [subsPage, subsStatus, subsSearchQ]);
+  }, [subsPage, subsStatus, subsSearchQ, enrichProblemTitles]);
 
   const loadSide = useCallback(async () => {
     const [healthRows, rtRes, audit, exec, usersRes] = await Promise.all([
@@ -446,7 +644,7 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
           error: normalizeApiError(err).message,
         })
       ),
-      hasPermission(user?.role, "audit:view")
+      can("audit:view")
         ? adminAuthApi.listAuditLogs({ page: 1, limit: 12 }).catch(() => ({
           data: [] as any[],
         }))
@@ -458,7 +656,7 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
           error: normalizeApiError(err).message,
         })
       ),
-      hasPermission(user?.role, "users:view")
+      can("users:view")
         ? adminAuthApi
           .listUsers({
             page: 1,
@@ -495,7 +693,7 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
       setRecentUsers([]);
       setUsersError(usersRes.error || "Unable to load users");
     }
-  }, [user?.role, userSearchQ]);
+  }, [can, userSearchQ]);
 
   const loadLeaderboard = useCallback(async () => {
     setLbLoading(true);
@@ -767,59 +965,72 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
       when: string;
       status?: string | null;
       icon: ReactNode;
+      dedupeKey: string;
     }> = [];
+    const seen = new Set<string>();
+
+    const pushUnique = (item: (typeof items)[number]) => {
+      if (seen.has(item.dedupeKey)) return;
+      seen.add(item.dedupeKey);
+      items.push(item);
+    };
+
     for (const s of submissions.slice(0, 8)) {
       const id = String(s.id || s._id);
       const pid = String(s.problemId || "");
       const pTitle =
         problemMap[pid]?.title || `Problem ${pid.slice(0, 8) || "—"}`;
       const st = String(s.status || "").toUpperCase();
-      const ok = st === "ACCEPTED";
-      const fail =
-        st.includes("ERROR") ||
-        st === "WRONG_ANSWER" ||
-        st === "FAILED" ||
-        st.includes("EXCEEDED");
-      items.push({
+      const when = String(s.createdAt || s.updatedAt || "");
+      pushUnique({
         id: `sub-${id}`,
-        title: `Submission ${humanizeStatus(st || "updated")}`,
-        entity: `${pTitle} · ${s.language || "—"}`,
-        when: s.createdAt || s.updatedAt,
+        dedupeKey: `sub-${id}-${st}-${when}`,
+        title: "Submission",
+        entity: `${pTitle} · ${languageLabel(s.language)}`,
+        when,
         status: st || null,
-        icon: ok ? (
-          <CheckCircle2 size={14} strokeWidth={2} className="size-3.5 text-success" aria-hidden />
-        ) : fail ? (
-          <XCircle size={14} strokeWidth={2} className="size-3.5 text-destructive" aria-hidden />
-        ) : (
-          <FileCode2 size={14} strokeWidth={2} className="size-3.5 text-chart-1" aria-hidden />
-        ),
+        icon: submissionActivityIcon(st),
       });
     }
+
     for (const a of auditRows.slice(0, 4)) {
       const action = String(a.action || "Admin action");
-      const lower = action.toLowerCase();
-      const icon = lower.includes("delete") ? (
-        <Trash2 size={14} strokeWidth={2} className="size-3.5 text-destructive" aria-hidden />
-      ) : lower.includes("update") || lower.includes("edit") ? (
-        <Pencil size={14} strokeWidth={2} className="size-3.5 text-chart-2" aria-hidden />
-      ) : (
-        <ShieldAlert size={14} strokeWidth={2} className="size-3.5 text-chart-2" aria-hidden />
-      );
-      items.push({
-        id: `audit-${a.id || a.action}-${a.createdAt}`,
-        title: action,
-        entity: `${a.resource || "—"}${a.resourceId ? ` · ${a.resourceId}` : ""}`,
-        when: a.createdAt,
-        icon,
+      const when = String(a.createdAt || "");
+      const resourceId = a.resourceId ? String(a.resourceId) : "";
+      pushUnique({
+        id: `audit-${a.id || action}-${when}`,
+        dedupeKey: `audit-${action}-${a.resource || ""}-${resourceId}-${when}`,
+        title: humanizeActivityAction(action),
+        entity: formatActivityEntity(a.resource, resourceId),
+        when,
+        icon: auditActivityIcon(action),
       });
     }
+
     return items
       .sort(
         (a, b) =>
-          new Date(b.when || 0).getTime() - new Date(a.when || 0).getTime()
+          new Date(b.when || 0).getTime() - new Date(a.when || 0).getTime(),
       )
       .slice(0, 12);
   }, [submissions, auditRows, problemMap]);
+
+  const liveActivityTotalPages = Math.max(
+    1,
+    Math.ceil(liveActivity.length / LIVE_ACTIVITY_PAGE_SIZE),
+  );
+
+  // Keep current page when data refreshes; only clamp if it becomes out of range.
+  useEffect(() => {
+    setLiveActivityPage((p) =>
+      Math.min(Math.max(1, p), liveActivityTotalPages),
+    );
+  }, [liveActivityTotalPages]);
+
+  const pagedLiveActivity = useMemo(() => {
+    const start = (liveActivityPage - 1) * LIVE_ACTIVITY_PAGE_SIZE;
+    return liveActivity.slice(start, start + LIVE_ACTIVITY_PAGE_SIZE);
+  }, [liveActivity, liveActivityPage]);
 
   const newUsersTrend = formatTrend(kpis.newUsersTrendPct);
 
@@ -888,16 +1099,25 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
           </div>
         </header>
 
-        {fallbackMode && !coreError ? (
+        {(fallbackMode || overview?.degraded) && !coreError ? (
           <div className="admin-alert admin-alert-warn" role="status">
             <div className="admin-alert-icon" aria-hidden>
               <AlertTriangle size={18} strokeWidth={2} className="size-[18px]" />
             </div>
             <div className="admin-alert-body">
-              <strong>Analytics service unavailable</strong>
+              <strong>
+                {fallbackMode
+                  ? "Analytics service unavailable"
+                  : "Partial analytics data"}
+              </strong>
               <p>
-                Dashboard is running in degraded mode. KPIs and charts are being
-                loaded from fallback Auth, Problem, and Submission services.
+                {fallbackMode
+                  ? "Dashboard is running in degraded mode. KPIs and charts are being loaded from fallback Auth, Problem, and Submission services."
+                  : "Some metrics may be incomplete or unavailable."}
+                {Array.isArray(overview?.unavailableSources) &&
+                overview.unavailableSources.length > 0
+                  ? ` Missing: ${overview.unavailableSources.join(", ")}.`
+                  : null}
               </p>
             </div>
             <Button
@@ -1080,27 +1300,86 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
                   description="There are no live platform events available right now."
                 />
               ) : (
-                <ul className="admin-activity-timeline">
-                  {liveActivity.map((item) => (
-                    <li key={item.id} className="admin-activity-tl-item">
-                      <span className="admin-activity-tl-dot" aria-hidden>
-                        {item.icon}
-                      </span>
-                      <div className="admin-activity-tl-body">
-                        <div className="admin-activity-tl-top">
-                          <span className="title">{item.title}</span>
-                          {item.status ? (
-                            <SubmissionVerdictBadge status={item.status} />
-                          ) : null}
+                <>
+                  <ul className="admin-activity-timeline">
+                    {pagedLiveActivity.map((item) => (
+                      <li key={item.id} className="admin-activity-tl-item">
+                        <span className="admin-activity-tl-dot" aria-hidden>
+                          {item.icon}
+                        </span>
+                        <div className="admin-activity-tl-body">
+                          <div className="admin-activity-tl-top">
+                            <span className="title">{item.title}</span>
+                            {item.status ? (
+                              <SubmissionVerdictBadge
+                                status={item.status}
+                                className="admin-activity-verdict"
+                              />
+                            ) : null}
+                          </div>
+                          <div className="entity" title={item.entity}>
+                            {item.entity}
+                          </div>
+                          <time className="when" dateTime={item.when}>
+                            {relativeTime(item.when)}
+                          </time>
                         </div>
-                        <div className="entity">{item.entity}</div>
-                        <time className="when" dateTime={item.when}>
-                          {formatDateTime(item.when)}
-                        </time>
+                      </li>
+                    ))}
+                  </ul>
+                  {liveActivityTotalPages > 1 ? (
+                    <nav
+                      className="admin-activity-pager"
+                      aria-label="Live activity pages"
+                    >
+                      <button
+                        type="button"
+                        className="admin-activity-pager-btn"
+                        disabled={liveActivityPage <= 1}
+                        onClick={() =>
+                          setLiveActivityPage((p) => Math.max(1, p - 1))
+                        }
+                      >
+                        Previous
+                      </button>
+                      <div className="admin-activity-pager-pages" role="list">
+                        {Array.from(
+                          { length: liveActivityTotalPages },
+                          (_, i) => i + 1,
+                        ).map((page) => (
+                          <button
+                            key={page}
+                            type="button"
+                            role="listitem"
+                            className={
+                              page === liveActivityPage
+                                ? "admin-activity-pager-page active"
+                                : "admin-activity-pager-page"
+                            }
+                            aria-current={
+                              page === liveActivityPage ? "page" : undefined
+                            }
+                            onClick={() => setLiveActivityPage(page)}
+                          >
+                            {page}
+                          </button>
+                        ))}
                       </div>
-                    </li>
-                  ))}
-                </ul>
+                      <button
+                        type="button"
+                        className="admin-activity-pager-btn"
+                        disabled={liveActivityPage >= liveActivityTotalPages}
+                        onClick={() =>
+                          setLiveActivityPage((p) =>
+                            Math.min(liveActivityTotalPages, p + 1),
+                          )
+                        }
+                      >
+                        Next
+                      </button>
+                    </nav>
+                  ) : null}
+                </>
               )}
             </div>
           </section>

@@ -1,4 +1,5 @@
 import { authClient } from "./authClient";
+import type { AccessTier, PublicSubscription } from "../access/accessModel";
 
 export interface AdminUser {
   id: string;
@@ -15,6 +16,8 @@ export interface AdminUser {
   createdAt?: string;
   updatedAt?: string;
   permissions?: string[];
+  subscription?: PublicSubscription;
+  accessTier?: AccessTier;
 }
 
 export interface AuditLog {
@@ -79,6 +82,31 @@ export interface UserSession {
   createdAt?: string;
   expiresAt?: string;
   expired: boolean;
+}
+
+export interface PlatformActivityItem extends UserActivityItem {
+  userId?: string | null;
+  userEmail?: string | null;
+  userName?: string | null;
+}
+
+export interface PlatformSessionRow extends UserSession {
+  userId?: string | null;
+  userEmail?: string | null;
+  userName?: string | null;
+}
+
+export interface PlatformProgressRow {
+  userId: string;
+  name: string;
+  email: string;
+  role: string;
+  status: string;
+  submissionCount: number;
+  acceptedCount: number;
+  acceptanceRate: number;
+  problemsAttempted: number;
+  problemsSolved: number;
 }
 
 export const adminAuthApi = {
@@ -193,6 +221,37 @@ export const adminAuthApi = {
     return res.data as { success: boolean; data: UserSession[] };
   },
 
+  listPlatformActivity: async (params?: { page?: number; limit?: number }) => {
+    const res = await authClient.get("/auth/admin/activity", { params });
+    return res.data as {
+      success: boolean;
+      data: PlatformActivityItem[];
+      meta: PageMeta;
+    };
+  },
+
+  listPlatformSessions: async (params?: { page?: number; limit?: number }) => {
+    const res = await authClient.get("/auth/admin/sessions", { params });
+    return res.data as {
+      success: boolean;
+      data: PlatformSessionRow[];
+      meta: PageMeta;
+    };
+  },
+
+  listPlatformProgress: async (params?: {
+    page?: number;
+    limit?: number;
+    search?: string;
+  }) => {
+    const res = await authClient.get("/auth/admin/progress", { params });
+    return res.data as {
+      success: boolean;
+      data: PlatformProgressRow[];
+      meta: PageMeta;
+    };
+  },
+
   revokeUserSession: async (id: string, sessionId: string) => {
     const res = await authClient.delete(
       `/auth/admin/users/${id}/sessions/${sessionId}`
@@ -214,6 +273,30 @@ export const adminAuthApi = {
     const res = await authClient.patch(`/auth/admin/users/${id}/status`, {
       status,
     });
+    return res.data as { success: boolean; data: AdminUser };
+  },
+
+  updateSubscription: async (
+    id: string,
+    payload: {
+      plan: "FREE" | "PREMIUM";
+      status:
+        | "none"
+        | "active"
+        | "canceled"
+        | "past_due"
+        | "expired"
+        | "grace";
+      currentPeriodEnd?: string | null;
+      gracePeriodEnd?: string | null;
+      cancelAtPeriodEnd?: boolean;
+      source?: "default" | "admin_grant" | "promo" | "billing";
+    }
+  ) => {
+    const res = await authClient.patch(
+      `/auth/admin/users/${id}/subscription`,
+      payload
+    );
     return res.data as { success: boolean; data: AdminUser };
   },
 

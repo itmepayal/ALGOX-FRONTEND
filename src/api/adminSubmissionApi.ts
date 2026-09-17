@@ -54,11 +54,6 @@ export const adminSubmissionApi = {
     return res.data as { success: boolean; data: Submission };
   },
 
-  update: async (id: string, payload: Partial<Submission>) => {
-    const res = await submissionClient.put(`/submissions/${id}`, payload);
-    return res.data as { success: boolean; data: Submission };
-  },
-
   remove: async (id: string) => {
     const res = await submissionClient.delete(`/submissions/${id}`);
     return res.data;

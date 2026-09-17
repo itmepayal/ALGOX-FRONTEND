@@ -4,8 +4,7 @@ import { adminAuthApi, type AdminUser } from "../../../api/adminAuthApi";
 import { DataTable } from "../shared/DataTable";
 import { StatusBadge } from "../shared/StatusBadge";
 import { PermissionGuard } from "../shared/PermissionGuard";
-import { hasPermission } from "../../../rbac/permissions";
-import { useAuth } from "../../../context/AuthContext";
+import { usePermission } from "../../../rbac/usePermission";
 
 interface Props {
   onOpen: (id: string) => void;
@@ -13,8 +12,8 @@ interface Props {
 }
 
 export const UserListPage: FC<Props> = ({ onOpen, onCreate }) => {
-  const { user } = useAuth();
-  const canCreate = hasPermission(user?.role, "users:create");
+  const { can } = usePermission();
+  const canCreate = can("users:create");
   const [rows, setRows] = useState<AdminUser[]>([]);
   const [page, setPage] = useState(1);
   const [meta, setMeta] = useState({ total: 0, totalPages: 1 });

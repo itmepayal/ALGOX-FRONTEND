@@ -17,6 +17,7 @@ import {
   Star,
   Timer,
   Upload,
+  Lock,
 } from "lucide-react";
 import type { Problem } from "../api/problemApi";
 import type { Submission } from "../api/submissionApi";
@@ -37,14 +38,19 @@ import {
   DSA_BEST_SHEET,
   STRIVER_A2Z_SHEET_ID,
   STRIVER_A2Z_SHEET_NAME,
+  type DsaBestSheet,
+  type SheetDifficulty,
+  type SheetProblemRef,
+  type SheetTopic,
 } from "../data/dsaBestSheet";
+import { sheetApi, type SheetPreview } from "../api/sheetApi";
 import {
   getProblemResources,
-  hasNote,
   loadNotes,
   saveNotes,
 } from "../utils/workspacePersistence";
 import { engagementApi } from "../api/engagementApi";
+import { contentApi } from "../api/contentApi";
 import { sheetProgressApi } from "../api/sheetProgressApi";
 import { progressApi, type ProgressImportPreview } from "../api/progressApi";
 import { YouTubeResourceIcon } from "./YouTubeResourceIcon";
@@ -54,14 +60,76 @@ import {
   loadAllSessions,
   syncPlannerWithAccepted,
   toDateKey,
+  type StudySession,
 } from "../utils/learningPersistence";
+import { hasAccessToken } from "../api/accessToken";
 import {
   buildDayActivityMap,
   computeStreaks,
   everAcceptedProblemIds,
 } from "../utils/learningStats";
+import { PremiumBadge } from "./access/PremiumBadge";
 
 const importBannerKey = (uid: string) => `ax-import-banner-dismissed:${uid}`;
+
+function previewToCatalog(preview: SheetPreview): DsaBestSheet | null {
+  const sections = preview.sections;
+  if (!sections?.length) return null;
+
+  const topics: SheetTopic[] = [];
+  const uniqueMap = new Map<
+    string,
+    SheetProblemRef & { category: string; topics: string[] }
+  >();
+  let order = 0;
+
+  for (const sec of sections) {
+    for (const topic of sec.topics || []) {
+      const topicName = topic.title || topic.name || "General";
+      const problems: SheetProblemRef[] = [];
+
+      for (const p of topic.problems || []) {
+        if (!p.slug && !p.title) continue;
+        const ref: SheetProblemRef = {
+          title: p.title || p.slug || "Untitled",
+          slug: p.slug || "",
+          difficulty: String(p.difficulty || "easy").toLowerCase() as SheetDifficulty,
+        };
+        problems.push(ref);
+        const key = ref.slug.toLowerCase() || ref.title.toLowerCase();
+        const existing = uniqueMap.get(key);
+        if (existing) {
+          if (!existing.topics.includes(topicName)) {
+            existing.topics.push(topicName);
+          }
+        } else {
+          uniqueMap.set(key, {
+            ...ref,
+            category: topicName,
+            topics: [topicName],
+          });
+        }
+      }
+
+      if (problems.length) {
+        topics.push({ order: order++, name: topicName, problems });
+      }
+    }
+  }
+
+  if (!topics.length) return null;
+  const uniqueProblems = Array.from(uniqueMap.values());
+  return {
+    name: preview.title || preview.name || "Sheet",
+    topics,
+    uniqueProblems,
+    stats: {
+      topics: topics.length,
+      sheetEntries: topics.reduce((n, t) => n + t.problems.length, 0),
+      uniqueProblems: uniqueProblems.length,
+    },
+  };
+}
 
 interface ProblemsSheetProps {
   problems: Problem[];
@@ -69,14 +137,19 @@ interface ProblemsSheetProps {
   submissions: Submission[];
   searchQuery: string;
   selectedDifficulty: string;
+  accessFilter?: "all" | "free" | "premium";
   statusFilter: "all" | "solved" | "attempted" | "unsolved";
   bookmarkedIds: Set<string>;
   revisionIds: Set<string>;
   userId?: string;
   learningRefreshKey?: number;
   userName?: string;
+  problemPage?: number;
+  totalPages?: number;
+  onProblemPageChange?: (page: number) => void;
   onSearchChange: (q: string) => void;
   onDifficultyChange: (d: string) => void;
+  onAccessFilterChange?: (a: "all" | "free" | "premium") => void;
   onStatusFilterChange: (s: "all" | "solved" | "attempted" | "unsolved") => void;
   onSelectProblem: (p: Problem) => void;
   onRemoveBookmark?: (problemId: string) => void;
@@ -98,13 +171,18 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
   submissions,
   searchQuery,
   selectedDifficulty,
+  accessFilter = "all",
   statusFilter,
   bookmarkedIds,
   revisionIds,
   userId,
   learningRefreshKey = 0,
+  problemPage = 1,
+  totalPages = 1,
+  onProblemPageChange,
   onSearchChange,
   onDifficultyChange,
+  onAccessFilterChange,
   onStatusFilterChange,
   onSelectProblem,
   onBookmarkChange,
@@ -115,11 +193,13 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
 }) => {
   const [sheetTab, setSheetTab] = useState<"all" | "revision" | "bookmarks">("all");
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [studySessions, setStudySessions] = useState<StudySession[]>([]);
   const [noteProblem, setNoteProblem] = useState<Problem | null>(null);
   const [noteDraft, setNoteDraft] = useState("");
+  const [noteTagsDraft, setNoteTagsDraft] = useState("");
   const [noteSaving, setNoteSaving] = useState(false);
   const [noteError, setNoteError] = useState("");
-  const [noteVersion, setNoteVersion] = useState(0);
+  const [noteProblemIds, setNoteProblemIds] = useState<Set<string>>(new Set());
   const [revisionBusy, setRevisionBusy] = useState<string | null>(null);
   const [bookmarkBusy, setBookmarkBusy] = useState<string | null>(null);
   const [rowError, setRowError] = useState("");
@@ -145,6 +225,69 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
   const [importPreviewing, setImportPreviewing] = useState(false);
   const [importConfirming, setImportConfirming] = useState(false);
   const importInFlight = useRef(false);
+  const [activeCatalog, setActiveCatalog] = useState<DsaBestSheet>(DSA_BEST_SHEET);
+  const [catalogSource, setCatalogSource] = useState<"server" | "fallback">(
+    "fallback"
+  );
+  const [activeSheetId, setActiveSheetId] = useState(STRIVER_A2Z_SHEET_ID);
+  const [sheetDisplayName, setSheetDisplayName] = useState(STRIVER_A2Z_SHEET_NAME);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const listRes = await sheetApi.listPublished();
+        const sheets = listRes.data || [];
+        const picked =
+          sheets.find((s) => s.id === STRIVER_A2Z_SHEET_ID) || sheets[0];
+        if (!picked) return;
+        const previewRes = await sheetApi.getPreview(picked.id);
+        const catalog = previewRes.data
+          ? previewToCatalog(previewRes.data)
+          : null;
+        if (!cancelled && catalog) {
+          setActiveCatalog(catalog);
+          setCatalogSource("server");
+          setActiveSheetId(picked.id);
+          setSheetDisplayName(picked.name || catalog.name);
+        }
+      } catch {
+        /* bundled fallback */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!userId || !hasAccessToken()) {
+      setNoteProblemIds(new Set());
+      return;
+    }
+    void contentApi
+      .listUserNotes(userId)
+      .then((res) => {
+        if (cancelled) return;
+        const ids = new Set<string>();
+        for (const n of res.data || []) {
+          const pid = normalizeProblemId(n.problemId);
+          if (!pid) continue;
+          if (String(n.noteText || "").trim()) {
+            ids.add(pid);
+            saveNotes(userId, pid, n.noteText);
+          }
+        }
+        setNoteProblemIds(ids);
+      })
+      .catch(() => {
+        if (!cancelled) setNoteProblemIds(new Set());
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
 
   const problemBySlug = useMemo(() => {
     const map = new Map<string, Problem>();
@@ -159,7 +302,7 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
   const sheetProblems = useMemo(() => {
     const seen = new Set<string>();
     const items: Problem[] = [];
-    for (const ref of DSA_BEST_SHEET.uniqueProblems) {
+    for (const ref of activeCatalog.uniqueProblems) {
       const hit =
         problemBySlug.get(ref.slug.toLowerCase()) ||
         problemBySlug.get(ref.title.trim().toLowerCase());
@@ -170,7 +313,7 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
       items.push(hit);
     }
     return items;
-  }, [problemBySlug]);
+  }, [problemBySlug, activeCatalog]);
 
   useEffect(() => {
     if (!userId) {
@@ -181,7 +324,7 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
     let cancelled = false;
     (async () => {
       try {
-        const res = await sheetProgressApi.getProgress(STRIVER_A2Z_SHEET_ID);
+        const res = await sheetProgressApi.getProgress(activeSheetId);
         if (!cancelled) setSheetResetAt(res.data?.resetAt ?? null);
       } catch {
         if (!cancelled) setSheetResetAt(null);
@@ -196,7 +339,7 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [userId]);
+  }, [userId, activeSheetId]);
 
   const dismissImportBanner = () => {
     setImportBannerVisible(false);
@@ -245,7 +388,7 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
       setImportPreview(null);
       dismissImportBanner();
       try {
-        const sheetRes = await sheetProgressApi.getProgress(STRIVER_A2Z_SHEET_ID);
+        const sheetRes = await sheetProgressApi.getProgress(activeSheetId);
         setSheetResetAt(sheetRes.data?.resetAt ?? null);
       } catch {
         /* keep existing */
@@ -278,17 +421,7 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
   }, [toast]);
 
   const matchesFilters = (p: Problem) => {
-    const q = searchQuery.toLowerCase();
     const pid = normalizeProblemId(p.id || p._id);
-    const matchSearch =
-      !q ||
-      p.title.toLowerCase().includes(q) ||
-      p.slug?.toLowerCase().includes(q) ||
-      p.category?.toLowerCase().includes(q) ||
-      p.tags?.some((t) => t.toLowerCase().includes(q));
-    const matchDiff =
-      selectedDifficulty === "All" ||
-      normalizeDifficulty(p.difficulty) === selectedDifficulty.toLowerCase();
     const matchTab =
       sheetTab === "all" ||
       (sheetTab === "revision" && revisionIds.has(pid)) ||
@@ -300,7 +433,7 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
       (statusFilter === "solved" && completed) ||
       (statusFilter === "attempted" && attempted) ||
       (statusFilter === "unsolved" && !completed);
-    return matchSearch && matchDiff && matchTab && matchStatus;
+    return matchTab && matchStatus;
   };
 
   const filtered = useMemo(() => {
@@ -319,7 +452,7 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
 
   /** Topic-wise sections from DSA Best Sheet (problems may appear under multiple topics). */
   const sheetSections = useMemo(() => {
-    const sections = DSA_BEST_SHEET.topics.map((topic) => {
+    const sections = activeCatalog.topics.map((topic) => {
       const seen = new Set<string>();
       const items: Problem[] = [];
       for (const ref of topic.problems) {
@@ -338,7 +471,7 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
 
     // Any DB problems not present in the curated sheet
     const sheetSlugs = new Set(
-      DSA_BEST_SHEET.uniqueProblems.map((p) => p.slug.toLowerCase())
+      activeCatalog.uniqueProblems.map((p) => p.slug.toLowerCase())
     );
     const extras = filtered.filter(
       (p) => !p.slug || !sheetSlugs.has(p.slug.toLowerCase())
@@ -358,6 +491,7 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
     statusFilter,
     submissions,
     sheetResetAt,
+    activeCatalog,
   ]);
 
   const progress = computeProgress(sheetProblems, submissions, sheetResetAt);
@@ -388,16 +522,34 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
     year: "numeric",
   });
 
+  useEffect(() => {
+    if (!userId) {
+      setStudySessions([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        await syncPlannerWithAccepted(
+          userId,
+          toDateKey(),
+          everAcceptedProblemIds(submissions)
+        );
+        const list = await loadAllSessions(userId);
+        if (!cancelled) setStudySessions(list);
+      } catch {
+        /* ignore — streak still uses submissions */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, submissions, learningRefreshKey]);
+
   const streak = useMemo(() => {
-    void learningRefreshKey;
-    const sessions = loadAllSessions(userId);
-    syncPlannerWithAccepted(
-      userId,
-      toDateKey(),
-      everAcceptedProblemIds(submissions)
-    );
-    return computeStreaks(buildDayActivityMap(submissions, sessions)).current;
-  }, [submissions, userId, learningRefreshKey]);
+    return computeStreaks(buildDayActivityMap(submissions, studySessions))
+      .current;
+  }, [submissions, studySessions]);
 
   useEffect(() => {
     if (Object.keys(expanded).length === 0 && sheetSections.length > 0) {
@@ -412,7 +564,7 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
     resetInFlight.current = true;
     setResetConfirming(true);
     try {
-      const res = await sheetProgressApi.resetProgress(STRIVER_A2Z_SHEET_ID);
+      const res = await sheetProgressApi.resetProgress(activeSheetId);
       setSheetResetAt(res.data?.resetAt ?? new Date().toISOString());
       setResetConfirmOpen(false);
       setToast({
@@ -434,7 +586,7 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
 
   const openPickedProblem = (problem: Problem) => {
     const pid = normalizeProblemId(problem.id || problem._id);
-    if (pid) pushRecentRandomId(STRIVER_A2Z_SHEET_ID, pid);
+    if (pid) pushRecentRandomId(activeSheetId, pid);
     setToast({ type: "success", text: `Random problem selected: ${problem.title}` });
     onSelectProblem(problem);
   };
@@ -470,7 +622,7 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
           sheetResetAt,
           {
             mode: effectiveMode,
-            recentIds: loadRecentRandomIds(STRIVER_A2Z_SHEET_ID),
+            recentIds: loadRecentRandomIds(activeSheetId),
             sheetAllComplete: sheetAllComplete && !hasActiveFilters,
           }
         );
@@ -526,17 +678,52 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
     const pid = normalizeProblemId(p.id || p._id);
     setNoteProblem(p);
     setNoteDraft(loadNotes(userId, pid));
+    setNoteTagsDraft("");
     setNoteError("");
+    if (userId && pid && hasAccessToken()) {
+      void contentApi
+        .getProblemNote(userId, pid)
+        .then((res) => {
+          const text = String(res.data?.noteText ?? "");
+          setNoteDraft(text);
+          setNoteTagsDraft((res.data?.tags || []).join(", "));
+          saveNotes(userId, pid, text);
+        })
+        .catch(() => {
+          /* keep cache draft */
+        });
+    }
   };
 
-  const saveNote = () => {
+  const saveNote = async () => {
     if (!noteProblem) return;
-    const pid = (noteProblem.id || noteProblem._id || "").toString();
+    const pid = normalizeProblemId(noteProblem.id || noteProblem._id);
+    if (!pid) return;
+    if (!userId || !hasAccessToken()) {
+      setNoteError("Sign in to save notes to your account.");
+      return;
+    }
     setNoteSaving(true);
     setNoteError("");
+    const tags = noteTagsDraft
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean);
     try {
-      saveNotes(userId, pid, noteDraft);
-      setNoteVersion((v) => v + 1);
+      const res = await contentApi.upsertProblemNote({
+        userId,
+        problemId: pid,
+        content: noteDraft,
+        tags,
+      });
+      const saved = Boolean(res.data?.noteText?.trim());
+      saveNotes(userId, pid, saved ? noteDraft : "");
+      setNoteProblemIds((prev) => {
+        const next = new Set(prev);
+        if (saved) next.add(pid);
+        else next.delete(pid);
+        return next;
+      });
       setNoteProblem(null);
     } catch {
       setNoteError("Failed to save note. Please try again.");
@@ -545,13 +732,32 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
     }
   };
 
-  const deleteNote = () => {
+  const deleteNote = async () => {
     if (!noteProblem) return;
-    const pid = (noteProblem.id || noteProblem._id || "").toString();
-    saveNotes(userId, pid, "");
-    setNoteDraft("");
-    setNoteVersion((v) => v + 1);
-    setNoteProblem(null);
+    const pid = normalizeProblemId(noteProblem.id || noteProblem._id);
+    if (!pid) return;
+    if (!userId || !hasAccessToken()) {
+      setNoteError("Sign in to delete notes from your account.");
+      return;
+    }
+    setNoteSaving(true);
+    setNoteError("");
+    try {
+      await contentApi.deleteProblemNote(userId, pid);
+      saveNotes(userId, pid, "");
+      setNoteDraft("");
+      setNoteTagsDraft("");
+      setNoteProblemIds((prev) => {
+        const next = new Set(prev);
+        next.delete(pid);
+        return next;
+      });
+      setNoteProblem(null);
+    } catch {
+      setNoteError("Failed to delete note. Please try again.");
+    } finally {
+      setNoteSaving(false);
+    }
   };
 
   const toggleRevision = async (p: Problem, e: MouseEvent) => {
@@ -559,7 +765,7 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
     e.stopPropagation();
     const pid = normalizeProblemId(p.id || p._id);
     if (!pid || revisionBusy) return;
-    if (!localStorage.getItem("accessToken")) {
+    if (!hasAccessToken()) {
       setRowError("Please sign in to mark problems for revision.");
       return;
     }
@@ -590,7 +796,7 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
     e.stopPropagation();
     const pid = normalizeProblemId(p.id || p._id);
     if (!pid || bookmarkBusy) return;
-    if (!localStorage.getItem("accessToken")) {
+    if (!hasAccessToken()) {
       setRowError("Please sign in to save favourite questions.");
       return;
     }
@@ -631,12 +837,12 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
 
   const handleResourceClick = (
     p: Problem,
-    url: string,
+    url: string | undefined,
     isPremium: boolean | undefined,
     e: MouseEvent
   ) => {
     e.stopPropagation();
-    if (isPremium) {
+    if (isPremium || !url || (p.isPremium && p.accessLocked)) {
       window.alert("This is a Plus / premium resource.");
       return;
     }
@@ -659,8 +865,7 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
       const diff = normalizeDifficulty(prob.difficulty);
       const isRev = revisionIds.has(pid);
       const isBm = bookmarkedIds.has(pid);
-      const noted = hasNote(userId, pid);
-      void noteVersion;
+      const noted = noteProblemIds.has(pid);
       const resources = getProblemResources(prob).filter((r) => r.type !== "practice");
       const practice =
         getProblemResources(prob).find((r) => r.type === "practice") ||
@@ -690,7 +895,13 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
             className="ax-row-title"
             onClick={() => onSelectProblem(prob)}
           >
+            {prob.isPremium || prob.accessLocked ? (
+              <Lock size={12} aria-hidden className="ax-row-lock" />
+            ) : null}
             {prob.title}
+            {prob.isPremium ? (
+              <PremiumBadge className="ax-row-premium-badge" label="Premium" />
+            ) : null}
           </button>
           <span className={`ax-diff ${diff}`}>
             {diff.charAt(0).toUpperCase() + diff.slice(1)}
@@ -791,12 +1002,17 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
       <div className="ax-sheet-main">
         <header className="ax-hero">
           <div>
-            <h1>{STRIVER_A2Z_SHEET_NAME}</h1>
+            <h1>{sheetDisplayName}</h1>
             <p>
-              {DSA_BEST_SHEET.stats.topics} topics ·{" "}
-              {DSA_BEST_SHEET.stats.uniqueProblems} unique problems · topic-wise
+              {activeCatalog.stats.topics} topics ·{" "}
+              {activeCatalog.stats.uniqueProblems} unique problems · topic-wise
               practice. Sheet progress is independent of bookmarks, revision, and
               global solved status.
+            </p>
+            <p className="ax-meta" style={{ marginTop: 6 }}>
+              {catalogSource === "server"
+                ? "Catalog from server"
+                : "Bundled catalog fallback"}
             </p>
           </div>
           <div className="ax-hero-actions">
@@ -921,6 +1137,19 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
               <option value="Medium">Medium</option>
               <option value="Hard">Hard</option>
             </select>
+            <select
+              value={accessFilter}
+              aria-label="Access"
+              onChange={(e) =>
+                onAccessFilterChange?.(
+                  e.target.value as "all" | "free" | "premium"
+                )
+              }
+            >
+              <option value="all">All</option>
+              <option value="free">Free</option>
+              <option value="premium">Premium</option>
+            </select>
             <button
               type="button"
               className="ax-btn ax-btn-random"
@@ -939,6 +1168,43 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
           </div>
         </div>
 
+        {totalPages > 1 && onProblemPageChange && (
+          <div
+            className="ax-pagination"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "flex-end",
+              gap: 12,
+              marginBottom: 12,
+              fontSize: "0.85rem",
+            }}
+          >
+            <span>
+              Page {problemPage} of {totalPages}
+            </span>
+            <button
+              type="button"
+              className="ax-btn"
+              disabled={problemPage <= 1 || loading}
+              onClick={() => onProblemPageChange(Math.max(1, problemPage - 1))}
+            >
+              Prev
+            </button>
+            <button
+              type="button"
+              className="ax-btn"
+              disabled={problemPage >= totalPages || loading}
+              onClick={() =>
+                onProblemPageChange(Math.min(totalPages, problemPage + 1))
+              }
+            >
+              Next
+            </button>
+          </div>
+        )}
+
+        {userId ? (
         <section className="ax-progress-banner" aria-label="Overall progress">
           <div className="ax-progress-banner-head">
             <span className="ax-progress-kicker">Overall Progress</span>
@@ -981,6 +1247,16 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
             </div>
           </div>
         </section>
+        ) : (
+        <section className="ax-progress-banner" aria-label="Sign in for progress">
+          <div className="ax-progress-banner-head">
+            <span className="ax-progress-kicker">Your progress</span>
+          </div>
+          <p style={{ margin: "8px 0 0", color: "var(--text-secondary)", fontSize: "0.875rem", lineHeight: 1.5 }}>
+            Create an account to track your progress. Guests can browse problems freely — solved counts and streaks appear after you sign in.
+          </p>
+        </section>
+        )}
 
         {rowError && (
           <div className="ax-error" role="alert">
@@ -1043,7 +1319,8 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
       <aside className="ax-rail" aria-label="DSA progress and learning tools">
         <div className="ax-rail-card">
           <div className="ax-rail-card-head">
-            <h3>AlgoPath Progress</h3>
+            <h3>{userId ? "AlgoPath Progress" : "Browse the sheet"}</h3>
+            {userId ? (
             <span
               className="ax-rail-info"
               title={`${progress.pct}% of sheet solved · ${streak} day streak`}
@@ -1051,8 +1328,11 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
             >
               <Info size={14} strokeWidth={2} />
             </span>
+            ) : null}
           </div>
 
+          {userId ? (
+          <>
           <div className="ax-rail-progress">
             <div
               className="ax-ring md"
@@ -1097,6 +1377,12 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
             <Flame size={13} strokeWidth={2} aria-hidden />
             {streak} day streak
           </p>
+          </>
+          ) : (
+          <p style={{ margin: 0, color: "var(--text-secondary)", fontSize: "0.85rem", lineHeight: 1.5 }}>
+            Open any problem to preview the statement. Sign in to save favourites, submit, and track a streak.
+          </p>
+          )}
         </div>
 
         <div className="ax-rail-links">
@@ -1138,9 +1424,22 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
               rows={8}
               autoFocus
             />
+            <input
+              type="text"
+              className="dsa-note-tags"
+              value={noteTagsDraft}
+              onChange={(e) => setNoteTagsDraft(e.target.value)}
+              placeholder="Tags (comma-separated)"
+              aria-label="Note tags"
+            />
             {noteError && <p className="dsa-note-error">{noteError}</p>}
             <div className="dsa-note-actions">
-              <button type="button" className="dsa-note-danger" onClick={deleteNote}>
+              <button
+                type="button"
+                className="dsa-note-danger"
+                disabled={noteSaving}
+                onClick={() => void deleteNote()}
+              >
                 Delete
               </button>
               <div className="dsa-note-actions-right">
@@ -1151,7 +1450,7 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
                   type="button"
                   className="dsa-note-primary"
                   disabled={noteSaving}
-                  onClick={saveNote}
+                  onClick={() => void saveNote()}
                 >
                   {noteSaving ? "Saving…" : "Save"}
                 </button>

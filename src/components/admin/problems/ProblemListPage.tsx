@@ -9,8 +9,7 @@ import { DataTable } from "../shared/DataTable";
 import { StatusBadge } from "../shared/StatusBadge";
 import { PermissionGuard } from "../shared/PermissionGuard";
 import { ConfirmDialog } from "../../ConfirmDialog";
-import { hasPermission } from "../../../rbac/permissions";
-import { useAuth } from "../../../context/AuthContext";
+import { usePermission } from "../../../rbac/usePermission";
 import { useToast } from "../../../context/ToastContext";
 import { normalizeApiError } from "../../../lib/apiError";
 import { WidgetError } from "../shared/WidgetError";
@@ -20,7 +19,7 @@ interface Props {
 }
 
 export const ProblemListPage: FC<Props> = ({ onEdit }) => {
-  const { user } = useAuth();
+  const { can } = usePermission();
   const toast = useToast();
   const [rows, setRows] = useState<AdminProblem[]>([]);
   const [page, setPage] = useState(1);
@@ -28,6 +27,7 @@ export const ProblemListPage: FC<Props> = ({ onEdit }) => {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
   const [difficulty, setDifficulty] = useState("all");
+  const [access, setAccess] = useState("all");
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [error, setError] = useState<{ title: string; message: string } | null>(
@@ -46,6 +46,7 @@ export const ProblemListPage: FC<Props> = ({ onEdit }) => {
         search: search || undefined,
         status: status === "all" ? undefined : status,
         difficulty: difficulty === "all" ? undefined : difficulty,
+        access: access === "all" ? undefined : access,
       });
       setRows(res.data || []);
       setMeta({
@@ -63,7 +64,7 @@ export const ProblemListPage: FC<Props> = ({ onEdit }) => {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, status, difficulty]);
+  }, [page, status, difficulty, access]);
 
   const idOf = (p: AdminProblem) => p.id || p._id || "";
 
@@ -132,21 +133,77 @@ export const ProblemListPage: FC<Props> = ({ onEdit }) => {
           <option value="medium">Medium</option>
           <option value="hard">Hard</option>
         </select>
+        <select
+          value={access}
+          onChange={(e) => {
+            setPage(1);
+            setAccess(e.target.value);
+          }}
+          aria-label="Access"
+        >
+          <option value="all">All access</option>
+          <option value="free">Free</option>
+          <option value="premium">Premium</option>
+        </select>
         <button type="button" className="admin-btn" onClick={() => { setPage(1); load(); }}>
           Search
         </button>
-        {hasPermission(user?.role, "problems:create") && (
+        {can("problems:create") && (
           <button type="button" className="admin-btn primary" onClick={() => onEdit(null)}>
             <Plus size={14} /> New problem
           </button>
         )}
-        {hasPermission(user?.role, "problems:publish") && selected.size > 0 && (
+        {can("problems:publish") && selected.size > 0 && (
           <>
             <button type="button" className="admin-btn" onClick={() => bulkStatus("published")}>
               Publish selected
             </button>
             <button type="button" className="admin-btn" onClick={() => bulkStatus("archived")}>
               <Archive size={14} /> Archive
+            </button>
+          </>
+        )}
+        {can("problems:update") && selected.size > 0 && (
+          <>
+            <button
+              type="button"
+              className="admin-btn"
+              onClick={async () => {
+                try {
+                  await adminProblemApi.bulk({
+                    ids: [...selected],
+                    action: "premium",
+                    isPremium: true,
+                  } as any);
+                  toast.success("Marked selected as Premium");
+                  setSelected(new Set());
+                  await load();
+                } catch (err: unknown) {
+                  toast.apiError(err, "Bulk premium update failed");
+                }
+              }}
+            >
+              Mark Premium
+            </button>
+            <button
+              type="button"
+              className="admin-btn"
+              onClick={async () => {
+                try {
+                  await adminProblemApi.bulk({
+                    ids: [...selected],
+                    action: "premium",
+                    isPremium: false,
+                  } as any);
+                  toast.success("Marked selected as Free");
+                  setSelected(new Set());
+                  await load();
+                } catch (err: unknown) {
+                  toast.apiError(err, "Bulk free update failed");
+                }
+              }}
+            >
+              Mark Free
             </button>
           </>
         )}
@@ -199,6 +256,13 @@ export const ProblemListPage: FC<Props> = ({ onEdit }) => {
             render: (p) => <StatusBadge status={String(p.difficulty).toLowerCase()} />,
           },
           {
+            key: "access",
+            header: "Access",
+            render: (p) => (
+              <StatusBadge status={p.isPremium ? "premium" : "free"} />
+            ),
+          },
+          {
             key: "status",
             header: "Status",
             render: (p) => <StatusBadge status={p.status || "draft"} />,
@@ -215,12 +279,12 @@ export const ProblemListPage: FC<Props> = ({ onEdit }) => {
               const id = idOf(p);
               return (
                 <div style={{ display: "flex", gap: 6 }}>
-                  {hasPermission(user?.role, "problems:publish") && p.status !== "published" && (
+                  {can("problems:publish") && p.status !== "published" && (
                     <button type="button" className="admin-btn" onClick={() => setProblemStatus(id, "published")}>
                       Publish
                     </button>
                   )}
-                  {hasPermission(user?.role, "problems:create") && (
+                  {can("problems:create") && (
                     <button
                       type="button"
                       className="admin-btn"
@@ -234,7 +298,7 @@ export const ProblemListPage: FC<Props> = ({ onEdit }) => {
                       <Copy size={14} />
                     </button>
                   )}
-                  {hasPermission(user?.role, "problems:delete") && (
+                  {can("problems:delete") && (
                     <button
                       type="button"
                       className="admin-btn danger"

@@ -7,6 +7,8 @@ import "./styles/platform.css";
 import "./styles/striver-sheet.css";
 import "./styles/workspace-premium.css";
 import "./styles/typography.css";
+import "./styles/guest.css";
+import "./styles/free-home.css";
 import App from "./App.tsx";
 import { EditorSettingsProvider } from "./hooks/useEditorSettings";
 import { bootstrapAppTheme } from "./components/AppThemeProvider";

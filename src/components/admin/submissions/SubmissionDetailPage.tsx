@@ -4,8 +4,7 @@ import type { Submission } from "../../../api/submissionApi";
 import { StatusBadge } from "../shared/StatusBadge";
 import { PermissionGuard } from "../shared/PermissionGuard";
 import { ConfirmDialog } from "../../ConfirmDialog";
-import { hasPermission } from "../../../rbac/permissions";
-import { useAuth } from "../../../context/AuthContext";
+import { usePermission } from "../../../rbac/usePermission";
 
 interface Props {
   id: string;
@@ -13,7 +12,7 @@ interface Props {
 }
 
 export const SubmissionDetailPage: FC<Props> = ({ id, onBack }) => {
-  const { user } = useAuth();
+  const { can } = usePermission();
   const [row, setRow] = useState<Submission | null>(null);
   const [error, setError] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -38,7 +37,7 @@ export const SubmissionDetailPage: FC<Props> = ({ id, onBack }) => {
         <button type="button" className="admin-btn" onClick={onBack}>
           ← Back
         </button>
-        {hasPermission(user?.role, "submissions:delete") && (
+        {can("submissions:delete") && (
           <button
             type="button"
             className="admin-btn danger"

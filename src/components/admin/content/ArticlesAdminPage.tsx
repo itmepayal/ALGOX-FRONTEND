@@ -32,8 +32,7 @@ import { Input } from "../../ui/input";
 import { ConfirmDialog } from "../../ConfirmDialog";
 import { adminContentApi } from "../../../api/adminContentApi";
 import { useToast } from "../../../context/ToastContext";
-import { hasPermission } from "../../../rbac/permissions";
-import { useAuth } from "../../../context/AuthContext";
+import { usePermission } from "../../../rbac/usePermission";
 import { cn } from "../../../lib/cn";
 import {
   ArticleStatusBadge,
@@ -306,10 +305,10 @@ const ArticleActions: FC<{
 
 export const ArticlesAdmin: FC<{ category?: string }> = ({ category }) => {
   const toast = useToast();
-  const { user } = useAuth();
-  const canCreate = hasPermission(user?.role, "content:create");
-  const canUpdate = hasPermission(user?.role, "content:update");
-  const canDelete = hasPermission(user?.role, "content:delete");
+  const { can, user } = usePermission();
+  const canCreate = can("content:create");
+  const canUpdate = can("content:update");
+  const canDelete = can("content:delete");
 
   const lockedCategory = category as CategoryValue | undefined;
   const isTutorialMode = lockedCategory === "tutorial";
@@ -630,7 +629,14 @@ export const ArticlesAdmin: FC<{ category?: string }> = ({ category }) => {
         <header className="pe-topbar">
           <div className="pe-topbar-left">
             <div>
-              <h2 className="pe-title">{pageTitle}</h2>
+              <h2
+                className={cn(
+                  "pe-title",
+                  isTutorialMode && "pe-title--tutorials",
+                )}
+              >
+                {pageTitle}
+              </h2>
               <p className="pe-sub">{pageSub}</p>
             </div>
           </div>
@@ -762,7 +768,9 @@ export const ArticlesAdmin: FC<{ category?: string }> = ({ category }) => {
         <section className="pe-card !p-0 overflow-hidden">
           <div className="border-b border-border px-5 py-4">
             <div className="pe-card-head mb-4">
-              <h3>{pageTitle}</h3>
+              <h3 className={isTutorialMode ? "pe-title--tutorials" : undefined}>
+                {pageTitle}
+              </h3>
               <p>
                 {loading
                   ? "Loading…"
