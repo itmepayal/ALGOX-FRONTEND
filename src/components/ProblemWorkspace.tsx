@@ -15,6 +15,10 @@ import {
   ThumbsUp,
   ThumbsDown,
   Bookmark,
+  Heart,
+  Star,
+  RefreshCw,
+  CircleCheck,
   RotateCcw,
   Maximize2,
   Minimize2,
@@ -46,6 +50,7 @@ import {
   engagementApi,
   formatEngagementCount,
   type UserReaction,
+  type PersonalConfidence,
 } from "../api/engagementApi";
 import {
   formatTestCaseInputSummary,
@@ -106,8 +111,11 @@ interface ProblemWorkspaceProps {
   onRequireAuth?: () => void;
   /** Premium upsell click (editorials / hints). */
   onUpgradeClick?: () => void;
-  /** Notify parent when bookmark state changes (for My Bookmarks list). */
+  /** Notify parent when bookmark state changes (for sheet sync). */
   onBookmarkChange?: (problemId: string, isBookmarked: boolean) => void;
+  onFavoriteChange?: (problemId: string, isFavourite: boolean) => void;
+  onImportantChange?: (problemId: string, isImportant: boolean) => void;
+  onRevisionChange?: (problemId: string, isRevision: boolean) => void;
   /** When false, Submit is unavailable (feature flag). */
   submissionsEnabled?: boolean;
   /** When false, experimental editor settings popover is hidden. */
@@ -353,6 +361,9 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
   onRequireAuth,
   onUpgradeClick,
   onBookmarkChange,
+  onFavoriteChange,
+  onImportantChange,
+  onRevisionChange,
   submissionsEnabled = true,
   advancedEditorEnabled = true,
   supportedLanguages,
@@ -385,9 +396,19 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
   const [dislikeCount, setDislikeCount] = useState(problem.dislikeCount ?? 0);
   const [userReaction, setUserReaction] = useState<UserReaction>(null);
   const [bookmarked, setBookmarked] = useState(Boolean(problem.isBookmarked));
+  const [favourited, setFavourited] = useState(Boolean(problem.isFavourite));
+  const [important, setImportant] = useState(false);
+  const [revision, setRevision] = useState(false);
+  const [personalConfidence, setPersonalConfidence] =
+    useState<PersonalConfidence>(null);
+  const [confidenceBusy, setConfidenceBusy] = useState(false);
   const [engagementBusy, setEngagementBusy] = useState(false);
   const [engagementError, setEngagementError] = useState("");
   const engagementReqRef = useRef(0);
+  const problemSolved = useMemo(
+    () => isSolved(problemId, problemSubmissions),
+    [problemId, problemSubmissions]
+  );
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
   const [resetConfirming, setResetConfirming] = useState(false);
   const resetLockRef = useRef(false);
@@ -563,6 +584,10 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
     setDislikeCount(problem.dislikeCount ?? 0);
     setUserReaction(null);
     setBookmarked(Boolean(problem.isBookmarked));
+    setFavourited(Boolean(problem.isFavourite));
+    setImportant(false);
+    setRevision(false);
+    setPersonalConfidence(null);
     setEngagementError("");
     setResetConfirmOpen(false);
     setResetConfirming(false);
@@ -577,7 +602,11 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
         setLikeCount(res.data.likeCount);
         setDislikeCount(res.data.dislikeCount);
         setUserReaction(res.data.currentUserReaction);
-        setBookmarked(res.data.isBookmarked);
+        setBookmarked(Boolean(res.data.isBookmarked));
+        setFavourited(Boolean(res.data.isFavourite));
+        setImportant(Boolean(res.data.isImportant));
+        setRevision(Boolean(res.data.isRevision));
+        setPersonalConfidence(res.data.personalConfidence ?? null);
       } catch {
         // keep problem-level counters
       }
@@ -656,17 +685,32 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
     currentUserReaction: UserReaction;
     isBookmarked?: boolean;
     isFavourite?: boolean;
+    isImportant?: boolean;
+    isRevision?: boolean;
+    personalConfidence?: PersonalConfidence;
   }) => {
-    const isBm =
-      typeof data.isFavourite === "boolean"
-        ? data.isFavourite
-        : Boolean(data.isBookmarked);
     setLikeCount(data.likeCount);
     setDislikeCount(data.dislikeCount);
     setUserReaction(data.currentUserReaction);
-    setBookmarked(isBm);
-    // Favourite only — never notify parent about revision from workspace actions.
-    onBookmarkChange?.(problemId, isBm);
+    if (typeof data.isBookmarked === "boolean") {
+      setBookmarked(data.isBookmarked);
+      onBookmarkChange?.(problemId, data.isBookmarked);
+    }
+    if (typeof data.isFavourite === "boolean") {
+      setFavourited(data.isFavourite);
+      onFavoriteChange?.(problemId, data.isFavourite);
+    }
+    if (typeof data.isImportant === "boolean") {
+      setImportant(data.isImportant);
+      onImportantChange?.(problemId, data.isImportant);
+    }
+    if (typeof data.isRevision === "boolean") {
+      setRevision(data.isRevision);
+      onRevisionChange?.(problemId, data.isRevision);
+    }
+    if (data.personalConfidence !== undefined) {
+      setPersonalConfidence(data.personalConfidence ?? null);
+    }
   };
 
   const handleReaction = async (reaction: "like" | "dislike") => {
@@ -677,6 +721,9 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
       dislikeCount,
       userReaction,
       bookmarked,
+      favourited,
+      important,
+      revision,
     };
 
     let nextLike = likeCount;
@@ -719,6 +766,9 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
       setDislikeCount(prev.dislikeCount);
       setUserReaction(prev.userReaction);
       setBookmarked(prev.bookmarked);
+      setFavourited(prev.favourited);
+      setImportant(prev.important);
+      setRevision(prev.revision);
       setEngagementError(
         err.response?.data?.message || err.message || "Failed to update reaction."
       );
@@ -727,40 +777,86 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
     }
   };
 
-  const handleBookmark = async () => {
+  const runToggle = async (
+    kind: "bookmark" | "favourite" | "important" | "revision",
+    next: boolean
+  ) => {
     if (!requireAuthOrContinue() || engagementBusy || !problemId) return;
 
-    const prev = {
-      likeCount,
-      dislikeCount,
-      userReaction,
-      bookmarked,
-    };
-    const next = !bookmarked;
-    setBookmarked(next);
+    const prev = { bookmarked, favourited, important, revision };
+    if (kind === "bookmark") setBookmarked(next);
+    if (kind === "favourite") setFavourited(next);
+    if (kind === "important") setImportant(next);
+    if (kind === "revision") setRevision(next);
     setEngagementError("");
     setEngagementBusy(true);
     const reqId = ++engagementReqRef.current;
 
     try {
-      const res = next
-        ? await engagementApi.addBookmark(problemId)
-        : await engagementApi.removeBookmark(problemId);
-      if (reqId !== engagementReqRef.current) return;
-      if (res?.data) applyEngagement(res.data);
+      if (kind === "bookmark") {
+        const res = next
+          ? await engagementApi.addBookmark(problemId)
+          : await engagementApi.removeBookmark(problemId);
+        if (reqId !== engagementReqRef.current) return;
+        if (res?.data) applyEngagement(res.data);
+        else onBookmarkChange?.(problemId, next);
+      } else if (kind === "favourite") {
+        const res = next
+          ? await engagementApi.addFavorite(problemId)
+          : await engagementApi.removeFavorite(problemId);
+        if (reqId !== engagementReqRef.current) return;
+        if (res?.data) applyEngagement(res.data);
+        else onFavoriteChange?.(problemId, next);
+      } else if (kind === "important") {
+        const res = await engagementApi.toggleImportant(problemId);
+        if (reqId !== engagementReqRef.current) return;
+        if (typeof res?.data?.isImportant === "boolean") {
+          setImportant(res.data.isImportant);
+          onImportantChange?.(problemId, res.data.isImportant);
+        }
+      } else {
+        const res = await engagementApi.toggleRevision(problemId);
+        if (reqId !== engagementReqRef.current) return;
+        if (typeof res?.data?.isRevision === "boolean") {
+          setRevision(res.data.isRevision);
+          onRevisionChange?.(problemId, res.data.isRevision);
+        }
+      }
     } catch (err: any) {
       if (reqId !== engagementReqRef.current) return;
-      setLikeCount(prev.likeCount);
-      setDislikeCount(prev.dislikeCount);
-      setUserReaction(prev.userReaction);
       setBookmarked(prev.bookmarked);
+      setFavourited(prev.favourited);
+      setImportant(prev.important);
+      setRevision(prev.revision);
       setEngagementError(
         err.response?.data?.message ||
           err.message ||
-          "Unable to update favourites. Please try again."
+          "Unable to update. Please try again."
       );
     } finally {
       if (reqId === engagementReqRef.current) setEngagementBusy(false);
+    }
+  };
+
+  const handleConfidence = async (value: PersonalConfidence) => {
+    if (!requireAuthOrContinue() || confidenceBusy || !problemId) return;
+    const prev = personalConfidence;
+    const next = personalConfidence === value ? null : value;
+    setPersonalConfidence(next);
+    setConfidenceBusy(true);
+    setEngagementError("");
+    try {
+      const res = await engagementApi.setPersonalConfidence(problemId, next);
+      setPersonalConfidence(res?.data?.personalConfidence ?? next);
+    } catch (err: any) {
+      setPersonalConfidence(prev);
+      setEngagementError(
+        err.response?.data?.message ||
+          err.message ||
+          "Unable to update confidence."
+      );
+    } finally {
+      setConfidenceBusy(false);
     }
   };
 
@@ -1189,7 +1285,7 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
                     ) : (
                       <>
                     <div className="lc-action-row">
-                      <div className="lc-social-actions">
+                      <div className="lc-social-actions" role="group" aria-label="Problem reactions">
                         <button
                           type="button"
                           className={`lc-social-btn ${userReaction === "like" ? "lc-reaction-active like" : ""}`}
@@ -1224,19 +1320,97 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
                             <span>{formatEngagementCount(dislikeCount)}</span>
                           )}
                         </button>
-                        <button
-                          type="button"
-                          className={`lc-social-btn ${bookmarked ? "lc-bookmark-active" : ""}`}
-                          aria-label={bookmarked ? "Remove from favourites" : "Add to favourites"}
-                          aria-pressed={bookmarked}
-                          title={bookmarked ? "Remove from favourites" : "Add to favourites"}
-                          disabled={engagementBusy}
-                          onClick={() => void handleBookmark()}
-                        >
-                          <Bookmark size={14} strokeWidth={1.75} fill={bookmarked ? "currentColor" : "none"} />
-                        </button>
                         <ProblemShare problem={problem} variant="icon" className="lc-share-inline" />
                       </div>
+                    </div>
+
+                    <div
+                      className="lc-personalize-bar"
+                      role="toolbar"
+                      aria-label="Personal problem markers"
+                    >
+                      {problemSolved && (
+                        <span className="lc-solved-badge" title="Solved via accepted submission">
+                          <CircleCheck size={14} aria-hidden />
+                          Solved
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        className={`lc-personalize-btn ${bookmarked ? "is-on" : ""}`}
+                        aria-label={bookmarked ? "Remove bookmark" : "Bookmark this problem"}
+                        aria-pressed={bookmarked}
+                        title={bookmarked ? "Remove bookmark" : "Bookmark — save for later"}
+                        disabled={engagementBusy}
+                        onClick={() => void runToggle("bookmark", !bookmarked)}
+                      >
+                        <Bookmark size={14} strokeWidth={1.75} fill={bookmarked ? "currentColor" : "none"} aria-hidden />
+                        <span className="lc-personalize-label">Bookmark</span>
+                      </button>
+                      <button
+                        type="button"
+                        className={`lc-personalize-btn ${favourited ? "is-on is-fav" : ""}`}
+                        aria-label={favourited ? "Remove from favourites" : "Add to favourites"}
+                        aria-pressed={favourited}
+                        title={favourited ? "Remove favourite" : "Favourite — preferred problem"}
+                        disabled={engagementBusy}
+                        onClick={() => void runToggle("favourite", !favourited)}
+                      >
+                        <Heart size={14} strokeWidth={1.75} fill={favourited ? "currentColor" : "none"} aria-hidden />
+                        <span className="lc-personalize-label">Favorite</span>
+                      </button>
+                      <button
+                        type="button"
+                        className={`lc-personalize-btn ${important ? "is-on is-important" : ""}`}
+                        aria-label={important ? "Remove important mark" : "Mark as important"}
+                        aria-pressed={important}
+                        title={important ? "Remove important" : "Important — interview / exam priority"}
+                        disabled={engagementBusy}
+                        onClick={() => void runToggle("important", !important)}
+                      >
+                        <Star size={14} strokeWidth={1.75} fill={important ? "currentColor" : "none"} aria-hidden />
+                        <span className="lc-personalize-label">Important</span>
+                      </button>
+                      <button
+                        type="button"
+                        className={`lc-personalize-btn ${revision ? "is-on is-revision" : ""}`}
+                        aria-label={revision ? "Remove revision mark" : "Mark for revision"}
+                        aria-pressed={revision}
+                        title={revision ? "Remove revision" : "Revision — revisit later"}
+                        disabled={engagementBusy}
+                        onClick={() => void runToggle("revision", !revision)}
+                      >
+                        <RefreshCw size={14} strokeWidth={1.75} aria-hidden />
+                        <span className="lc-personalize-label">Revision</span>
+                      </button>
+                    </div>
+
+                    <div className="lc-confidence-row" role="group" aria-label="My confidence">
+                      <span className="lc-confidence-label">
+                        Official: <strong>{problem.difficulty || "—"}</strong>
+                        <span className="lc-confidence-sep" aria-hidden>
+                          ·
+                        </span>
+                        My confidence:
+                      </span>
+                      {(
+                        [
+                          ["easy_for_me", "Easy for me"],
+                          ["needs_practice", "Need practice"],
+                          ["difficult", "Difficult"],
+                        ] as const
+                      ).map(([value, label]) => (
+                        <button
+                          key={value}
+                          type="button"
+                          className={`lc-confidence-chip ${personalConfidence === value ? "is-on" : ""}`}
+                          aria-pressed={personalConfidence === value}
+                          disabled={confidenceBusy || engagementBusy}
+                          onClick={() => void handleConfidence(value)}
+                        >
+                          {label}
+                        </button>
+                      ))}
                     </div>
 
                     {engagementError && (
@@ -1372,7 +1546,7 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
                       className="lc-notes-area"
                       value={notes}
                       onChange={(e) => handleNotesChange(e.target.value)}
-                      placeholder="Write notes for this problem… autosaved locally."
+                      placeholder="Private notes for this problem… saved to your account when signed in."
                       spellCheck={false}
                     />
                   </div>

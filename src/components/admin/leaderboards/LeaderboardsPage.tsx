@@ -6,6 +6,7 @@ import {
   Loader2,
   RefreshCw,
   RotateCcw,
+  ShieldCheck,
   Trophy,
   User as UserIcon,
 } from "lucide-react";
@@ -125,6 +126,7 @@ export const LeaderboardsPage: FC<LeaderboardsPageProps> = ({
   const [loadingAudit, setLoadingAudit] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
   const [confirmSuspend, setConfirmSuspend] = useState(false);
+  const [confirmUnsuspend, setConfirmUnsuspend] = useState(false);
 
   const reloadGlobal = async () => {
     const res = await leaderboardApi.getLeaderboard({
@@ -276,6 +278,22 @@ export const LeaderboardsPage: FC<LeaderboardsPageProps> = ({
     }
   };
 
+  const onUnsuspend = async () => {
+    const id = resetUserId.trim();
+    if (!id) return;
+    try {
+      setSuspending(true);
+      await adminLeaderboardApi.suspendEntry(id, false);
+      toast.success("Entry unsuspended");
+      setConfirmUnsuspend(false);
+      await reloadGlobal();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Unsuspend failed");
+    } finally {
+      setSuspending(false);
+    }
+  };
+
   const onLoadAudit = async () => {
     try {
       setLoadingAudit(true);
@@ -391,6 +409,22 @@ export const LeaderboardsPage: FC<LeaderboardsPageProps> = ({
                 type="button"
                 variant="secondary"
                 size="sm"
+                disabled={!resetUserId.trim() || suspending}
+                onClick={() => setConfirmUnsuspend(true)}
+                aria-label="Unsuspend entry"
+              >
+                <ShieldCheck
+                  size={14}
+                  strokeWidth={1.75}
+                  className="size-3.5 shrink-0"
+                  aria-hidden
+                />
+                Unsuspend
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
                 disabled={loadingAudit}
                 onClick={() => void onLoadAudit()}
                 aria-label={loadingAudit ? "Loading audit" : "Load audit"}
@@ -441,14 +475,14 @@ export const LeaderboardsPage: FC<LeaderboardsPageProps> = ({
           <section className="pe-card !p-4">
             <div className="pe-card-head !mb-3">
               <h3>Entry actions</h3>
-              <p>Enter a user ID to reset ranking or suspend an entry</p>
+              <p>Enter a user ID to reset ranking or suspend / unsuspend an entry</p>
             </div>
             <div className="relative min-w-0 max-w-xl">
               <Input
                 value={resetUserId}
                 onChange={(e) => setResetUserId(e.target.value)}
-                placeholder="User ID to reset / suspend"
-                aria-label="User ID to reset or suspend"
+                placeholder="User ID to reset / suspend / unsuspend"
+                aria-label="User ID to reset, suspend, or unsuspend"
                 className="bg-background font-code"
               />
             </div>
@@ -707,6 +741,28 @@ export const LeaderboardsPage: FC<LeaderboardsPageProps> = ({
           if (!suspending) setConfirmSuspend(false);
         }}
         onConfirm={() => void onSuspend()}
+      />
+
+      <ConfirmDialog
+        open={confirmUnsuspend}
+        title="Unsuspend leaderboard entry?"
+        description={
+          <>
+            This will restore the leaderboard entry for user{" "}
+            <strong className="font-code text-foreground">
+              {resetUserId.trim() || "—"}
+            </strong>
+            .
+          </>
+        }
+        cancelLabel="Cancel"
+        confirmLabel="Unsuspend"
+        confirming={suspending}
+        confirmingLabel="Unsuspending…"
+        onCancel={() => {
+          if (!suspending) setConfirmUnsuspend(false);
+        }}
+        onConfirm={() => void onUnsuspend()}
       />
     </PermissionGuard>
   );

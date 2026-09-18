@@ -11,26 +11,91 @@ export const EVALUATION_API_URL = SERVICE_URLS.evaluation;
 export const LEADERBOARD_API_URL = SERVICE_URLS.leaderboard;
 
 export const analyticsClient = createServiceClient(ANALYTICS_API_URL, {
-  timeout: 10000,
+  timeout: 12000,
 });
 
-export type DashboardRange = "today" | "7d" | "30d" | "90d" | "1y";
+export type DashboardRange =
+  | "today"
+  | "yesterday"
+  | "7d"
+  | "30d"
+  | "90d"
+  | "this_month"
+  | "prev_month"
+  | "1y"
+  | "this_year";
 
 export function rangeToDays(range: string): number {
   switch (range) {
     case "today":
+    case "yesterday":
       return 1;
     case "7d":
       return 7;
     case "90d":
       return 90;
+    case "this_month": {
+      const now = new Date();
+      return Math.max(1, now.getUTCDate());
+    }
+    case "prev_month": {
+      const now = new Date();
+      const firstThis = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1);
+      const firstPrev = Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1);
+      return Math.max(1, Math.round((firstThis - firstPrev) / 86400000));
+    }
     case "1y":
     case "365d":
+    case "this_year":
       return 365;
     case "30d":
     default:
       return 30;
   }
+}
+
+function trendPct(current: number, previous: number): number | null {
+  if (previous > 0) {
+    return Math.round(((current - previous) / previous) * 1000) / 10;
+  }
+  return null;
+}
+
+function composeCompare(users: any, submissions: any, days: number) {
+  return {
+    enabled: true,
+    periodLabel: `previous ${days}d`,
+    newUsers: {
+      current: users?.newUsersInRange ?? null,
+      previous: users?.newUsersPrevRange ?? null,
+      trendPct: users?.newUsersTrendPct ?? null,
+    },
+    submissions: {
+      current: submissions?.rangeTotal ?? null,
+      previous: submissions?.prevRangeTotal ?? null,
+      trendPct:
+        submissions?.rangeSubmissionsTrendPct ??
+        trendPct(
+          Number(submissions?.rangeTotal || 0),
+          Number(submissions?.prevRangeTotal || 0)
+        ),
+    },
+    accepted: {
+      current: submissions?.rangeAccepted ?? null,
+      previous: submissions?.prevRangeAccepted ?? null,
+      trendPct:
+        submissions?.rangeAcceptedTrendPct ??
+        trendPct(
+          Number(submissions?.rangeAccepted || 0),
+          Number(submissions?.prevRangeAccepted || 0)
+        ),
+    },
+    acceptanceRate: {
+      current: submissions?.rangeSuccessRate ?? null,
+      previous: submissions?.prevRangeSuccessRate ?? null,
+      trendPct: submissions?.rangeSuccessRateTrendPct ?? null,
+    },
+  };
 }
 
 function composeOverview(
@@ -53,6 +118,9 @@ function composeOverview(
         ? "degraded"
         : "real";
 
+  const days = rangeToDays(range);
+  const compare = composeCompare(users, submissions, days);
+
   return {
     range,
     source: meta.source,
@@ -67,21 +135,29 @@ function composeOverview(
     users: users ?? null,
     problems: problems ?? null,
     submissions: submissions ?? null,
+    compare,
     kpis: {
       totalUsers: users?.totalUsers ?? null,
       dau: users?.dau ?? null,
       wau: users?.wau ?? null,
       mau: users?.mau ?? null,
       activeUsers: users?.activeUsers ?? users?.dau ?? null,
+      newUsersInRange: users?.newUsersInRange ?? null,
       totalProblems: problems?.total ?? null,
       publishedProblems: problems?.published ?? null,
       draftProblems: problems?.draft ?? null,
       totalSubmissions: submissions?.total ?? null,
       todaySubmissions: submissions?.today ?? null,
+      rangeSubmissions: submissions?.rangeTotal ?? null,
+      rangeAccepted: submissions?.rangeAccepted ?? null,
+      rangeSuccessRate: submissions?.rangeSuccessRate ?? null,
       successRate: submissions?.successRate ?? null,
       solvedProblems: submissions?.solvedProblems ?? null,
       acceptedSubmissions: submissions?.accepted ?? null,
       newUsersTrendPct: users?.newUsersTrendPct ?? null,
+      submissionsTrendPct: compare.submissions.trendPct,
+      acceptedTrendPct: compare.accepted.trendPct,
+      acceptanceTrendPct: compare.acceptanceRate.trendPct,
     },
   };
 }
@@ -124,7 +200,7 @@ function hasUsefulKpis(data: any): boolean {
 async function fetchInternalStats(range: string) {
   const days = rangeToDays(range);
   const results = await Promise.allSettled([
-    authClient.get(`/auth/admin/internal/user-stats`, {
+    authClient.get(`/auth/admin/user-stats`, {
       params: { days },
       timeout: 12000,
     }),
@@ -167,6 +243,23 @@ async function fetchInternalStats(range: string) {
 
 async function tryAnalyticsBundle(range: string) {
   try {
+    const res = await analyticsClient.get("/analytics/admin/dashboard", {
+      params: { range },
+      timeout: 14000,
+    });
+    const data = res.data?.data ?? res.data;
+    if (data?.overview && data?.charts) {
+      return {
+        overview: { ...data.overview, source: "analytics" as const },
+        charts: { ...data.charts, source: "analytics" as const },
+        ok: true as const,
+      };
+    }
+  } catch {
+    /* fall through to legacy pair */
+  }
+
+  try {
     const [o, c] = await Promise.all([
       analyticsClient.get("/analytics/admin/overview", {
         params: { range },
@@ -177,15 +270,17 @@ async function tryAnalyticsBundle(range: string) {
         timeout: 9000,
       }),
     ]);
-    const overview = {
-      ...(o.data?.data ?? o.data),
-      source: "analytics" as const,
+    return {
+      overview: {
+        ...(o.data?.data ?? o.data),
+        source: "analytics" as const,
+      },
+      charts: {
+        ...(c.data?.data ?? c.data),
+        source: "analytics" as const,
+      },
+      ok: true as const,
     };
-    const charts = {
-      ...(c.data?.data ?? c.data),
-      source: "analytics" as const,
-    };
-    return { overview, charts, ok: true as const };
   } catch {
     return { ok: false as const };
   }
@@ -197,7 +292,6 @@ async function tryAnalyticsBundle(range: string) {
  */
 export const adminAnalyticsApi = {
   loadDashboard: async (range: DashboardRange | string = "30d") => {
-    // Run Analytics + direct fan-in in parallel. Use whichever returns useful data.
     const [analyticsResult, directResult] = await Promise.all([
       tryAnalyticsBundle(range),
       fetchInternalStats(range).then(
@@ -236,7 +330,6 @@ export const adminAnalyticsApi = {
       };
     }
 
-    // Analytics returned empty/degraded zeros — still better than a hard crash
     if (analyticsResult.ok) {
       return {
         overview: {
@@ -261,6 +354,18 @@ export const adminAnalyticsApi = {
     );
   },
 
+  exportDashboard: async (
+    range: DashboardRange | string = "30d",
+    format: "json" | "csv" = "json"
+  ) => {
+    const res = await analyticsClient.get("/analytics/admin/export", {
+      params: { range, format },
+      timeout: 20000,
+      responseType: format === "csv" ? "blob" : "json",
+    });
+    return res;
+  },
+
   executionHealth: async () => {
     const res = await axios.get(`${EVALUATION_API_URL}/health`, {
       timeout: 5000,
@@ -273,6 +378,9 @@ export const adminAnalyticsApi = {
         redis?: string;
         queue?: Record<string, unknown>;
       };
+      service?: string;
+      redis?: string;
+      queue?: Record<string, unknown>;
     };
   },
 

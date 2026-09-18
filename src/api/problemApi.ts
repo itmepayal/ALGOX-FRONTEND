@@ -41,6 +41,9 @@ export interface Problem {
   tags: string[];
   /** Problem-level classification from API (FREE=false / PREMIUM=true). */
   isPremium?: boolean;
+  /** True when problem belongs to a published FREE Learning Sheet. */
+  isSheetFree?: boolean;
+  access?: "FREE" | "PREMIUM";
   /** True when premium problem content was redacted (no entitlement). */
   accessLocked?: boolean;
   editorialLocked?: boolean;
@@ -68,6 +71,8 @@ export interface Problem {
   dislikeCount?: number;
   bookmarkCount?: number;
   isBookmarked?: boolean;
+  isFavourite?: boolean;
+  isImportant?: boolean;
   timeLimitMs?: number;
   memoryLimitMb?: number;
   createdAt?: string;

@@ -14,12 +14,13 @@ export interface AdminDailyChallenge {
 }
 
 /**
- * Admin CMS for daily challenges — uses existing PUT /challenges/admin/:dateKey.
+ * Admin CMS for daily challenges —
+ * GET/PUT /challenges/admin/:dateKey (includes unpublished drafts).
  */
 export const adminChallengeApi = {
   getByDate: async (dateKey: string) => {
     const res = await problemClient.get<ApiResponse<AdminDailyChallenge>>(
-      `/challenges/date/${encodeURIComponent(dateKey)}`
+      `/challenges/admin/${encodeURIComponent(dateKey)}`
     );
     return res.data;
   },

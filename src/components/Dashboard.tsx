@@ -61,47 +61,20 @@ import {
 import { normalizeProblemId, updateIdSet } from "../utils/engagementIds";
 import type { RunCaseResult, RunResult } from "../types/judge";
 import { hasAccessToken } from "../api/accessToken";
-import {
-  BarChart3,
-  Briefcase,
-  Brain,
-  CalendarDays,
-  RotateCcw,
-  Flame,
-  Home,
-  LayoutDashboard,
-  ListTodo,
-  Search,
-  ShieldCheck,
-  Star,
-  Swords,
-  Timer,
-  User as UserIcon,
-} from "lucide-react";
+import { Crown, Flame, Search, ShieldCheck } from "lucide-react";
 import { FreeHomeDashboard } from "./home/FreeHomeDashboard";
 import { CompaniesPage } from "./companies/CompaniesPage";
 import { MockInterviewPanel } from "./MockInterviewPanel";
 import { AiAssistantPanel } from "./AiAssistantPanel";
 import { SubmissionAnalyticsPanel } from "./SubmissionAnalyticsPanel";
 import { SpacedRepetitionPanel } from "./SpacedRepetitionPanel";
+import { canAccess } from "../access/canAccess";
+import {
+  PLATFORM_NAV_ITEMS,
+  type PlatformNavId,
+} from "../nav/platformNav";
 
-type PlatformTab =
-  | "home"
-  | "problems"
-  | "favourites"
-  | "companies"
-  | "interview"
-  | "ai"
-  | "analytics"
-  | "reviews"
-  | "calendar"
-  | "sessions"
-  | "planner"
-  | "contests"
-  | "discuss"
-  | "learn"
-  | "ranks"
-  | "profile";
+type PlatformTab = PlatformNavId | "profile";
 
 interface DashboardProps {
   onOpenAdmin?: () => void;
@@ -142,6 +115,8 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
     useState<string | null>(null);
   const [selectedProblem, setSelectedProblem] = useState<Problem | null>(null);
   const [bookmarkedIds, setBookmarkedIds] = useState<Set<string>>(new Set());
+  const [favouriteIds, setFavouriteIds] = useState<Set<string>>(new Set());
+  const [importantIds, setImportantIds] = useState<Set<string>>(new Set());
   const [revisionIds, setRevisionIds] = useState<Set<string>>(new Set());
 
   const [userCode, setUserCode] = useState("");
@@ -310,6 +285,44 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
     }
   };
 
+  const fetchFavourites = async () => {
+    if (!user || !hasAccessToken()) {
+      setFavouriteIds(new Set());
+      return;
+    }
+    try {
+      const res = await engagementApi.listMyFavoriteIds();
+      setFavouriteIds(
+        new Set(
+          (res?.data?.problemIds || [])
+            .map((id) => normalizeProblemId(id))
+            .filter(Boolean)
+        )
+      );
+    } catch (err) {
+      console.warn("Fetch favourites failed:", err);
+    }
+  };
+
+  const fetchImportant = async () => {
+    if (!user || !hasAccessToken()) {
+      setImportantIds(new Set());
+      return;
+    }
+    try {
+      const res = await engagementApi.listMyImportantIds();
+      setImportantIds(
+        new Set(
+          (res?.data?.problemIds || [])
+            .map((id) => normalizeProblemId(id))
+            .filter(Boolean)
+        )
+      );
+    } catch (err) {
+      console.warn("Fetch important failed:", err);
+    }
+  };
+
   /** Bookmark-only state update — must never modify revisionIds. */
   const handleBookmarkChange = (problemId: string, isBookmarked: boolean) => {
     const id = normalizeProblemId(problemId);
@@ -321,6 +334,19 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
       )
     );
     setFavouritesRefreshKey((k) => k + 1);
+  };
+
+  const handleFavoriteChange = (problemId: string, isFavourite: boolean) => {
+    const id = normalizeProblemId(problemId);
+    if (!id) return;
+    setFavouriteIds((prev) => updateIdSet(prev, id, isFavourite));
+    setFavouritesRefreshKey((k) => k + 1);
+  };
+
+  const handleImportantChange = (problemId: string, isImportant: boolean) => {
+    const id = normalizeProblemId(problemId);
+    if (!id) return;
+    setImportantIds((prev) => updateIdSet(prev, id, isImportant));
   };
 
   /** Revision-only state update — must never modify bookmarkedIds. */
@@ -339,7 +365,7 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
       // Do not call fetchRevisions / handleRevisionChange.
     } catch (err) {
       console.warn("Remove bookmark failed:", err);
-      window.alert("Unable to update favourites. Please try again.");
+      window.alert("Unable to update bookmark. Please try again.");
     }
   };
 
@@ -465,6 +491,8 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
 
   useEffect(() => {
     void fetchBookmarks();
+    void fetchFavourites();
+    void fetchImportant();
     void fetchRevisions();
     fetchUserSubmissions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -541,6 +569,8 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
   useEffect(() => {
     if (user) {
       void fetchBookmarks();
+      void fetchFavourites();
+      void fetchImportant();
       void fetchRevisions();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1066,42 +1096,23 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
     }
   }, [settings?.defaultLanguage, settings?.supportedLanguages, selectedLanguage]);
 
-  const topNavItems = [
-    { id: "home" as const, label: "Home" },
-    { id: "problems" as const, label: "Sheets" },
-    { id: "favourites" as const, label: "My Favourites" },
-    { id: "companies" as const, label: "Companies" },
-    { id: "interview" as const, label: "Interview" },
-    { id: "ai" as const, label: "AI" },
-    { id: "analytics" as const, label: "Analytics" },
-    { id: "reviews" as const, label: "Reviews" },
-    { id: "calendar" as const, label: "Roadmap" },
-    { id: "sessions" as const, label: "Sessions" },
-    { id: "planner" as const, label: "Planner" },
-    ...(contestsEnabled
-      ? [{ id: "contests" as const, label: "Contest" }]
-      : []),
-    ...(discussionsEnabled
-      ? [{ id: "discuss" as const, label: "Discuss" }]
-      : []),
-    { id: "learn" as const, label: "Learn" },
-    ...(submissionsEnabled ? [{ id: "ranks" as const, label: "Ranks" }] : []),
-  ];
-
-  const railItems = [
-    { id: "home" as const, icon: LayoutDashboard, label: "Home" },
-    { id: "problems" as const, icon: Home, label: "Sheet" },
-    { id: "favourites" as const, icon: Star, label: "My Favourites" },
-    { id: "companies" as const, icon: Briefcase, label: "Companies" },
-    { id: "interview" as const, icon: Swords, label: "Interview" },
-    { id: "ai" as const, icon: Brain, label: "AI" },
-    { id: "analytics" as const, icon: BarChart3, label: "Analytics" },
-    { id: "reviews" as const, icon: RotateCcw, label: "Reviews" },
-    { id: "calendar" as const, icon: CalendarDays, label: "Calendar" },
-    { id: "sessions" as const, icon: Timer, label: "Sessions" },
-    { id: "planner" as const, icon: ListTodo, label: "Planner" },
-    { id: "profile" as const, icon: UserIcon, label: "Profile" },
-  ];
+  const navItems = useMemo(() => {
+    return PLATFORM_NAV_ITEMS.filter((item) => {
+      if (item.featureFlag === "contests") return contestsEnabled;
+      if (item.featureFlag === "discussions") return discussionsEnabled;
+      if (item.featureFlag === "submissions") return submissionsEnabled;
+      return true;
+    }).map((item) => {
+      const premiumLocked = Boolean(
+        item.premiumFeature && !canAccess(user, item.premiumFeature)
+      );
+      return {
+        ...item,
+        premiumLocked,
+        tooltip: premiumLocked ? `${item.label} — Premium` : item.label,
+      };
+    });
+  }, [contestsEnabled, discussionsEnabled, submissionsEnabled, user]);
 
   return (
     <div className="platform-root">
@@ -1128,14 +1139,22 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
         </button>
 
         <nav className="platform-navbar-nav" aria-label="Primary">
-          {topNavItems.map(({ id, label }) => (
+          {navItems.map(({ id, label, icon: Icon, premiumLocked, tooltip }) => (
             <button
               key={id}
               type="button"
               className={`platform-navbar-link ${activeTab === id ? "active" : ""}`}
+              aria-label={tooltip}
+              title={tooltip}
               onClick={() => setActiveTab(id)}
             >
-              {label}
+              <span className="platform-navbar-link-icon" aria-hidden>
+                <Icon size={16} strokeWidth={1.75} />
+              </span>
+              <span className="platform-navbar-link-label">{label}</span>
+              {premiumLocked ? (
+                <span className="platform-nav-premium-dot" aria-hidden />
+              ) : null}
             </button>
           ))}
         </nav>
@@ -1201,27 +1220,38 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
       </header>
 
       <div className="platform-shell">
-        <aside className="platform-sidebar platform-sidebar-labeled" aria-label="Quick navigation">
+        <aside className="platform-sidebar" aria-label="Primary navigation">
           <nav className="platform-sidebar-nav">
-            {railItems.map(({ id, icon: Icon, label }) => (
+            {navItems.map(({ id, icon: Icon, label, premiumLocked, tooltip }) => (
               <button
                 key={id}
                 type="button"
-                title={label}
-                aria-label={label}
+                aria-label={tooltip}
+                aria-current={activeTab === id ? "page" : undefined}
                 className={`platform-nav-item ${activeTab === id ? "active" : ""}`}
                 onClick={() => setActiveTab(id)}
               >
-                <span className="platform-nav-icon"><Icon size={18} /></span>
+                <span className="platform-nav-icon">
+                  <Icon size={20} strokeWidth={1.75} />
+                  {premiumLocked ? (
+                    <span className="platform-nav-premium" aria-hidden>
+                      <Crown size={9} strokeWidth={2.25} />
+                    </span>
+                  ) : null}
+                </span>
+                <span className="platform-nav-tooltip" role="tooltip">
+                  {tooltip}
+                </span>
+                <span className="platform-nav-label">{label}</span>
               </button>
             ))}
           </nav>
           <div className="platform-sidebar-bottom">
             <button
               type="button"
-              className="platform-nav-item"
-              title="Profile"
+              className={`platform-nav-item ${activeTab === "profile" ? "active" : ""}`}
               aria-label="Profile"
+              aria-current={activeTab === "profile" ? "page" : undefined}
               onClick={() => setActiveTab("profile")}
             >
               <span className="platform-nav-icon platform-nav-avatar">
@@ -1230,6 +1260,9 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
                 ) : (
                   user?.name?.charAt(0) || "U"
                 )}
+              </span>
+              <span className="platform-nav-tooltip" role="tooltip">
+                Profile
               </span>
             </button>
           </div>
@@ -1308,6 +1341,8 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
                 accessFilter={accessFilter}
                 statusFilter={statusFilter}
                 bookmarkedIds={bookmarkedIds}
+                favouriteIds={favouriteIds}
+                importantIds={importantIds}
                 revisionIds={revisionIds}
                 userId={userId}
                 userName={user?.name}
@@ -1325,6 +1360,8 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
                 }}
                 onRemoveBookmark={handleRemoveBookmark}
                 onBookmarkChange={handleBookmarkChange}
+                onFavoriteChange={handleFavoriteChange}
+                onImportantChange={handleImportantChange}
                 onRevisionChange={handleRevisionChange}
                 onOpenAdmin={onOpenAdmin}
                 onNavigateLearning={(tab) => setActiveTab(tab)}
@@ -1341,7 +1378,7 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
                 userId={userId}
                 refreshKey={favouritesRefreshKey}
                 onSelectProblem={setSelectedProblem}
-                onBookmarkChange={handleBookmarkChange}
+                onFavoriteChange={handleFavoriteChange}
                 onExploreQuestions={() => setActiveTab("problems")}
               />
             )}
@@ -1615,6 +1652,9 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
           onLoadSubmission={handleLoadSubmission}
           onCloseSubmissionView={handleCloseSubmissionView}
           onBookmarkChange={handleBookmarkChange}
+          onFavoriteChange={handleFavoriteChange}
+          onImportantChange={handleImportantChange}
+          onRevisionChange={handleRevisionChange}
           submissionsEnabled={submissionsEnabled}
           advancedEditorEnabled={newEditorEnabled}
           supportedLanguages={supportedLanguages}

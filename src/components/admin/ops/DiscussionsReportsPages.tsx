@@ -138,6 +138,8 @@ export const ReportsAdminPage: FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [status, setStatus] = useState("OPEN");
+  const [detail, setDetail] = useState<AdminReport | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -161,6 +163,20 @@ export const ReportsAdminPage: FC = () => {
     void load();
   }, [load]);
 
+  const openDetail = async (id: string) => {
+    try {
+      setDetailLoading(true);
+      setError("");
+      const res = await adminDiscussionApi.getReport(id);
+      setDetail(res.data || null);
+    } catch (err: any) {
+      setError(err?.response?.data?.message || "Unable to load report detail");
+      setDetail(null);
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
   const act = async (
     id: string,
     kind: "assign" | "review" | "resolve" | "dismiss" | "reopen"
@@ -174,6 +190,7 @@ export const ReportsAdminPage: FC = () => {
         await adminDiscussionApi.dismissReport(id, "Dismissed by admin");
       if (kind === "reopen") await adminDiscussionApi.reopenReport(id);
       await load();
+      if (detail?._id === id) await openDetail(id);
     } catch (err: any) {
       setError(err?.response?.data?.message || "Action failed");
     }
@@ -198,6 +215,70 @@ export const ReportsAdminPage: FC = () => {
         </button>
       </div>
       {error ? <p className="admin-error">{error}</p> : null}
+      {detail || detailLoading ? (
+        <div
+          className="admin-panel"
+          style={{ marginBottom: 12, padding: 12 }}
+          aria-live="polite"
+        >
+          <div className="admin-toolbar" style={{ marginBottom: 8 }}>
+            <strong>Report detail</strong>
+            <button
+              type="button"
+              className="admin-link"
+              onClick={() => setDetail(null)}
+            >
+              Close
+            </button>
+          </div>
+          {detailLoading ? (
+            <p className="admin-muted">Loading detail…</p>
+          ) : detail ? (
+            <dl
+              style={{
+                display: "grid",
+                gridTemplateColumns: "120px 1fr",
+                gap: "6px 12px",
+                margin: 0,
+                fontSize: 13,
+              }}
+            >
+              <dt className="admin-muted">ID</dt>
+              <dd className="font-code" style={{ margin: 0 }}>
+                {detail._id}
+              </dd>
+              <dt className="admin-muted">Target</dt>
+              <dd style={{ margin: 0 }}>
+                {detail.targetType}:{detail.targetId}
+              </dd>
+              <dt className="admin-muted">Reporter</dt>
+              <dd className="font-code" style={{ margin: 0 }}>
+                {detail.reporterId}
+              </dd>
+              <dt className="admin-muted">Reason</dt>
+              <dd style={{ margin: 0 }}>{detail.reason}</dd>
+              <dt className="admin-muted">Description</dt>
+              <dd style={{ margin: 0 }}>{detail.description || "—"}</dd>
+              <dt className="admin-muted">Priority</dt>
+              <dd style={{ margin: 0 }}>
+                <StatusBadge status={detail.priority} />
+              </dd>
+              <dt className="admin-muted">Status</dt>
+              <dd style={{ margin: 0 }}>
+                <StatusBadge status={detail.status} />
+              </dd>
+              <dt className="admin-muted">Assignee</dt>
+              <dd style={{ margin: 0 }}>{detail.assignedTo || "—"}</dd>
+              <dt className="admin-muted">Resolution</dt>
+              <dd style={{ margin: 0 }}>{detail.resolution || "—"}</dd>
+              <dt className="admin-muted">Created</dt>
+              <dd style={{ margin: 0 }}>
+                {new Date(detail.createdAt).toLocaleString()}
+              </dd>
+            </dl>
+          ) : null}
+        </div>
+      ) : null}
       <DataTable
         loading={loading}
         emptyTitle="No reports in queue"
@@ -233,8 +314,15 @@ export const ReportsAdminPage: FC = () => {
             key: "actions",
             header: "Actions",
             render: (r) => (
-              <PermissionGuard permission="reports:review">
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                <button
+                  type="button"
+                  className="admin-link"
+                  onClick={() => void openDetail(r._id)}
+                >
+                  Details
+                </button>
+                <PermissionGuard permission="reports:review">
                   <button
                     type="button"
                     className="admin-link"
@@ -256,8 +344,8 @@ export const ReportsAdminPage: FC = () => {
                   <button type="button" className="admin-link" onClick={() => void act(r._id, "reopen")}>
                     Reopen
                   </button>
-                </div>
-              </PermissionGuard>
+                </PermissionGuard>
+              </div>
             ),
           },
         ]}

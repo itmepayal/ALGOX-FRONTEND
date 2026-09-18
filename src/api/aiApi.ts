@@ -42,7 +42,7 @@ export interface AiAssistResponse {
     remaining: number;
     failed: number;
   };
-  provider: "openai" | "policy" | "none";
+  provider: "gemini" | "openai" | "policy" | "none";
 }
 
 /**

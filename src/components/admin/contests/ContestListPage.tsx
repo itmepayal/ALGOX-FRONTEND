@@ -19,6 +19,7 @@ import {
   Plus,
   RefreshCw,
   Search,
+  Send,
   Square,
   Trash2,
   Trophy,
@@ -142,6 +143,7 @@ const ContestActions: FC<{
   canManage: boolean;
   busy: boolean;
   onView: () => void;
+  onPublish: () => void;
   onSchedule: () => void;
   onStart: () => void;
   onEnd: () => void;
@@ -152,6 +154,7 @@ const ContestActions: FC<{
   canManage,
   busy,
   onView,
+  onPublish,
   onSchedule,
   onStart,
   onEnd,
@@ -192,6 +195,13 @@ const ContestActions: FC<{
       icon: Eye,
       onClick: onView,
       show: true,
+    },
+    {
+      key: "publish",
+      label: "Publish",
+      icon: Send,
+      onClick: onPublish,
+      show: canManage && status === "DRAFT",
     },
     {
       key: "schedule",
@@ -759,6 +769,9 @@ export const ContestListPage: FC<Props> = ({ onOpen }) => {
                       canManage={canManage}
                       busy={actionBusyId === adminContestApi.id(c)}
                       onView={() => onOpen(adminContestApi.id(c))}
+                      onPublish={() =>
+                        void runLifecycle(c, "Publish", adminContestApi.publish)
+                      }
                       onSchedule={() =>
                         void runLifecycle(c, "Schedule", adminContestApi.schedule)
                       }

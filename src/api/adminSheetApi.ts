@@ -1,6 +1,7 @@
 import { problemClient } from "./problemApi";
 
 export type AdminSheetStatus = "DRAFT" | "PUBLISHED" | "ARCHIVED";
+export type AdminSheetAccess = "FREE" | "PREMIUM";
 
 export interface AdminSheet {
   id?: string;
@@ -9,6 +10,8 @@ export interface AdminSheet {
   title: string;
   description?: string;
   status: AdminSheetStatus;
+  /** FREE sheets unlock linked problems for free users. */
+  access?: AdminSheetAccess;
   order?: number;
   totalProblems?: number;
   createdBy?: string;
@@ -96,6 +99,7 @@ export const adminSheetApi = {
     description?: string;
     order?: number;
     status?: AdminSheetStatus;
+    access?: AdminSheetAccess;
   }): Promise<ApiEnvelope<AdminSheet>> => {
     const res = await problemClient.post("/admin/sheets", payload);
     return res.data as ApiEnvelope<AdminSheet>;
@@ -103,7 +107,12 @@ export const adminSheetApi = {
 
   update: async (
     sheetId: string,
-    payload: { title?: string; description?: string; order?: number }
+    payload: {
+      title?: string;
+      description?: string;
+      order?: number;
+      access?: AdminSheetAccess;
+    }
   ): Promise<ApiEnvelope<AdminSheet>> => {
     const res = await problemClient.patch(
       `/admin/sheets/${encodeURIComponent(sheetId)}`,

@@ -700,24 +700,29 @@ const RoomsMonitor: FC = () => {
           {
             key: "type",
             header: "Type",
-            render: (r) => r.kind || r.roomType || r.type || "Unavailable / Not tracked",
+            render: (r) => r.kind || r.roomType || r.type || "—",
           },
           {
             key: "users",
             header: "Connected",
+            technical: true,
             render: (r) =>
               r.size ??
               r.connectedUsers ??
-              "Unavailable / Not tracked",
+              (Array.isArray(r.members) ? r.members.length : "—"),
           },
           {
-            key: "activity",
-            header: "Last activity",
-            render: () => "Unavailable / Not tracked",
+            key: "members",
+            header: "Socket IDs",
+            render: (r) =>
+              Array.isArray(r.members) && r.members.length
+                ? r.members.slice(0, 4).join(", ") +
+                  (r.members.length > 4 ? ` +${r.members.length - 4}` : "")
+                : "—",
           },
         ]}
         rows={rows}
-        rowKey={(r) => r.room || r.roomId || r.id}
+        rowKey={(r) => String(r.room || r.roomId || r.id)}
       />
     </PermissionGuard>
   );

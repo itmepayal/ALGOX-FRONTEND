@@ -664,6 +664,125 @@
   border-color: transparent !important;
 }
 
+.lc-workspace .lc-personalize-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 12px;
+}
+
+.lc-workspace .lc-personalize-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--ws-border) 80%, transparent);
+  background: transparent;
+  color: var(--ws-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.lc-workspace .lc-personalize-btn:hover:not(:disabled) {
+  color: var(--ws-text);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.lc-workspace .lc-personalize-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.lc-workspace .lc-personalize-btn.is-on {
+  color: var(--ws-text);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.lc-workspace .lc-personalize-btn.is-fav.is-on {
+  color: #f43f5e;
+  background: rgba(244, 63, 94, 0.12);
+}
+
+.lc-workspace .lc-personalize-btn.is-important.is-on {
+  color: #eab308;
+  background: rgba(234, 179, 8, 0.12);
+}
+
+.lc-workspace .lc-personalize-btn.is-revision.is-on {
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.12);
+}
+
+.lc-workspace .lc-solved-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #22c55e;
+  background: rgba(34, 197, 94, 0.12);
+}
+
+.lc-workspace .lc-confidence-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 14px;
+}
+
+.lc-workspace .lc-confidence-label {
+  font-size: 0.75rem;
+  color: var(--ws-muted);
+  margin-right: 4px;
+}
+
+.lc-workspace .lc-confidence-sep {
+  margin: 0 6px;
+  opacity: 0.5;
+}
+
+.lc-workspace .lc-confidence-chip {
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--ws-border) 80%, transparent);
+  background: transparent;
+  color: var(--ws-muted);
+  font-size: 0.7rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.lc-workspace .lc-confidence-chip.is-on {
+  color: var(--ws-text);
+  border-color: transparent;
+  background: rgba(99, 102, 241, 0.18);
+}
+
+.lc-workspace .lc-confidence-chip:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+@media (max-width: 720px) {
+  .lc-workspace .lc-personalize-label {
+    display: none;
+  }
+  .lc-workspace .lc-personalize-btn {
+    width: 32px;
+    padding: 0;
+    justify-content: center;
+  }
+}
+
 .lc-workspace .lc-share-inline button,
 .lc-workspace .ps-share-trigger-icon {
   background: transparent !important;

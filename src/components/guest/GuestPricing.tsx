@@ -1,21 +1,23 @@
 import type { FC } from "react";
 import { Check, Crown } from "lucide-react";
 import { useAuthPrompt } from "../../context/AuthPromptContext";
+import { Button } from "../ui/button";
 
 const FREE = [
-  "Browse all public problems",
-  "Read public study content",
+  "Learning Sheet problems (configured FREE sheets)",
+  "Account & progress tracking",
+  "Public discussions",
   "View contest listings & leaderboard previews",
-  "Submit solutions after signup",
-  "Save favourites & track progress after signup",
+  "Submit solutions on FREE Sheet problems after signup",
 ];
 
 const PREMIUM = [
   "Everything in Free",
+  "All problems outside Learning Sheets",
   "Premium editorials & guided solutions",
   "Extra hints and solution walkthroughs",
-  "AI-assisted practice tools (when enabled)",
-  "Priority learning surfaces",
+  "AI Assist, analytics & mock interviews",
+  "Company interview sets & study plans",
 ];
 
 /** Marketing pricing — no fake subscriber counts. */
@@ -26,14 +28,13 @@ export const GuestPricing: FC = () => {
     <div className="guest-pricing">
       <header className="guest-pricing-header">
         <p className="guest-hero-kicker">
-          <Crown size={14} />
-          Pricing
+          <Crown size={14} aria-hidden /> Pricing
         </p>
         <h1 className="guest-section-title">Choose how you practice</h1>
         <p className="guest-section-lede">
-          Start free. Upgrade when you want Premium editorials and advanced
-          practice tools. Billing activates only after a verified payment —
-          never from a client-side toggle.
+          Free users practice official Learning Sheet problems. Everything else
+          requires AlgoPath Premium. Billing activates only after a verified
+          payment — never from a client-side toggle.
         </p>
       </header>
 
@@ -46,13 +47,13 @@ export const GuestPricing: FC = () => {
           <ul>
             {FREE.map((item) => (
               <li key={item}>
-                <Check size={14} /> {item}
+                <Check size={14} aria-hidden /> {item}
               </li>
             ))}
           </ul>
-          <button
-            type="button"
-            className="guest-btn ghost"
+          <Button
+            variant="secondary"
+            className="w-full"
             onClick={() =>
               openAuth({
                 tab: "signup",
@@ -62,7 +63,7 @@ export const GuestPricing: FC = () => {
             }
           >
             Create free account
-          </button>
+          </Button>
         </article>
 
         <article className="guest-price-card featured">
@@ -74,24 +75,23 @@ export const GuestPricing: FC = () => {
           <ul>
             {PREMIUM.map((item) => (
               <li key={item}>
-                <Check size={14} /> {item}
+                <Check size={14} aria-hidden /> {item}
               </li>
             ))}
           </ul>
-          <button
-            type="button"
-            className="guest-btn primary"
+          <Button
+            className="w-full"
             onClick={() =>
               openAuth({
                 tab: "signup",
                 title: "Upgrade to Premium",
                 message:
-                  "Upgrade to Premium to access this editorial. Create an account first, then checkout from your profile.",
+                  "Upgrade to Premium to unlock the full problem catalog. Create an account first, then checkout from your profile.",
               })
             }
           >
             Sign up to upgrade
-          </button>
+          </Button>
         </article>
       </div>
     </div>

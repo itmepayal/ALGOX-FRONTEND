@@ -37,9 +37,9 @@
      Poppins  → primary UI
      Saira    → technical / metrics
      Fira Code → source code only */
-  --font-primary: "Poppins", sans-serif;
-  --font-technical: "Saira", sans-serif;
-  --font-mono: "Fira Code", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --font-primary: "Saira", sans-serif;
+  --font-technical: "Poppins", sans-serif;
+  --font-mono: "Poppins", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   /* Back-compat aliases */
   --font-sans: var(--font-primary);
   --font-tech: var(--font-technical);

@@ -1,46 +1,24 @@
-import type { FC } from "react";
+import { useState, type FC } from "react";
 import { BrandMark } from "../BrandLogo";
 import { usePlatformSettings } from "../../context/PlatformSettingsContext";
 import { useAuthPrompt } from "../../context/AuthPromptContext";
 import { Menu, X } from "lucide-react";
-import { useState } from "react";
-
-export type GuestTab =
-  | "home"
-  | "problems"
-  | "companies"
-  | "contests"
-  | "discuss"
-  | "learn"
-  | "ranks"
-  | "pricing";
-
-const NAV: { id: GuestTab; label: string; flag?: string }[] = [
-  { id: "home", label: "Home" },
-  { id: "problems", label: "Problems" },
-  { id: "companies", label: "Companies" },
-  { id: "contests", label: "Contests", flag: "contests" },
-  { id: "discuss", label: "Discuss", flag: "discussions" },
-  { id: "learn", label: "Learn" },
-  { id: "ranks", label: "Ranks" },
-  { id: "pricing", label: "Pricing" },
-];
+import { Button } from "../ui/button";
 
 interface GuestNavbarProps {
-  active: GuestTab;
-  onNavigate: (tab: GuestTab) => void;
+  onGoHome: () => void;
+  onGoPricing: () => void;
 }
 
-export const GuestNavbar: FC<GuestNavbarProps> = ({ active, onNavigate }) => {
-  const { settings, isEnabled } = usePlatformSettings();
+/** Landing navbar — brand, Pricing (in-page), Login / Get Started. No feature tabs. */
+export const GuestNavbar: FC<GuestNavbarProps> = ({
+  onGoHome,
+  onGoPricing,
+}) => {
+  const { settings } = usePlatformSettings();
   const { openAuth } = useAuthPrompt();
   const [mobileOpen, setMobileOpen] = useState(false);
   const platformName = settings?.platformName || "AlgoPath";
-
-  const items = NAV.filter((item) => {
-    if (!item.flag) return true;
-    return isEnabled(item.flag as "contests" | "discussions" | "submissions");
-  });
 
   return (
     <header className="guest-navbar">
@@ -48,9 +26,10 @@ export const GuestNavbar: FC<GuestNavbarProps> = ({ active, onNavigate }) => {
         type="button"
         className="guest-navbar-brand"
         onClick={() => {
-          onNavigate("home");
+          onGoHome();
           setMobileOpen(false);
         }}
+        aria-label={`${platformName} home`}
       >
         <BrandMark size={28} />
         <span className="guest-navbar-name">
@@ -64,40 +43,38 @@ export const GuestNavbar: FC<GuestNavbarProps> = ({ active, onNavigate }) => {
         </span>
       </button>
 
-      <nav className="guest-navbar-nav" aria-label="Guest primary">
-        {items.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            className={`guest-navbar-link ${active === item.id ? "active" : ""}`}
-            onClick={() => onNavigate(item.id)}
-          >
-            {item.label}
-          </button>
-        ))}
+      <nav className="guest-navbar-nav" aria-label="Primary">
+        <button
+          type="button"
+          className="guest-navbar-link"
+          onClick={onGoPricing}
+        >
+          Pricing
+        </button>
       </nav>
 
       <div className="guest-navbar-actions">
-        <button
-          type="button"
-          className="guest-btn ghost"
+        <Button
+          variant="ghost"
+          size="sm"
+          className="guest-nav-login"
           onClick={() => openAuth({ tab: "login", title: "Welcome back" })}
         >
-          Log in
-        </button>
-        <button
-          type="button"
-          className="guest-btn primary"
+          Login
+        </Button>
+        <Button
+          size="sm"
+          className="guest-nav-cta"
           onClick={() =>
             openAuth({
               tab: "signup",
-              title: "Create your account",
-              message: "Track progress, save problems, and join contests.",
+              title: "Create your AlgoPath account",
+              message: "Start building stronger problem-solving skills.",
             })
           }
         >
-          Sign up
-        </button>
+          Get Started
+        </Button>
         <button
           type="button"
           className="guest-navbar-menu"
@@ -109,21 +86,18 @@ export const GuestNavbar: FC<GuestNavbarProps> = ({ active, onNavigate }) => {
         </button>
       </div>
 
-      {mobileOpen && (
+      {mobileOpen ? (
         <div className="guest-navbar-drawer" role="navigation">
-          {items.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className={`guest-drawer-link ${active === item.id ? "active" : ""}`}
-              onClick={() => {
-                onNavigate(item.id);
-                setMobileOpen(false);
-              }}
-            >
-              {item.label}
-            </button>
-          ))}
+          <button
+            type="button"
+            className="guest-drawer-link"
+            onClick={() => {
+              onGoPricing();
+              setMobileOpen(false);
+            }}
+          >
+            Pricing
+          </button>
           <button
             type="button"
             className="guest-drawer-link"
@@ -132,7 +106,7 @@ export const GuestNavbar: FC<GuestNavbarProps> = ({ active, onNavigate }) => {
               openAuth({ tab: "login" });
             }}
           >
-            Log in
+            Login
           </button>
           <button
             type="button"
@@ -142,10 +116,10 @@ export const GuestNavbar: FC<GuestNavbarProps> = ({ active, onNavigate }) => {
               openAuth({ tab: "signup" });
             }}
           >
-            Sign up
+            Get Started
           </button>
         </div>
-      )}
+      ) : null}
     </header>
   );
 };

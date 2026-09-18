@@ -528,7 +528,9 @@ export const ContestDetailPage: FC<Props> = ({ id, onBack }) => {
             </div>
           ) : null}
           <DataTable
-            rowKey={(r) => String(r.userId || r.rank || Math.random())}
+            rowKey={(r) =>
+              String(r.userId || `rank-${r.rank ?? "x"}`)
+            }
             rows={board}
             emptyTitle="No rankings yet"
             emptyDescription="Rankings appear after participants submit solutions."

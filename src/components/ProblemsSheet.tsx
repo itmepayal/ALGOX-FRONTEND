@@ -8,9 +8,11 @@ import {
   ExternalLink,
   FileText,
   Flame,
+  Heart,
   Info,
   ListTodo,
   Loader2,
+  RefreshCw,
   RotateCcw,
   Search,
   Shuffle,
@@ -140,6 +142,8 @@ interface ProblemsSheetProps {
   accessFilter?: "all" | "free" | "premium";
   statusFilter: "all" | "solved" | "attempted" | "unsolved";
   bookmarkedIds: Set<string>;
+  favouriteIds?: Set<string>;
+  importantIds?: Set<string>;
   revisionIds: Set<string>;
   userId?: string;
   learningRefreshKey?: number;
@@ -154,6 +158,8 @@ interface ProblemsSheetProps {
   onSelectProblem: (p: Problem) => void;
   onRemoveBookmark?: (problemId: string) => void;
   onBookmarkChange?: (problemId: string, isBookmarked: boolean) => void;
+  onFavoriteChange?: (problemId: string, isFavourite: boolean) => void;
+  onImportantChange?: (problemId: string, isImportant: boolean) => void;
   onRevisionChange?: (problemId: string, isRevision: boolean) => void;
   onOpenAdmin?: () => void;
   onNavigateLearning?: (tab: "calendar" | "sessions" | "planner") => void;
@@ -174,6 +180,8 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
   accessFilter = "all",
   statusFilter,
   bookmarkedIds,
+  favouriteIds = new Set(),
+  importantIds = new Set(),
   revisionIds,
   userId,
   learningRefreshKey = 0,
@@ -186,12 +194,16 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
   onStatusFilterChange,
   onSelectProblem,
   onBookmarkChange,
+  onFavoriteChange,
+  onImportantChange,
   onRevisionChange,
   onOpenAdmin: _onOpenAdmin,
   onNavigateLearning,
   onProgressImported,
 }) => {
-  const [sheetTab, setSheetTab] = useState<"all" | "revision" | "bookmarks">("all");
+  const [sheetTab, setSheetTab] = useState<
+    "all" | "revision" | "bookmarks" | "favourites" | "important"
+  >("all");
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [studySessions, setStudySessions] = useState<StudySession[]>([]);
   const [noteProblem, setNoteProblem] = useState<Problem | null>(null);
@@ -202,6 +214,8 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
   const [noteProblemIds, setNoteProblemIds] = useState<Set<string>>(new Set());
   const [revisionBusy, setRevisionBusy] = useState<string | null>(null);
   const [bookmarkBusy, setBookmarkBusy] = useState<string | null>(null);
+  const [favouriteBusy, setFavouriteBusy] = useState<string | null>(null);
+  const [importantBusy, setImportantBusy] = useState<string | null>(null);
   const [rowError, setRowError] = useState("");
   const [sheetResetAt, setSheetResetAt] = useState<string | null>(null);
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
@@ -425,7 +439,9 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
     const matchTab =
       sheetTab === "all" ||
       (sheetTab === "revision" && revisionIds.has(pid)) ||
-      (sheetTab === "bookmarks" && bookmarkedIds.has(pid));
+      (sheetTab === "bookmarks" && bookmarkedIds.has(pid)) ||
+      (sheetTab === "favourites" && favouriteIds.has(pid)) ||
+      (sheetTab === "important" && importantIds.has(pid));
     const completed = isSheetCompleted(pid, submissions, sheetResetAt);
     const attempted = !completed && hasAttempted(pid, submissions);
     const matchStatus =
@@ -445,6 +461,8 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
     sheetTab,
     revisionIds,
     bookmarkedIds,
+    favouriteIds,
+    importantIds,
     statusFilter,
     submissions,
     sheetResetAt,
@@ -797,30 +815,67 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
     const pid = normalizeProblemId(p.id || p._id);
     if (!pid || bookmarkBusy) return;
     if (!hasAccessToken()) {
-      setRowError("Please sign in to save favourite questions.");
+      setRowError("Please sign in to bookmark questions.");
       return;
     }
     const prev = bookmarkedIds.has(pid);
-    // Optimistic favourite-only update — never touch revision
     onBookmarkChange?.(pid, !prev);
     setBookmarkBusy(pid);
     setRowError("");
     try {
       const res = await engagementApi.toggleBookmark(pid);
-      // Only apply bookmark flag. Ignore any unrelated fields.
+      // Bookmark flag only — never drive favourite UI from this response.
+      const next =
+        typeof res.data?.isBookmarked === "boolean"
+          ? res.data.isBookmarked
+          : !prev;
+      onBookmarkChange?.(pid, next);
+      setToast({
+        type: "success",
+        text: next ? "Bookmarked" : "Removed bookmark",
+      });
+    } catch (err: any) {
+      onBookmarkChange?.(pid, prev);
+      setRowError(
+        err.response?.data?.message ||
+          err.message ||
+          "Unable to update bookmark. Please try again."
+      );
+      setToast({
+        type: "error",
+        text: "Unable to update bookmark. Please try again.",
+      });
+    } finally {
+      setBookmarkBusy(null);
+    }
+  };
+
+  const toggleFavourite = async (p: Problem, e: MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const pid = normalizeProblemId(p.id || p._id);
+    if (!pid || favouriteBusy) return;
+    if (!hasAccessToken()) {
+      setRowError("Please sign in to favourite questions.");
+      return;
+    }
+    const prev = favouriteIds.has(pid);
+    onFavoriteChange?.(pid, !prev);
+    setFavouriteBusy(pid);
+    setRowError("");
+    try {
+      const res = await engagementApi.toggleFavorite(pid);
       const next =
         typeof res.data?.isFavourite === "boolean"
           ? res.data.isFavourite
-          : typeof res.data?.isBookmarked === "boolean"
-            ? res.data.isBookmarked
-            : !prev;
-      onBookmarkChange?.(pid, next);
+          : !prev;
+      onFavoriteChange?.(pid, next);
       setToast({
         type: "success",
         text: next ? "Added to favourites" : "Removed from favourites",
       });
     } catch (err: any) {
-      onBookmarkChange?.(pid, prev);
+      onFavoriteChange?.(pid, prev);
       setRowError(
         err.response?.data?.message ||
           err.message ||
@@ -831,7 +886,47 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
         text: "Unable to update favourites. Please try again.",
       });
     } finally {
-      setBookmarkBusy(null);
+      setFavouriteBusy(null);
+    }
+  };
+
+  const toggleImportant = async (p: Problem, e: MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const pid = normalizeProblemId(p.id || p._id);
+    if (!pid || importantBusy) return;
+    if (!hasAccessToken()) {
+      setRowError("Please sign in to mark questions as important.");
+      return;
+    }
+    const prev = importantIds.has(pid);
+    onImportantChange?.(pid, !prev);
+    setImportantBusy(pid);
+    setRowError("");
+    try {
+      const res = await engagementApi.toggleImportant(pid);
+      const next =
+        typeof res.data?.isImportant === "boolean"
+          ? res.data.isImportant
+          : !prev;
+      onImportantChange?.(pid, next);
+      setToast({
+        type: "success",
+        text: next ? "Marked important" : "Removed important",
+      });
+    } catch (err: any) {
+      onImportantChange?.(pid, prev);
+      setRowError(
+        err.response?.data?.message ||
+          err.message ||
+          "Unable to update important. Please try again."
+      );
+      setToast({
+        type: "error",
+        text: "Unable to update important. Please try again.",
+      });
+    } finally {
+      setImportantBusy(null);
     }
   };
 
@@ -865,6 +960,8 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
       const diff = normalizeDifficulty(prob.difficulty);
       const isRev = revisionIds.has(pid);
       const isBm = bookmarkedIds.has(pid);
+      const isFav = favouriteIds.has(pid);
+      const isImp = importantIds.has(pid);
       const noted = noteProblemIds.has(pid);
       const resources = getProblemResources(prob).filter((r) => r.type !== "practice");
       const practice =
@@ -956,8 +1053,8 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
             <button
               type="button"
               className={`ax-icon ${isBm ? "on-bookmark" : ""}`}
-              title={isBm ? "Remove from favourites" : "Add to favourites"}
-              aria-label={isBm ? "Remove from favourites" : "Add to favourites"}
+              title={isBm ? "Remove bookmark" : "Bookmark — save for later"}
+              aria-label={isBm ? "Remove bookmark" : "Bookmark this problem"}
               aria-pressed={isBm}
               disabled={bookmarkBusy === pid}
               onClick={(e) => void toggleBookmark(prob, e)}
@@ -966,6 +1063,36 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
                 <Loader2 size={13} className="animate-spin" />
               ) : (
                 <Bookmark size={14} fill={isBm ? "currentColor" : "none"} />
+              )}
+            </button>
+            <button
+              type="button"
+              className={`ax-icon ${isFav ? "on-favourite" : ""}`}
+              title={isFav ? "Remove favourite" : "Favourite — preferred problem"}
+              aria-label={isFav ? "Remove from favourites" : "Add to favourites"}
+              aria-pressed={isFav}
+              disabled={favouriteBusy === pid}
+              onClick={(e) => void toggleFavourite(prob, e)}
+            >
+              {favouriteBusy === pid ? (
+                <Loader2 size={13} className="animate-spin" />
+              ) : (
+                <Heart size={14} fill={isFav ? "currentColor" : "none"} />
+              )}
+            </button>
+            <button
+              type="button"
+              className={`ax-icon ${isImp ? "on-important" : ""}`}
+              title={isImp ? "Remove important" : "Important — interview / exam priority"}
+              aria-label={isImp ? "Remove important mark" : "Mark as important"}
+              aria-pressed={isImp}
+              disabled={importantBusy === pid}
+              onClick={(e) => void toggleImportant(prob, e)}
+            >
+              {importantBusy === pid ? (
+                <Loader2 size={13} className="animate-spin" />
+              ) : (
+                <Star size={14} fill={isImp ? "currentColor" : "none"} />
               )}
             </button>
             <button
@@ -989,7 +1116,7 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
               {revisionBusy === pid ? (
                 <Loader2 size={13} className="animate-spin" />
               ) : (
-                <Star size={14} fill={isRev ? "currentColor" : "none"} />
+                <RefreshCw size={14} />
               )}
             </button>
           </div>
@@ -1006,8 +1133,8 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
             <p>
               {activeCatalog.stats.topics} topics ·{" "}
               {activeCatalog.stats.uniqueProblems} unique problems · topic-wise
-              practice. Sheet progress is independent of bookmarks, revision, and
-              global solved status.
+              practice. Sheet progress is independent of bookmarks, favourites,
+              revision, and global solved status.
             </p>
             <p className="ax-meta" style={{ marginTop: 6 }}>
               {catalogSource === "server"
@@ -1088,9 +1215,11 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
           <div className="ax-tabs">
             {(
               [
-                ["all", "All Problems"],
+                ["all", "All"],
+                ["bookmarks", `Bookmarked (${bookmarkedIds.size})`],
+                ["favourites", `Favorites (${favouriteIds.size})`],
+                ["important", `Important (${importantIds.size})`],
                 ["revision", `Revision (${revisionIds.size})`],
-                ["bookmarks", `Favourites (${bookmarkedIds.size})`],
               ] as const
             ).map(([id, label]) => (
               <button

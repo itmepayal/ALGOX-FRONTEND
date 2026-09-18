@@ -30,6 +30,7 @@ import { usePermission } from "../../../rbac/usePermission";
 import {
   adminSheetApi,
   type AdminSheet,
+  type AdminSheetAccess,
   type AdminSheetStatus,
   type SheetPreview,
 } from "../../../api/adminSheetApi";
@@ -92,6 +93,7 @@ export const SheetsAdminPage: FC = () => {
   const [formTitle, setFormTitle] = useState("");
   const [formDescription, setFormDescription] = useState("");
   const [formOrder, setFormOrder] = useState("0");
+  const [formAccess, setFormAccess] = useState<AdminSheetAccess>("FREE");
   const [sheetIdTouched, setSheetIdTouched] = useState(false);
 
   const [deleteTarget, setDeleteTarget] = useState<AdminSheet | null>(null);
@@ -153,6 +155,7 @@ export const SheetsAdminPage: FC = () => {
     setFormTitle("");
     setFormDescription("");
     setFormOrder("0");
+    setFormAccess("FREE");
     setSheetIdTouched(false);
   };
 
@@ -169,6 +172,7 @@ export const SheetsAdminPage: FC = () => {
       setFormTitle(sheet.title || "");
       setFormDescription(sheet.description || "");
       setFormOrder(String(sheet.order ?? 0));
+      setFormAccess(sheet.access === "PREMIUM" ? "PREMIUM" : "FREE");
       setSheetIdTouched(true);
     } catch (err) {
       toast.error(errMsg(err, "Failed to load sheet"));
@@ -215,6 +219,7 @@ export const SheetsAdminPage: FC = () => {
         description: formDescription.trim(),
         order: Number(formOrder) || 0,
         status: "DRAFT",
+        access: formAccess,
       });
       toast.success("Sheet created");
       closePanel();
@@ -235,6 +240,7 @@ export const SheetsAdminPage: FC = () => {
         title: formTitle.trim(),
         description: formDescription.trim(),
         order: Number(formOrder) || 0,
+        access: formAccess,
       });
       toast.success("Sheet updated");
       closePanel();
@@ -571,6 +577,15 @@ export const SheetsAdminPage: FC = () => {
                 render: (r) => <StatusBadge status={r.status} />,
               },
               {
+                key: "access",
+                header: "Access",
+                render: (r) => (
+                  <StatusBadge
+                    status={r.access === "PREMIUM" ? "premium" : "free"}
+                  />
+                ),
+              },
+              {
                 key: "problems",
                 header: "Problems",
                 technical: true,
@@ -737,10 +752,28 @@ export const SheetsAdminPage: FC = () => {
                       onChange={(e) => setFormOrder(e.target.value)}
                     />
                   </label>
+                  <label className="admin-field">
+                    <span>Learner access</span>
+                    <select
+                      className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                      value={formAccess}
+                      onChange={(e) =>
+                        setFormAccess(
+                          e.target.value === "PREMIUM" ? "PREMIUM" : "FREE"
+                        )
+                      }
+                    >
+                      <option value="FREE">FREE — linked problems free for all</option>
+                      <option value="PREMIUM">PREMIUM — requires subscription</option>
+                    </select>
+                  </label>
                   {panel === "edit" && detail ? (
                     <p className="admin-muted" style={{ margin: 0, fontSize: 12 }}>
-                      Status: <StatusBadge status={detail.status} /> · Problems:{" "}
-                      {detail.totalProblems ?? 0}
+                      Status: <StatusBadge status={detail.status} /> · Access:{" "}
+                      <StatusBadge
+                        status={detail.access === "PREMIUM" ? "premium" : "free"}
+                      />{" "}
+                      · Problems: {detail.totalProblems ?? 0}
                     </p>
                   ) : null}
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>

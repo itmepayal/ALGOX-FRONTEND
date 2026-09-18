@@ -709,6 +709,14 @@
   color: #fbbf24;
 }
 
+.ax-icon.on-favourite {
+  color: #fb7185;
+}
+
+.ax-icon.on-important {
+  color: #f59e0b;
+}
+
 .ax-icon.on-revision {
   color: #38bdf8;
 }

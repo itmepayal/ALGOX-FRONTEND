@@ -4,31 +4,40 @@ import { createServiceClient } from "./authClient";
 
 export type UserReaction = "like" | "dislike" | null;
 
+export type PersonalConfidence =
+  | "easy_for_me"
+  | "needs_practice"
+  | "difficult"
+  | null;
+
 export interface EngagementState {
   likeCount: number;
   dislikeCount: number;
   bookmarkCount?: number;
+  favoriteCount?: number;
   favouriteCount?: number;
+  importantCount?: number;
   currentUserReaction: UserReaction;
   isBookmarked: boolean;
   isFavourite?: boolean;
+  isImportant?: boolean;
   isRevision?: boolean;
+  personalConfidence?: PersonalConfidence;
 }
 
-/** Bookmark / favourite mutations must never be used to update revision UI state. */
-export interface BookmarkMutationResult {
-  isBookmarked: boolean;
-  isFavourite?: boolean;
-  bookmarkCount: number;
-  favouriteCount?: number;
-  likeCount: number;
-  dislikeCount: number;
-  currentUserReaction: UserReaction;
-}
+/** Bookmark mutations must never drive Favourite / Important / Revision UI alone. */
+export interface BookmarkMutationResult extends EngagementState {}
+
+export interface FavouriteMutationResult extends EngagementState {}
 
 /** Revision mutations must never be used to update bookmark UI state. */
 export interface RevisionMutationResult {
   isRevision: boolean;
+}
+
+export interface ImportantMutationResult {
+  isImportant: boolean;
+  importantCount?: number;
 }
 
 export type FavouriteSolvedFilter = "all" | "solved" | "attempted" | "unsolved";
@@ -49,16 +58,18 @@ export interface FavouriteListQuery {
   solved?: FavouriteSolvedFilter;
   accessType?: FavouriteAccessFilter;
   sort?: FavouriteSort;
-  /** Force paged envelope even with defaults. */
   paginated?: boolean;
 }
 
 export interface FavouriteProblem extends Problem {
   isFavourite?: boolean;
+  isBookmarked?: boolean;
+  isImportant?: boolean;
   isPremium?: boolean;
   favouritedAt?: string | null;
   progressStatus?: "NOT_STARTED" | "ATTEMPTED" | "SOLVED";
   solvedStatus?: "solved" | "attempted" | "unsolved";
+  personalConfidence?: PersonalConfidence;
 }
 
 export interface FavouriteStats {
@@ -77,6 +88,15 @@ export interface FavouriteListResult {
   filters: { categories: string[] };
 }
 
+export interface PersonalizationSummary {
+  bookmarked: number;
+  favourites: number;
+  important: number;
+  revision: number;
+  difficult: number;
+  needsPractice: number;
+}
+
 export interface FavouriteAnalytics {
   mostFavourited: Array<{
     id: string;
@@ -85,6 +105,8 @@ export interface FavouriteAnalytics {
     difficulty: string;
     category: string;
     favouriteCount: number;
+    bookmarkCount?: number;
+    importantCount?: number;
     isPremium: boolean;
   }>;
   trends: Array<{ date: string; count: number }>;
@@ -92,6 +114,12 @@ export interface FavouriteAnalytics {
   premiumFavourites: number;
   mostFavouritedFree: FavouriteAnalytics["mostFavourited"];
   mostFavouritedPremium: FavouriteAnalytics["mostFavourited"];
+  aggregates?: {
+    bookmarks: number;
+    favourites: number;
+    important: number;
+    revision: number;
+  };
 }
 
 export interface ApiResponse<T> {
@@ -139,9 +167,9 @@ export const engagementApi = {
   },
 
   removeBookmark: async (problemId: string) => {
-    const res = await engagementClient.delete<ApiResponse<BookmarkMutationResult>>(
-      `/problems/${problemId}/bookmark`
-    );
+    const res = await engagementClient.delete<
+      ApiResponse<BookmarkMutationResult>
+    >(`/problems/${problemId}/bookmark`);
     return res.data;
   },
 
@@ -152,7 +180,52 @@ export const engagementApi = {
     return res.data;
   },
 
-  /** Flat list — backward compatible with Dashboard sheet sync. */
+  addFavorite: async (problemId: string) => {
+    const res = await engagementClient.post<
+      ApiResponse<FavouriteMutationResult>
+    >(`/problems/${problemId}/favourite`);
+    return res.data;
+  },
+
+  removeFavorite: async (problemId: string) => {
+    const res = await engagementClient.delete<
+      ApiResponse<FavouriteMutationResult>
+    >(`/problems/${problemId}/favourite`);
+    return res.data;
+  },
+
+  toggleFavorite: async (problemId: string) => {
+    const res = await engagementClient.post<
+      ApiResponse<FavouriteMutationResult>
+    >(`/problems/${problemId}/favourite/toggle`);
+    return res.data;
+  },
+
+  toggleImportant: async (problemId: string) => {
+    const res = await engagementClient.post<
+      ApiResponse<ImportantMutationResult>
+    >(`/problems/${problemId}/important/toggle`);
+    return res.data;
+  },
+
+  setPersonalConfidence: async (
+    problemId: string,
+    confidence: PersonalConfidence
+  ) => {
+    const res = await engagementClient.patch<
+      ApiResponse<{ personalConfidence: PersonalConfidence; problemId: string }>
+    >(`/problems/${problemId}/personal-confidence`, { confidence });
+    return res.data;
+  },
+
+  getPersonalizationSummary: async () => {
+    const res = await engagementClient.get<
+      ApiResponse<PersonalizationSummary>
+    >(`/problems/personalization/summary`);
+    return res.data;
+  },
+
+  /** Flat bookmark list — Dashboard sheet sync. */
   listMyBookmarks: async () => {
     const res = await engagementClient.get<ApiResponse<Problem[]>>(
       `/problems/bookmarks/me`
@@ -160,13 +233,12 @@ export const engagementApi = {
     return res.data;
   },
 
-  /** Paginated favourites with stats + filters (server-side). */
+  /** Paginated favourites (independent of bookmarks). */
   listMyFavourites: async (query?: FavouriteListQuery) => {
     const res = await engagementClient.get<ApiResponse<FavouriteListResult>>(
       `/problems/favourites/me`,
       {
         params: {
-          paginated: true,
           page: query?.page ?? 1,
           limit: query?.limit ?? 20,
           search: query?.search || undefined,
@@ -188,6 +260,20 @@ export const engagementApi = {
         },
       }
     );
+    return res.data;
+  },
+
+  listMyFavoriteIds: async () => {
+    const res = await engagementClient.get<
+      ApiResponse<{ problemIds: string[] }>
+    >(`/problems/favourites/ids`);
+    return res.data;
+  },
+
+  listMyImportantIds: async () => {
+    const res = await engagementClient.get<
+      ApiResponse<{ problemIds: string[] }>
+    >(`/problems/important/me`);
     return res.data;
   },
 

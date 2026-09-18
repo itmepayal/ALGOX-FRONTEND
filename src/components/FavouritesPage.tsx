@@ -41,6 +41,7 @@ interface FavouritesPageProps {
   userId?: string;
   onSelectProblem: (p: Problem) => void;
   onBookmarkChange?: (problemId: string, isBookmarked: boolean) => void;
+  onFavoriteChange?: (problemId: string, isFavourite: boolean) => void;
   onExploreQuestions?: () => void;
   /** Bump to force refetch (e.g. after workspace toggle). */
   refreshKey?: number;
@@ -71,12 +72,20 @@ export const FavouritesPage: FC<FavouritesPageProps> = ({
   submissions,
   userId,
   onSelectProblem,
-  onBookmarkChange,
+  onBookmarkChange: _onBookmarkChange,
+  onFavoriteChange,
   onExploreQuestions,
   refreshKey = 0,
 }) => {
   const [items, setItems] = useState<FavouriteProblem[]>([]);
   const [stats, setStats] = useState<FavouriteStats>(EMPTY_STATS);
+  const [summary, setSummary] = useState<{
+    bookmarked: number;
+    favourites: number;
+    important: number;
+    revision: number;
+  } | null>(null);
+
   const [categories, setCategories] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -137,6 +146,9 @@ export const FavouritesPage: FC<FavouritesPageProps> = ({
       setItems(res.data?.items || []);
       setStats(res.data?.stats || EMPTY_STATS);
       setCategories(res.data?.filters?.categories || []);
+      void engagementApi.getPersonalizationSummary().then((s) => {
+        if (s?.data) setSummary(s.data);
+      }).catch(() => undefined);
       setTotal(res.meta?.total ?? res.data?.stats?.total ?? 0);
       setTotalPages(res.meta?.totalPages ?? 0);
     } catch (err: any) {
@@ -201,18 +213,18 @@ export const FavouritesPage: FC<FavouritesPageProps> = ({
       ...s,
       total: Math.max(0, s.total - 1),
     }));
-    onBookmarkChange?.(pid, false);
+    onFavoriteChange?.(pid, false);
     setBusyId(pid);
 
     try {
-      await engagementApi.removeBookmark(pid);
+      await engagementApi.removeFavorite(pid);
       setToast({ type: "success", text: "Removed from favourites" });
       // Refetch to keep pagination / stats accurate
       await fetchFavourites();
     } catch {
       setItems(prevItems);
       setStats(prevStats);
-      onBookmarkChange?.(pid, true);
+      onFavoriteChange?.(pid, true);
       setToast({
         type: "error",
         text: "Unable to update favourites. Please try again.",
@@ -239,11 +251,33 @@ export const FavouritesPage: FC<FavouritesPageProps> = ({
         <div>
           <h1 className="fav-title">
             <Star size={22} fill="currentColor" aria-hidden />
-            My Favourites
+            My Problems
           </h1>
-          <p className="fav-subtitle">Questions you&apos;ve saved for later.</p>
+          <p className="fav-subtitle">
+            Favourites are preferred problems (heart). Older saves made from the
+            sheet when it said “favourites” were stored as bookmarks — find them
+            under Bookmarked on the Problems sheet.
+          </p>
         </div>
       </header>
+
+      {summary && (
+        <section className="fav-stats" aria-label="Personalization summary">
+          {(
+            [
+              ["Bookmarked", summary.bookmarked],
+              ["Favorites", summary.favourites],
+              ["Important", summary.important],
+              ["Revision", summary.revision],
+            ] as const
+          ).map(([label, value]) => (
+            <div key={label} className="fav-stat-card">
+              <strong>{value}</strong>
+              <span>{label}</span>
+            </div>
+          ))}
+        </section>
+      )}
 
       <section className="fav-stats" aria-label="Favourite stats">
         {(
@@ -370,7 +404,11 @@ export const FavouritesPage: FC<FavouritesPageProps> = ({
         <div className="fav-empty">
           <Bookmark size={40} strokeWidth={1.5} />
           <h2>No favourite questions yet</h2>
-          <p>Save questions here so you can easily come back to them.</p>
+          <p>
+            Use the heart on a sheet row or question page to favourite. If you
+            previously saved items when the sheet said “favourites”, those are
+            still under Bookmarked on the Problems sheet.
+          </p>
           <button
             type="button"
             className="fav-cta"

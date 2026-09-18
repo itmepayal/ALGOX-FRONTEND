@@ -4,7 +4,7 @@ import { useAuth } from "../../context/AuthContext";
 import { useAuthPrompt } from "../../context/AuthPromptContext";
 import { AuthModal } from "../AuthModal";
 
-/** Overlay auth card for contextual “Sign in to …” prompts. */
+/** Overlay auth experience for contextual “Sign in to …” prompts. */
 export const AuthPromptOverlay: FC = () => {
   const { user } = useAuth();
   const { open, options, closeAuth } = useAuthPrompt();
@@ -29,7 +29,7 @@ export const AuthPromptOverlay: FC = () => {
       className="guest-auth-overlay"
       role="dialog"
       aria-modal="true"
-      aria-labelledby="guest-auth-title"
+      aria-labelledby="guest-auth-form-title"
       onClick={(e) => {
         if (e.target === e.currentTarget) closeAuth();
       }}
@@ -43,22 +43,18 @@ export const AuthPromptOverlay: FC = () => {
         >
           <X size={18} />
         </button>
-        {(options.title || options.message) && (
+        {(options.title || options.message) &&
+        options.title !== "Welcome back" &&
+        options.title !== "Create your AlgoPath account" ? (
           <div className="guest-auth-banner">
             {options.title ? (
-              <h2 id="guest-auth-title" className="guest-auth-banner-title">
-                {options.title}
-              </h2>
-            ) : (
-              <h2 id="guest-auth-title" className="sr-only">
-                Sign in
-              </h2>
-            )}
+              <h2 className="guest-auth-banner-title">{options.title}</h2>
+            ) : null}
             {options.message ? (
               <p className="guest-auth-banner-msg">{options.message}</p>
             ) : null}
           </div>
-        )}
+        ) : null}
         <AuthModal
           initialTab={options.tab || "login"}
           embed
