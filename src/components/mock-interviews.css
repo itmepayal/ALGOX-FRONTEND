@@ -1,0 +1,531 @@
+/* Mock Interviews — premium co-page layout */
+
+.mock-page {
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
+}
+
+.mock-page .co-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.mock-page .co-title svg {
+  color: var(--primary);
+}
+
+.mock-principle {
+  margin: 8px 0 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  max-width: 42rem;
+}
+
+/* Trust strip */
+
+.mock-feature-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0 0 14px;
+}
+
+.mock-feature-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+}
+
+.mock-feature-card svg {
+  color: var(--primary);
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.mock-feature-card strong {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 750;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-main);
+}
+
+.mock-feature-card span {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
+/* Overview stats */
+
+.mock-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.mock-stat {
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+}
+
+.mock-stat strong {
+  display: block;
+  font-size: 1.15rem;
+  font-weight: 750;
+  color: var(--text-main);
+  font-variant-numeric: tabular-nums;
+}
+
+.mock-stat span {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.mock-stat-note {
+  margin: -6px 0 14px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+/* Live continue banner */
+
+.mock-live-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--primary) 35%, var(--border-subtle));
+  background: color-mix(in srgb, var(--primary-subtle) 50%, var(--bg-card));
+}
+
+.mock-live-banner-kicker {
+  margin: 0 0 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--primary-bright, var(--primary));
+}
+
+.mock-live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--danger, #ef4444);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger, #ef4444) 25%, transparent);
+}
+
+.mock-live-banner h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 750;
+  color: var(--text-main);
+}
+
+/* Config layout */
+
+.mock-config-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(280px, 0.85fr);
+  gap: 14px;
+  align-items: start;
+  margin-bottom: 14px;
+  min-width: 0;
+}
+
+.mock-config-main {
+  min-width: 0;
+}
+
+.mock-config-step {
+  margin-bottom: 32px;
+  min-width: 0;
+}
+
+.mock-config-step-label {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  margin: 0 0 6px;
+  min-width: 0;
+}
+
+.mock-config-step-num {
+  font-size: 0.72rem;
+  font-weight: 750;
+  letter-spacing: 0.06em;
+  color: var(--primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.mock-config-step-sep {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.mock-config-step-title {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-main);
+}
+
+.mock-config-hint {
+  margin: 0 0 14px;
+  font-size: 0.84rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  line-height: 1.45;
+  max-width: 40rem;
+}
+
+/* Shared config options — full-width section rows */
+
+.mock-config-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+  min-width: 0;
+  width: 100%;
+}
+
+.mock-config-options--quad {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.mock-config-options--langs {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.mock-config-options--counts {
+  grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
+  max-width: 28rem;
+}
+
+.mock-config-option {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  min-width: 0;
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 650;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.mock-config-option:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--primary) 35%, var(--border-subtle));
+  color: var(--text-main);
+  background: var(--bg-card-hover, var(--bg-elevated));
+}
+
+.mock-config-option:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.mock-config-option:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.mock-config-option-selected {
+  border-color: color-mix(in srgb, var(--primary) 50%, var(--border-subtle));
+  background: color-mix(in srgb, var(--primary) 12%, var(--bg-card));
+  color: var(--text-main);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 28%, transparent);
+}
+
+.mock-config-option-label {
+  min-width: 0;
+  overflow-wrap: break-word;
+  text-align: center;
+}
+
+.mock-config-option-check {
+  flex-shrink: 0;
+  color: var(--primary);
+}
+
+.mock-option-card {
+  position: relative;
+}
+
+.mock-option-check {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  color: var(--primary);
+}
+
+.mock-config-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border-subtle);
+  min-width: 0;
+}
+
+.mock-config-ready-label {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.mock-config-ready-summary {
+  margin: 4px 0 0;
+  font-size: 0.95rem;
+  font-weight: 650;
+  color: var(--text-main);
+}
+
+.mock-config-ready-note {
+  margin: 6px 0 0;
+  font-size: 0.8rem;
+  font-weight: 550;
+  color: var(--text-muted);
+}
+
+.mock-config-start-btn {
+  flex: 0 0 auto;
+}
+
+/* Legacy row — force single column if still referenced */
+.mock-config-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* Summary sticky */
+
+.mock-summary-panel {
+  position: sticky;
+  top: 12px;
+  padding: 16px 18px;
+  min-width: 0;
+}
+
+.mock-summary-company {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.mock-summary-company strong {
+  display: block;
+  font-size: 1.15rem;
+  font-weight: 750;
+  color: var(--text-main);
+}
+
+.mock-summary-company p {
+  margin: 2px 0 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.mock-summary-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.mock-summary-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+  font-size: 0.75rem;
+  font-weight: 650;
+  color: var(--text-secondary);
+}
+
+.mock-summary-trust {
+  margin: 0 0 14px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.mock-summary-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mock-summary-actions .btn,
+.mock-summary-actions button {
+  width: 100%;
+}
+
+.mock-config-invalid {
+  margin: 0 0 8px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--danger, #ef4444);
+}
+
+/* History filters */
+
+.mock-history-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.mock-history-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.mock-hist-chip {
+  appearance: none;
+  border: 1px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 6px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.mock-hist-chip:hover {
+  color: var(--text-main);
+}
+
+.mock-hist-chip:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.mock-hist-chip-active {
+  color: var(--primary-bright, var(--primary));
+  background: var(--primary-subtle);
+  border-color: transparent;
+}
+
+.mock-history-tag {
+  font-size: 0.65rem !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 3px 8px !important;
+  border-radius: 6px !important;
+}
+
+@media (max-width: 1100px) {
+  .mock-feature-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .mock-config-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .mock-summary-panel {
+    position: static;
+  }
+
+  .mock-summary-actions {
+    display: none;
+  }
+
+  .mock-config-options,
+  .mock-config-options--quad,
+  .mock-config-options--langs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .mock-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .mock-feature-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .mock-config-options,
+  .mock-config-options--quad,
+  .mock-config-options--langs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .mock-config-footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .mock-config-start-btn {
+    width: 100%;
+  }
+}
+
+@media (max-width: 420px) {
+  .mock-config-options--langs {
+    grid-template-columns: 1fr;
+  }
+}

@@ -65,12 +65,17 @@ import {
   type StudySession,
 } from "../utils/learningPersistence";
 import { hasAccessToken } from "../api/accessToken";
+import { useAuth } from "../context/AuthContext";
+import { canAccess } from "../access/canAccess";
 import {
   buildDayActivityMap,
   computeStreaks,
   everAcceptedProblemIds,
 } from "../utils/learningStats";
 import { PremiumBadge } from "./access/PremiumBadge";
+import { PremiumNavIndicator } from "./access/PremiumNavIndicator";
+import { getPlatformNavItem } from "../nav/platformNav";
+import { setPendingPremiumNav } from "../access/pendingPremiumNav";
 
 const importBannerKey = (uid: string) => `ax-import-banner-dismissed:${uid}`;
 
@@ -201,6 +206,7 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
   onNavigateLearning,
   onProgressImported,
 }) => {
+  const { user } = useAuth();
   const [sheetTab, setSheetTab] = useState<
     "all" | "revision" | "bookmarks" | "favourites" | "important"
   >("all");
@@ -545,16 +551,28 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
       setStudySessions([]);
       return;
     }
+    const allowPlanner = canAccess(user, "premium.daily_planner");
+    const allowSessions = canAccess(user, "premium.study_sessions");
+    if (!allowPlanner && !allowSessions) {
+      setStudySessions([]);
+      return;
+    }
     let cancelled = false;
     (async () => {
       try {
-        await syncPlannerWithAccepted(
-          userId,
-          toDateKey(),
-          everAcceptedProblemIds(submissions)
-        );
-        const list = await loadAllSessions(userId);
-        if (!cancelled) setStudySessions(list);
+        if (allowPlanner) {
+          await syncPlannerWithAccepted(
+            userId,
+            toDateKey(),
+            everAcceptedProblemIds(submissions)
+          );
+        }
+        if (allowSessions) {
+          const list = await loadAllSessions(userId);
+          if (!cancelled) setStudySessions(list);
+        } else if (!cancelled) {
+          setStudySessions([]);
+        }
       } catch {
         /* ignore — streak still uses submissions */
       }
@@ -562,7 +580,7 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [userId, submissions, learningRefreshKey]);
+  }, [userId, user, submissions, learningRefreshKey]);
 
   const streak = useMemo(() => {
     return computeStreaks(buildDayActivityMap(submissions, studySessions))
@@ -1517,23 +1535,52 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
         <div className="ax-rail-links">
           {(
             [
-              { id: "calendar" as const, label: "Calendar + Roadmap", Icon: CalendarDays },
+              {
+                id: "calendar" as const,
+                label: "Calendar + Roadmap",
+                Icon: CalendarDays,
+              },
               { id: "sessions" as const, label: "Sessions", Icon: Timer },
-              { id: "planner" as const, label: "Daily Planner", Icon: ListTodo },
+              {
+                id: "planner" as const,
+                label: "Daily Planner",
+                Icon: ListTodo,
+              },
             ] as const
-          ).map(({ id, label, Icon }) => (
-            <button
-              key={id}
-              type="button"
-              className="ax-rail-link"
-              onClick={() => onNavigateLearning?.(id)}
-            >
-              <span>
-                <Icon size={15} strokeWidth={1.75} /> {label}
-              </span>
-              <ChevronRight size={15} strokeWidth={2} aria-hidden />
-            </button>
-          ))}
+          ).map(({ id, label, Icon }) => {
+            const nav = getPlatformNavItem(id);
+            const feature = nav?.premiumFeature;
+            const locked = Boolean(feature && !canAccess(user, feature));
+            const isPremium = Boolean(feature);
+            const tip = locked
+              ? `${label} — Premium feature — Upgrade to unlock`
+              : isPremium
+                ? `${label} — Premium feature — Included in your plan`
+                : label;
+            return (
+              <button
+                key={id}
+                type="button"
+                className="ax-rail-link"
+                title={tip}
+                aria-label={tip}
+                onClick={() => {
+                  if (feature && locked) {
+                    setPendingPremiumNav(id, feature);
+                  }
+                  onNavigateLearning?.(id);
+                }}
+              >
+                <span>
+                  <Icon size={15} strokeWidth={1.75} /> {label}
+                  {isPremium ? (
+                    <PremiumNavIndicator locked={locked} variant="inline" />
+                  ) : null}
+                </span>
+                <ChevronRight size={15} strokeWidth={2} aria-hidden />
+              </button>
+            );
+          })}
         </div>
       </aside>
 

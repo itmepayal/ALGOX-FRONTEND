@@ -20,6 +20,9 @@ export const FEATURE_IDS = [
   "premium.challenge_history",
   "premium.streak_freeze",
   "premium.spaced_repetition",
+  "premium.daily_planner",
+  "premium.study_sessions",
+  "premium.learning_calendar",
 ] as const;
 
 export type FeatureId = (typeof FEATURE_IDS)[number];
@@ -55,7 +58,7 @@ export const FEATURE_META: Record<
   "premium.ai": {
     label: "AI assist",
     description:
-      "AlgoPath AI learning assistant (Premium allowance; Free has limited daily credits)",
+      "AlgoPath AI learning assistant — Premium members only",
   },
   "premium.analytics": {
     label: "Advanced analytics",
@@ -94,6 +97,51 @@ export const FEATURE_META: Record<
     description:
       "Advanced revision scheduling, reschedule controls, and personalized review recommendations",
   },
+  "premium.daily_planner": {
+    label: "Daily Planner",
+    description:
+      "Personalized daily plans, revision tasks, and day-by-day DSA progress",
+  },
+  "premium.study_sessions": {
+    label: "Study Sessions",
+    description:
+      "Focused coding and study sessions with timers, history, and productivity stats",
+  },
+  "premium.learning_calendar": {
+    label: "Calendar + Roadmap",
+    description:
+      "Plan your DSA preparation with scheduled practice, roadmap tracking, and review planning.",
+  },
+};
+
+/** Benefit bullets for PremiumFeatureLock (UI only). */
+export const FEATURE_BENEFITS: Partial<Record<FeatureId, readonly string[]>> = {
+  "premium.ai": [
+    "Progressive smart hints without full solutions",
+    "Code analysis for bugs and complexity",
+    "Personalized learning recommendations",
+    "Interview-style coaching and reasoning practice",
+  ],
+  "premium.daily_planner": [
+    "Create personalized daily plans",
+    "Track planned problems and revisions",
+    "Monitor daily completion and streaks",
+  ],
+  "premium.study_sessions": [
+    "Start, pause, and complete focus sessions",
+    "Review session history and duration",
+    "Analyze consistency and productivity",
+  ],
+  "premium.learning_calendar": [
+    "Plan problems on a monthly roadmap",
+    "Schedule revisions and study sessions",
+    "Track completed activity by day",
+  ],
+  "premium.company_questions": [
+    "Company-specific interview problem sets",
+    "Difficulty and topic distribution insights",
+    "Track preparation progress per company",
+  ],
 };
 
 const FEATURE_SET = new Set<string>(FEATURE_IDS);

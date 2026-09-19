@@ -506,10 +506,28 @@ export const ArticlesAdmin: FC<{ category?: string }> = ({ category }) => {
 
   const validateForm = () => {
     const next: Record<string, string> = {};
-    if (!title.trim() || title.trim().length < 2) {
+    const cleanTitle = title.trim();
+    if (!cleanTitle || cleanTitle.length < 2) {
       next.title = "Title must be at least 2 characters.";
-    } else if (title.trim().length > 300) {
+    } else if (cleanTitle.length > 300) {
       next.title = "Title must be at most 300 characters.";
+    } else if (
+      /^(create article|create study plan|save|submit|publish|untitled)$/i.test(
+        cleanTitle
+      )
+    ) {
+      next.title = "Enter a real article title (not a button label).";
+    } else {
+      for (let len = 1; len <= Math.floor(cleanTitle.length / 2); len += 1) {
+        if (cleanTitle.length % len !== 0) continue;
+        const unit = cleanTitle.slice(0, len);
+        const reps = cleanTitle.length / len;
+        if (reps >= 2 && unit.repeat(reps) === cleanTitle) {
+          next.title =
+            "Title looks duplicated. Enter the article name once.";
+          break;
+        }
+      }
     }
     const finalSlug = (slug || slugify(title)).trim();
     if (!finalSlug || finalSlug.length < 2) {

@@ -7,14 +7,10 @@ import { Button } from "../ui/button";
 
 interface GuestNavbarProps {
   onGoHome: () => void;
-  onGoPricing: () => void;
 }
 
-/** Landing navbar — brand, Pricing (in-page), Login / Get Started. No feature tabs. */
-export const GuestNavbar: FC<GuestNavbarProps> = ({
-  onGoHome,
-  onGoPricing,
-}) => {
+/** Landing navbar — brand + Login / Get Started. No feature tabs. */
+export const GuestNavbar: FC<GuestNavbarProps> = ({ onGoHome }) => {
   const { settings } = usePlatformSettings();
   const { openAuth } = useAuthPrompt();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -42,16 +38,6 @@ export const GuestNavbar: FC<GuestNavbarProps> = ({
           )}
         </span>
       </button>
-
-      <nav className="guest-navbar-nav" aria-label="Primary">
-        <button
-          type="button"
-          className="guest-navbar-link"
-          onClick={onGoPricing}
-        >
-          Pricing
-        </button>
-      </nav>
 
       <div className="guest-navbar-actions">
         <Button
@@ -88,16 +74,6 @@ export const GuestNavbar: FC<GuestNavbarProps> = ({
 
       {mobileOpen ? (
         <div className="guest-navbar-drawer" role="navigation">
-          <button
-            type="button"
-            className="guest-drawer-link"
-            onClick={() => {
-              onGoPricing();
-              setMobileOpen(false);
-            }}
-          >
-            Pricing
-          </button>
           <button
             type="button"
             className="guest-drawer-link"

@@ -30,7 +30,6 @@ import { getProblemId } from "../../utils/workspacePersistence";
 import { EmptyState } from "../ui/empty-state";
 import { UpgradePrompt } from "../access/UpgradePrompt";
 import { Button } from "../ui/button";
-import { billingApi } from "../../api/billingApi";
 import { companyApi, type CompanyCard } from "../../api/companyApi";
 import type { FreeHomeNavTab } from "./types";
 
@@ -256,10 +255,10 @@ export const PremiumPreparationSection: FC<PremiumPreparationSectionProps> = ({
   const startUpgrade = async () => {
     setUpgradeBusy(true);
     try {
-      const cfg = await billingApi.getConfig();
-      if (!cfg.data?.enabled) return;
-      const session = await billingApi.createCheckout();
-      if (session.data?.url) window.location.assign(session.data.url);
+      const { startPremiumCheckout } = await import(
+        "../../billing/startPremiumCheckout"
+      );
+      await startPremiumCheckout();
     } catch {
       /* ignore */
     } finally {

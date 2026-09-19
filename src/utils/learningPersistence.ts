@@ -75,10 +75,42 @@ function requireAuth(userId: string | undefined): asserts userId is string {
 
 function apiErrorMessage(err: unknown, fallback: string): string {
   const ax = err as {
-    response?: { data?: { message?: string } };
+    code?: string;
+    response?: { status?: number; data?: { message?: string } };
     message?: string;
   };
-  return ax?.response?.data?.message || ax?.message || fallback;
+  const serverMsg = ax?.response?.data?.message;
+  if (typeof serverMsg === "string" && serverMsg.trim()) {
+    const raw = serverMsg.trim();
+    // Never surface raw transport names from the server either
+    if (!/network error|axios|econnrefused|err_network/i.test(raw)) {
+      return raw;
+    }
+  }
+  const code = String(ax?.code || "");
+  const msg = String(ax?.message || "");
+  if (
+    code === "ERR_NETWORK" ||
+    code === "ECONNABORTED" ||
+    /network error/i.test(msg) ||
+    /timeout/i.test(msg) ||
+    /econnrefused/i.test(msg)
+  ) {
+    return "Unable to reach AlgoPath servers. Check your connection and try again.";
+  }
+  if (ax?.response?.status === 401) {
+    return "Sign in again to sync study sessions.";
+  }
+  if (ax?.response?.status === 403) {
+    return "You do not have permission to manage study sessions.";
+  }
+  if (ax?.response?.status && ax.response.status >= 500) {
+    return "Study sessions service is temporarily unavailable. Please retry shortly.";
+  }
+  if (msg && !/network error|axioserror|err_network|econnrefused/i.test(msg)) {
+    return msg;
+  }
+  return fallback;
 }
 
 export function toDateKey(d: Date = new Date()): string {
@@ -317,6 +349,19 @@ export async function endStudySession(
     }
     return res.data ?? null;
   } catch (err) {
+    // Idempotent recovery: if the server already completed the session but the
+    // response was lost, clear local active state instead of keeping a zombie timer.
+    try {
+      const activeRes = await learningApi.getActiveSession();
+      const stillActive = activeRes.data ?? null;
+      if (!stillActive) {
+        activeCache.set(userId, null);
+        return null;
+      }
+      activeCache.set(userId, stillActive);
+    } catch {
+      /* fall through to original error */
+    }
     throw new LearningPersistError(
       apiErrorMessage(err, "Failed to end study session")
     );
@@ -374,8 +419,15 @@ export function formatDurationMs(ms: number): string {
   const h = Math.floor(totalSec / 3600);
   const m = Math.floor((totalSec % 3600) / 60);
   const s = totalSec % 60;
-  if (h > 0) return `${h}h ${String(m).padStart(2, "0")}m`;
-  if (m > 0) return `${m}m ${String(s).padStart(2, "0")}s`;
+  if (h > 0) {
+    const parts = [`${h}h`];
+    if (m > 0) parts.push(`${m}m`);
+    if (s > 0) parts.push(`${s}s`);
+    return parts.join(" ");
+  }
+  if (m > 0) {
+    return s > 0 ? `${m}m ${s}s` : `${m}m`;
+  }
   return `${s}s`;
 }
 

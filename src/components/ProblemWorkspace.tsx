@@ -74,7 +74,6 @@ import { canAccess } from "../access/canAccess";
 import { UpgradePrompt } from "./access/UpgradePrompt";
 import { PremiumBadge } from "./access/PremiumBadge";
 import { PremiumEditorTools } from "./PremiumEditorTools";
-import { billingApi } from "../api/billingApi";
 
 interface ProblemWorkspaceProps {
   problem: Problem;
@@ -1270,10 +1269,11 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
                           onUpgradeClick={
                             onUpgradeClick ||
                             (() => {
-                              void billingApi.createCheckout().then((s) => {
-                                const url = s.data?.url;
-                                if (url) window.location.assign(url);
-                              }).catch(() => undefined);
+                              void import("../billing/startPremiumCheckout")
+                                .then(({ startPremiumCheckout }) =>
+                                  startPremiumCheckout()
+                                )
+                                .catch(() => undefined);
                             })
                           }
                         />

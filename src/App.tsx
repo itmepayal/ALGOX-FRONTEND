@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from "./context/AuthContext";
 import { PlatformSettingsProvider, usePlatformSettings } from "./context/PlatformSettingsContext";
 import { AuthPromptProvider } from "./context/AuthPromptContext";
 import { Dashboard } from "./components/Dashboard";
+import { BillingReturnHandler } from "./components/BillingReturnHandler";
 import { GuestApp } from "./components/guest/GuestApp";
 import { canAccessAdmin } from "./rbac/permissions";
 import {
@@ -116,16 +117,19 @@ function AppContent() {
       );
     }
     return (
-      <Dashboard
-        onOpenAdmin={
-          canAccessAdmin(user.role, user.permissions)
-            ? () => {
-                window.history.replaceState({}, "", "/admin?admin=dashboard");
-                setView("admin");
-              }
-            : undefined
-        }
-      />
+      <>
+        <BillingReturnHandler />
+        <Dashboard
+          onOpenAdmin={
+            canAccessAdmin(user.role, user.permissions)
+              ? () => {
+                  window.history.replaceState({}, "", "/admin?admin=dashboard");
+                  setView("admin");
+                }
+              : undefined
+          }
+        />
+      </>
     );
   }
 

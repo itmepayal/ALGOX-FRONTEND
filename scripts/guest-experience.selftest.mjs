@@ -26,7 +26,6 @@ const required = [
   "components/guest/GuestApp.tsx",
   "components/guest/GuestNavbar.tsx",
   "components/guest/GuestHome.tsx",
-  "components/guest/GuestPricing.tsx",
   "components/guest/AuthPromptOverlay.tsx",
   "context/AuthPromptContext.tsx",
   "styles/guest.css",

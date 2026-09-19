@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState, type FC, type FormEvent } from "react";
-import { Briefcase, Loader2, Plus, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState, type FC, type FormEvent } from "react";
+import { Briefcase, Plus, Trash2 } from "lucide-react";
 import { PermissionGuard } from "../shared/PermissionGuard";
 import { DataTable } from "../shared/DataTable";
 import { StatusBadge } from "../shared/StatusBadge";
@@ -7,6 +7,7 @@ import { adminContentApi } from "../../../api/adminContentApi";
 import { useToast } from "../../../context/ToastContext";
 import { usePermission } from "../../../rbac/usePermission";
 import { ConfirmDialog } from "../../ConfirmDialog";
+import { AddCompanyProblemDialog } from "./AddCompanyProblemDialog";
 
 type CompanyRow = {
   id?: string;
@@ -344,17 +345,8 @@ const CompanyQuestionsPanel: FC<{
   const id = cid(company);
   const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [form, setForm] = useState({
-    problemId: "",
-    title: "",
-    difficulty: "medium" as "easy" | "medium" | "hard",
-    topics: "",
-    role: "",
-    frequency: "",
-    lastSeenAt: "",
-    isPremium: false,
-    order: 0,
-  });
+  const [attachedSearch, setAttachedSearch] = useState("");
+  const [addOpen, setAddOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -376,136 +368,96 @@ const CompanyQuestionsPanel: FC<{
     void load();
   }, [load]);
 
-  const add = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!canCreate) return;
-    try {
-      const payload: Record<string, unknown> = {
-        problemId: form.problemId,
-        title: form.title,
-        difficulty: form.difficulty,
-        topics: form.topics
-          .split(",")
-          .map((s) => s.trim())
-          .filter(Boolean),
-        role: form.role || undefined,
-        isPremium: form.isPremium,
-        order: form.order,
-      };
-      // Only send frequency/lastSeen when explicitly provided
-      if (form.frequency.trim() !== "") {
-        payload.frequency = Number(form.frequency);
-      }
-      if (form.lastSeenAt.trim() !== "") {
-        payload.lastSeenAt = new Date(form.lastSeenAt).toISOString();
-      }
-      await adminContentApi.createCompanyQuestion(id, payload);
-      toast.success("Question added");
-      setForm({
-        problemId: "",
-        title: "",
-        difficulty: "medium",
-        topics: "",
-        role: "",
-        frequency: "",
-        lastSeenAt: "",
-        isPremium: false,
-        order: 0,
-      });
-      await load();
-    } catch (err: unknown) {
-      toast.apiError(err, "Create question failed");
+  const attachedIds = useMemo(() => {
+    const s = new Set<string>();
+    for (const r of rows) {
+      if (r.problemId) s.add(String(r.problemId));
     }
-  };
+    return s;
+  }, [rows]);
+
+  const filteredRows = useMemo(() => {
+    const q = attachedSearch.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((r) => {
+      const hay = [
+        r.title,
+        r.problemId,
+        r.slug,
+        r.role,
+        r.difficulty,
+        ...(Array.isArray(r.topics) ? r.topics : []),
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return hay.includes(q);
+    });
+  }, [rows, attachedSearch]);
 
   return (
     <div className="admin-card" style={{ marginTop: 16 }}>
-      <div style={{ display: "flex", justifyContent: "space-between" }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: 12,
+          flexWrap: "wrap",
+        }}
+      >
         <h3>Questions — {company.name}</h3>
-        <button type="button" className="admin-btn" onClick={onClose}>
-          Close
-        </button>
-      </div>
-      {canCreate ? (
-        <form
-          onSubmit={add}
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
-            gap: 8,
-            marginBottom: 12,
-          }}
-        >
-          <input
-            required
-            placeholder="Problem ID"
-            value={form.problemId}
-            onChange={(e) => setForm({ ...form, problemId: e.target.value })}
-          />
-          <input
-            required
-            placeholder="Title"
-            value={form.title}
-            onChange={(e) => setForm({ ...form, title: e.target.value })}
-          />
-          <select
-            value={form.difficulty}
-            onChange={(e) =>
-              setForm({
-                ...form,
-                difficulty: e.target.value as "easy" | "medium" | "hard",
-              })
-            }
-          >
-            <option value="easy">Easy</option>
-            <option value="medium">Medium</option>
-            <option value="hard">Hard</option>
-          </select>
-          <input
-            placeholder="Topics (comma)"
-            value={form.topics}
-            onChange={(e) => setForm({ ...form, topics: e.target.value })}
-          />
-          <input
-            placeholder="Role"
-            value={form.role}
-            onChange={(e) => setForm({ ...form, role: e.target.value })}
-          />
-          <input
-            placeholder="Frequency (optional)"
-            value={form.frequency}
-            onChange={(e) => setForm({ ...form, frequency: e.target.value })}
-          />
-          <input
-            type="date"
-            title="Last seen (optional)"
-            value={form.lastSeenAt}
-            onChange={(e) => setForm({ ...form, lastSeenAt: e.target.value })}
-          />
-          <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
-            <input
-              type="checkbox"
-              checked={form.isPremium}
-              onChange={(e) =>
-                setForm({ ...form, isPremium: e.target.checked })
-              }
-            />
-            Premium Q
-          </label>
-          <button type="submit" className="admin-btn primary">
-            {loading ? <Loader2 size={14} className="animate-spin" /> : "Add"}
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          {canCreate ? (
+            <button
+              type="button"
+              className="admin-btn primary"
+              onClick={() => setAddOpen(true)}
+            >
+              <Plus size={14} /> Add Problem
+            </button>
+          ) : null}
+          <button type="button" className="admin-btn" onClick={onClose}>
+            Close
           </button>
-        </form>
-      ) : null}
+        </div>
+      </div>
+
+      <div style={{ margin: "12px 0" }}>
+        <input
+          type="search"
+          placeholder="Search attached questions..."
+          value={attachedSearch}
+          onChange={(e) => setAttachedSearch(e.target.value)}
+          aria-label="Search attached questions"
+          style={{ width: "100%", maxWidth: 360 }}
+        />
+      </div>
 
       <DataTable
-        rows={rows}
+        rows={filteredRows}
         rowKey={(r) => String(r.id || r._id)}
         loading={loading}
         emptyTitle="No questions"
-        emptyDescription="Attach problems with optional frequency/last-seen metadata."
+        emptyDescription={
+          attachedSearch.trim()
+            ? "No attached questions match your search."
+            : "Click Add Problem to attach an existing AlgoPath problem."
+        }
         columns={[
-          { key: "title", header: "Title", render: (r) => r.title },
+          {
+            key: "title",
+            header: "Title",
+            render: (r) => (
+              <span>
+                {r.title}
+                <br />
+                <span className="admin-muted" style={{ fontSize: 11 }}>
+                  {r.problemId}
+                </span>
+              </span>
+            ),
+          },
           { key: "diff", header: "Diff", render: (r) => r.difficulty },
           { key: "role", header: "Role", render: (r) => r.role || "—" },
           {
@@ -537,10 +489,14 @@ const CompanyQuestionsPanel: FC<{
                 <button
                   type="button"
                   className="admin-btn"
+                  aria-label={`Remove ${r.title}`}
                   onClick={() =>
                     void adminContentApi
                       .deleteCompanyQuestion(id, String(r.id || r._id))
-                      .then(load)
+                      .then(() => {
+                        toast.success("Question removed");
+                        return load();
+                      })
                       .catch((err) => toast.apiError(err, "Delete failed"))
                   }
                 >
@@ -549,6 +505,16 @@ const CompanyQuestionsPanel: FC<{
               ) : null,
           },
         ]}
+      />
+
+      <AddCompanyProblemDialog
+        open={addOpen}
+        companyId={id}
+        companyName={company.name}
+        companyRoles={company.roles || []}
+        attachedProblemIds={attachedIds}
+        onClose={() => setAddOpen(false)}
+        onAttached={() => void load()}
       />
     </div>
   );

@@ -61,18 +61,11 @@ export const SubscriptionStatusBar: FC<{
     setMsg("");
     setBusy(true);
     try {
-      const cfg = await billingApi.getConfig();
-      if (!cfg.data?.enabled) {
-        setMsg("Billing is not enabled in this environment.");
-        return;
-      }
-      const session = await billingApi.createCheckout();
-      const url = session.data?.url;
-      if (url) {
-        window.location.assign(url);
-        return;
-      }
-      setMsg("Checkout session missing redirect URL.");
+      const { startPremiumCheckout } = await import(
+        "../../billing/startPremiumCheckout"
+      );
+      const result = await startPremiumCheckout();
+      if (!result.ok) setMsg(result.message);
     } catch (err: any) {
       setMsg(
         err?.response?.data?.message ||

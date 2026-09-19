@@ -1,17 +1,41 @@
 import type { Problem } from "../api/problemApi";
 import type { Submission } from "../api/submissionApi";
 import { isSolved, normalizeDifficulty } from "./problemUtils";
-import { toDateKey, type StudySession } from "./learningPersistence";
+import {
+  formatDurationMs,
+  toDateKey,
+  type StudySession,
+} from "./learningPersistence";
+
+/**
+ * Calendar day activity levels (documented product rule):
+ *
+ * - none:      no accepted submits and no completed study sessions
+ * - planned:   daily planner has problem tasks, but no qualifying activity yet
+ * - partial:   some activity (accepted and/or completed session) but planner
+ *              target for the day is not fully met (when a plan exists)
+ * - completed: ≥1 accepted official submit OR ≥1 completed study session;
+ *              if a planner target exists, also require enough unique solved
+ *              problems to cover planned problem tasks
+ *
+ * Qualifying “active day” for streaks: acceptedCount > 0 OR sessionsCompleted > 0.
+ * Opening the app alone never qualifies.
+ */
 
 export type DayActivityLevel = "none" | "planned" | "partial" | "completed";
 
 export interface DayActivity {
   dateKey: string;
+  /** Unique problem IDs with an official ACCEPTED that day (source ≠ run). */
   solvedProblemIds: string[];
+  /** Unique problem IDs with any official submit that day (source ≠ run). */
+  attemptedProblemIds: string[];
   attemptedCount: number;
   acceptedCount: number;
   studyMs: number;
   sessionsCompleted: number;
+  /** Topics from completed study sessions ending that day. */
+  topics: string[];
   level: DayActivityLevel;
 }
 
@@ -25,6 +49,8 @@ export interface RoadmapTopic {
   medium: number;
   hard: number;
   problemIds: string[];
+  /** Sum of completed study-session duration for this topic (ms). */
+  studyMs: number;
 }
 
 const CANONICAL_ROADMAP = [
@@ -89,6 +115,10 @@ function submissionDayKey(s: Submission): string | null {
   return toDateKey(d);
 }
 
+function isOfficialSubmit(s: Submission): boolean {
+  return s.source !== "run";
+}
+
 export function buildDayActivityMap(
   submissions: Submission[],
   sessions: StudySession[],
@@ -102,10 +132,12 @@ export function buildDayActivityMap(
       row = {
         dateKey: key,
         solvedProblemIds: [],
+        attemptedProblemIds: [],
         attemptedCount: 0,
         acceptedCount: 0,
         studyMs: 0,
         sessionsCompleted: 0,
+        topics: [],
         level: "none",
       };
       map.set(key, row);
@@ -114,17 +146,24 @@ export function buildDayActivityMap(
   };
 
   for (const s of submissions) {
+    if (!isOfficialSubmit(s)) continue;
     const key = submissionDayKey(s);
     if (!key) continue;
     const row = ensure(key);
-    row.attemptedCount += 1;
-    if (s.status === "ACCEPTED" && s.source !== "run") {
-      row.acceptedCount += 1;
-      const pid = s.problemId?.toString();
+    const pid = s.problemId?.toString();
+    if (pid && !row.attemptedProblemIds.includes(pid)) {
+      row.attemptedProblemIds.push(pid);
+    }
+    if (s.status === "ACCEPTED") {
       if (pid && !row.solvedProblemIds.includes(pid)) {
         row.solvedProblemIds.push(pid);
       }
     }
+  }
+
+  for (const row of map.values()) {
+    row.attemptedCount = row.attemptedProblemIds.length;
+    row.acceptedCount = row.solvedProblemIds.length;
   }
 
   for (const sess of sessions) {
@@ -133,6 +172,10 @@ export function buildDayActivityMap(
     const row = ensure(key);
     row.sessionsCompleted += 1;
     row.studyMs += Math.max(0, sess.accumulatedMs);
+    const topic = (sess.topic || "").trim();
+    if (topic && !row.topics.includes(topic)) {
+      row.topics.push(topic);
+    }
   }
 
   if (plannedByDate) {
@@ -143,11 +186,15 @@ export function buildDayActivityMap(
 
   for (const row of map.values()) {
     const planned = plannedByDate?.[row.dateKey] || 0;
-    if (row.acceptedCount > 0 || row.sessionsCompleted > 0) {
+    const hasQualifying =
+      row.acceptedCount > 0 || row.sessionsCompleted > 0;
+    if (hasQualifying) {
       if (planned > 0 && row.solvedProblemIds.length >= planned) {
         row.level = "completed";
-      } else if (row.acceptedCount > 0 || row.sessionsCompleted > 0) {
-        row.level = planned > 0 ? "partial" : "completed";
+      } else if (planned > 0) {
+        row.level = "partial";
+      } else {
+        row.level = "completed";
       }
     } else if (planned > 0) {
       row.level = "planned";
@@ -205,7 +252,8 @@ function parseDateOnly(key: string): Date {
 
 export function buildRoadmap(
   problems: Problem[],
-  submissions: Submission[]
+  submissions: Submission[],
+  sessions: StudySession[] = []
 ): RoadmapTopic[] {
   const byCat = new Map<string, Problem[]>();
   for (const name of CANONICAL_ROADMAP) byCat.set(name, []);
@@ -214,6 +262,16 @@ export function buildRoadmap(
     const cat = canonicalizeCategory(p.category || "Basics");
     if (!byCat.has(cat)) byCat.set(cat, []);
     byCat.get(cat)!.push(p);
+  }
+
+  const studyByTopic = new Map<string, number>();
+  for (const sess of sessions) {
+    if (sess.status !== "completed") continue;
+    const topic = canonicalizeCategory(sess.topic || "General");
+    studyByTopic.set(
+      topic,
+      (studyByTopic.get(topic) || 0) + Math.max(0, sess.accumulatedMs)
+    );
   }
 
   const topics: RoadmapTopic[] = [];
@@ -252,6 +310,7 @@ export function buildRoadmap(
       medium,
       hard,
       problemIds,
+      studyMs: studyByTopic.get(name) || 0,
     });
   }
 
@@ -295,3 +354,5 @@ export function everAcceptedProblemIds(submissions: Submission[]): Set<string> {
   }
   return set;
 }
+
+export { formatDurationMs };

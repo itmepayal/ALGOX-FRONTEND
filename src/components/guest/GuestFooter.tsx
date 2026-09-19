@@ -5,13 +5,9 @@ import { useAuthPrompt } from "../../context/AuthPromptContext";
 
 interface GuestFooterProps {
   onGoHome: () => void;
-  onGoPricing: () => void;
 }
 
-export const GuestFooter: FC<GuestFooterProps> = ({
-  onGoHome,
-  onGoPricing,
-}) => {
+export const GuestFooter: FC<GuestFooterProps> = ({ onGoHome }) => {
   const { settings } = usePlatformSettings();
   const { openAuth } = useAuthPrompt();
   const platformName = settings?.platformName || "AlgoPath";
@@ -34,11 +30,6 @@ export const GuestFooter: FC<GuestFooterProps> = ({
               <li>
                 <button type="button" onClick={onGoHome}>
                   Home
-                </button>
-              </li>
-              <li>
-                <button type="button" onClick={onGoPricing}>
-                  Pricing
                 </button>
               </li>
             </ul>

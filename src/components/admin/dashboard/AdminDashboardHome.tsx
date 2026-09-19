@@ -41,6 +41,10 @@ import { adminAuthApi, type AdminUser } from "../../../api/adminAuthApi";
 import { adminSubmissionApi } from "../../../api/adminSubmissionApi";
 import { adminProblemApi } from "../../../api/adminProblemApi";
 import { adminRealtimeApi } from "../../../api/adminRealtimeApi";
+import {
+  adminLearningApi,
+  type ProductUsageOverview,
+} from "../../../api/adminLearningApi";
 import { PermissionGuard } from "../shared/PermissionGuard";
 import { StatusBadge } from "../shared/StatusBadge";
 import { SubmissionVerdictBadge } from "../shared/SubmissionVerdictBadge";
@@ -232,6 +236,12 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
   const [rt, setRt] = useState<{ ok: boolean; data?: any; error?: string }>({
     ok: false,
   });
+  const [productUsage, setProductUsage] = useState<ProductUsageOverview | null>(
+    null,
+  );
+  const [productUsageError, setProductUsageError] = useState<string | null>(
+    null,
+  );
 
   useEffect(() => {
     problemMapRef.current = problemMap;
@@ -276,6 +286,15 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
           .map((r: any) => String(r.problemId || r._id || "").trim())
           .filter(Boolean);
         await enrichProblemTitles(topIds);
+
+        try {
+          const pu = await adminLearningApi.productUsage();
+          setProductUsage(pu.data || null);
+          setProductUsageError(null);
+        } catch (err: unknown) {
+          setProductUsage(null);
+          setProductUsageError(normalizeApiError(err).message);
+        }
       } catch (err: unknown) {
         const n = normalizeApiError(err);
         setCoreError({ title: n.title, message: n.message });
@@ -563,7 +582,7 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
 
         <section className="admin-dash-kpis" aria-label="Key metrics">
           {kpiSkeleton ? (
-            Array.from({ length: 4 }).map((_, i) => (
+            Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="admin-dash-kpi-skel admin-skel" />
             ))
           ) : (
@@ -576,6 +595,42 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
                   (usersBlock.newUsersInRange != null
                     ? `${formatNumber(usersBlock.newUsersInRange)} new in range`
                     : undefined)
+                }
+                icon={<Users size={20} strokeWidth={1.75} />}
+              />
+              <StatsCard
+                label="Free Users"
+                value={
+                  kpis.freeUsers != null
+                    ? formatNumber(kpis.freeUsers)
+                    : usersBlock.freeUsers != null
+                      ? formatNumber(usersBlock.freeUsers)
+                      : "—"
+                }
+                hint={
+                  kpis.freeUsers == null && usersBlock.freeUsers == null
+                    ? "Data unavailable"
+                    : kpis.freeDau != null
+                      ? `${formatNumber(kpis.freeDau)} free DAU`
+                      : undefined
+                }
+                icon={<Users size={20} strokeWidth={1.75} />}
+              />
+              <StatsCard
+                label="Premium Users"
+                value={
+                  kpis.premiumUsers != null
+                    ? formatNumber(kpis.premiumUsers)
+                    : usersBlock.premiumUsers != null
+                      ? formatNumber(usersBlock.premiumUsers)
+                      : "—"
+                }
+                hint={
+                  kpis.conversionRatePct != null
+                    ? `${kpis.conversionRatePct}% conversion`
+                    : kpis.premiumUsers == null
+                      ? "Data unavailable"
+                      : undefined
                 }
                 icon={<Users size={20} strokeWidth={1.75} />}
               />
@@ -610,6 +665,106 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
                 icon={<BarChart3 size={20} strokeWidth={1.75} />}
               />
             </>
+          )}
+        </section>
+
+        <section className="admin-dash-panel" aria-label="Product usage">
+          <div className="admin-dash-panel-head">
+            <h2 className="admin-dash-panel-title">Product / Premium usage</h2>
+            <p className="admin-dash-muted">
+              Unique users from real Mongo collections (UTC windows). Missing
+              features show Data unavailable — no invented metrics.
+            </p>
+          </div>
+          {productUsageError ? (
+            <WidgetError
+              title="Product usage unavailable"
+              message={productUsageError}
+              onRetry={() => void loadCore()}
+            />
+          ) : !productUsage ? (
+            <p className="admin-dash-muted">Loading product usage…</p>
+          ) : (
+            <div className="admin-dash-table-wrap">
+              <table className="admin-dash-table">
+                <thead>
+                  <tr>
+                    <th>Feature</th>
+                    <th>Users</th>
+                    <th>Today</th>
+                    <th>7 Days</th>
+                    <th>30 Days</th>
+                    <th>Notes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(
+                    [
+                      ["Daily Planner", productUsage.features.planner],
+                      ["Sessions", productUsage.features.sessions],
+                      ["Calendar", productUsage.features.calendar],
+                      ["Companies", productUsage.features.companies],
+                      ["AI", productUsage.features.ai],
+                      ["Analytics page", productUsage.features.analyticsPage],
+                      ["Revision Queue", productUsage.features.revisionQueue],
+                      ["Mock Interview", productUsage.features.mockInterview],
+                    ] as const
+                  ).map(([label, row]) => {
+                    if (!row) {
+                      return (
+                        <tr key={label}>
+                          <td>{label}</td>
+                          <td>—</td>
+                          <td>—</td>
+                          <td>—</td>
+                          <td>—</td>
+                          <td className="admin-dash-muted">Not available</td>
+                        </tr>
+                      );
+                    }
+                    const unavailable = row.available === false;
+                    const fmt = (v: number | null | undefined) =>
+                      unavailable || v == null ? "—" : formatNumber(v);
+                    return (
+                      <tr key={label}>
+                        <td>{label}</td>
+                        <td>{fmt(row.uniqueUsers as number | null)}</td>
+                        <td>{fmt(row.today as number | null)}</td>
+                        <td>{fmt(row.week as number | null)}</td>
+                        <td>{fmt(row.month as number | null)}</td>
+                        <td className="admin-dash-muted">
+                          {unavailable
+                            ? String(row.note || "Data unavailable")
+                            : String(row.note || "")}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              {productUsage.features.revisionQueue ? (
+                <p className="admin-dash-muted" style={{ marginTop: 8 }}>
+                  SRS due today:{" "}
+                  {formatNumber(
+                    Number(productUsage.features.revisionQueue.dueToday || 0),
+                  )}{" "}
+                  · overdue:{" "}
+                  {formatNumber(
+                    Number(productUsage.features.revisionQueue.overdue || 0),
+                  )}{" "}
+                  · upcoming:{" "}
+                  {formatNumber(
+                    Number(productUsage.features.revisionQueue.upcoming || 0),
+                  )}{" "}
+                  · completed today:{" "}
+                  {formatNumber(
+                    Number(
+                      productUsage.features.revisionQueue.completedToday || 0,
+                    ),
+                  )}
+                </p>
+              ) : null}
+            </div>
           )}
         </section>
 

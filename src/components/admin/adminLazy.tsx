@@ -103,6 +103,10 @@ export const LazyLearningAdminPage = lazyNamed(
   () => import("./learning/LearningAdminPage"),
   "LearningAdminPage"
 );
+export const LazyMockInterviewsAdminPage = lazyNamed(
+  () => import("./learning/MockInterviewsAdminPage"),
+  "MockInterviewsAdminPage"
+);
 export const LazyDiscussionsAdminPage = lazyNamed(
   () => import("./ops/DiscussionsReportsPages"),
   "DiscussionsAdminPage"

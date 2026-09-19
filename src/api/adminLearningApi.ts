@@ -53,4 +53,36 @@ export const adminLearningApi = {
     );
     return res.data;
   },
+  productUsage: async () => {
+    const res = await problemClient.get<ApiEnvelope<ProductUsageOverview>>(
+      "/admin/learning/product-usage"
+    );
+    return res.data;
+  },
+};
+
+export type FeatureUsageRow = {
+  uniqueUsers?: number | null;
+  today?: number | null;
+  week?: number | null;
+  month?: number | null;
+  totalEvents?: number | null;
+  available?: boolean;
+  note?: string;
+  [key: string]: unknown;
+};
+
+export type ProductUsageOverview = {
+  generatedAt: string;
+  timezoneNote?: string;
+  features: {
+    planner: FeatureUsageRow;
+    sessions: FeatureUsageRow;
+    calendar: FeatureUsageRow;
+    companies: FeatureUsageRow;
+    analyticsPage: FeatureUsageRow;
+    ai: FeatureUsageRow;
+    revisionQueue: FeatureUsageRow;
+    mockInterview?: FeatureUsageRow;
+  };
 };

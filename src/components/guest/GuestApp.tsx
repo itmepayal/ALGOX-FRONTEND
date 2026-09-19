@@ -30,13 +30,6 @@ function scrubLandingTabParam() {
   window.history.replaceState({}, "", next || "/");
 }
 
-function scrollToPricing() {
-  document.getElementById("pricing")?.scrollIntoView({
-    behavior: "smooth",
-    block: "start",
-  });
-}
-
 function scrollToTop() {
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
@@ -112,16 +105,10 @@ export const GuestApp: FC = () => {
           scrubLandingTabParam();
           scrollToTop();
         }}
-        onGoPricing={() => {
-          setSelectedProblem(null);
-          setProblemInLocation(null);
-          scrubLandingTabParam();
-          scrollToPricing();
-        }}
       />
       <div className="guest-main">
         {!selectedProblem ? (
-          <GuestHome onGoPricing={scrollToPricing} />
+          <GuestHome />
         ) : (
           <ProblemWorkspace
             problem={selectedProblem}
@@ -190,12 +177,7 @@ export const GuestApp: FC = () => {
         )}
       </div>
 
-      {!selectedProblem ? (
-        <GuestFooter
-          onGoHome={scrollToTop}
-          onGoPricing={scrollToPricing}
-        />
-      ) : null}
+      {!selectedProblem ? <GuestFooter onGoHome={scrollToTop} /> : null}
       <AuthPromptOverlay />
     </div>
   );

@@ -8,7 +8,12 @@ export interface ContentArticle {
   content: string;
   category?: string;
   tags?: string[];
+  authorName?: string;
+  authorAvatar?: string;
+  readTimeMinutes?: number;
   isPublished?: boolean;
+  isPremium?: boolean;
+  accessLocked?: boolean;
   createdAt?: string;
   updatedAt?: string;
 }

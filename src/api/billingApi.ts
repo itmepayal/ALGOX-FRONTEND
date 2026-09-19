@@ -4,12 +4,14 @@ export type PublicBillingConfig = {
   enabled: boolean;
   provider: string;
   publishableKey?: string | null;
+  cashfreeEnv?: "sandbox" | "production" | null;
 };
 
 export type CheckoutSessionResult = {
   sessionId: string;
   url: string;
   provider: string;
+  paymentSessionId?: string;
 };
 
 export const billingApi = {
@@ -28,6 +30,18 @@ export const billingApi = {
       message?: string;
       data: CheckoutSessionResult;
       code?: string;
+    };
+  },
+
+  /** Confirm Cashfree return_url — server re-checks order status. */
+  confirmCashfreeOrder: async (orderId: string) => {
+    const res = await authClient.post("/auth/subscription/cashfree/confirm", {
+      orderId,
+    });
+    return res.data as {
+      success: boolean;
+      message?: string;
+      data: { granted: boolean; duplicate: boolean; status: string };
     };
   },
 

@@ -9,6 +9,7 @@ export type MockInterviewStatus =
 export interface MockInterviewConfig {
   company?: string;
   role?: string;
+  interviewType?: "coding" | "dsa" | "mixed";
   difficulty: "easy" | "medium" | "hard" | "mixed";
   durationMinutes: number;
   language: "python" | "javascript" | "cpp" | "java";
@@ -33,6 +34,11 @@ export interface MockInterviewReport {
   problemsTotal: number;
   problemsAttempted: number;
   problemsAccepted: number;
+  overallScore: number | null;
+  acceptedSubmissions?: number;
+  totalSubmissions?: number;
+  strengths?: string[];
+  areasToImprove?: string[];
   scores: {
     problemSolving: MockScoreCell;
     correctness: MockScoreCell;
@@ -41,6 +47,7 @@ export interface MockInterviewReport {
     codeQuality: MockScoreCell;
     performance: MockScoreCell;
     completion: MockScoreCell;
+    attempts?: MockScoreCell;
   };
   attempts: Array<{
     problemId: string;
@@ -51,6 +58,8 @@ export interface MockInterviewReport {
     totalTestCases?: number;
     executionTimeMs?: number;
     memoryMb?: number;
+    attemptCount?: number;
+    submissionId?: string;
   }>;
 }
 
@@ -69,8 +78,45 @@ export interface MockInterviewSession {
   report?: MockInterviewReport | null;
 }
 
+export interface MockInterviewPublicConfig {
+  feature: string;
+  companies: string[];
+  roles: string[];
+  difficulties: string[];
+  languages: string[];
+  durationMinutes: number[];
+  problemCounts: number[];
+  interviewTypes: string[];
+  scoreWeights: Record<string, number>;
+  notes?: Record<string, string>;
+}
+
+export type PastInterviewRow = {
+  id: string;
+  status: MockInterviewStatus | string;
+  config?: Partial<MockInterviewConfig>;
+  startedAt?: string;
+  endsAt?: string;
+  completedAt?: string | null;
+  problemsTotal?: number;
+  hasReport?: boolean;
+  overallScore?: number | null;
+  problemsAccepted?: number | null;
+};
+
 export const mockInterviewApi = {
-  start: async (config: Partial<MockInterviewConfig> & { language: MockInterviewConfig["language"] }) => {
+  getConfig: async () => {
+    const res = await problemClient.get<ApiResponse<MockInterviewPublicConfig>>(
+      "/interviews/config"
+    );
+    return res.data;
+  },
+
+  start: async (
+    config: Partial<MockInterviewConfig> & {
+      language: MockInterviewConfig["language"];
+    }
+  ) => {
     const res = await problemClient.post<ApiResponse<MockInterviewSession>>(
       "/interviews/start",
       config
@@ -86,20 +132,10 @@ export const mockInterviewApi = {
   },
 
   listMine: async (limit = 20) => {
-    const res = await problemClient.get<
-      ApiResponse<
-        Array<{
-          id: string;
-          status: MockInterviewStatus | string;
-          config?: Partial<MockInterviewConfig>;
-          startedAt?: string;
-          endsAt?: string;
-          completedAt?: string | null;
-          problemsTotal?: number;
-          hasReport?: boolean;
-        }>
-      >
-    >("/interviews/mine", { params: { limit } });
+    const res = await problemClient.get<ApiResponse<PastInterviewRow[]>>(
+      "/interviews/mine",
+      { params: { limit } }
+    );
     return res.data;
   },
 
@@ -132,7 +168,12 @@ export const mockInterviewApi = {
 
   getReport: async (sessionId: string) => {
     const res = await problemClient.get<
-      ApiResponse<{ sessionId: string; status: string; report: MockInterviewReport }>
+      ApiResponse<{
+        sessionId: string;
+        status: string;
+        config?: MockInterviewConfig;
+        report: MockInterviewReport;
+      }>
     >(`/interviews/${sessionId}/report`);
     return res.data;
   },

@@ -5,16 +5,40 @@ const LEADERBOARD_URL = SERVICE_URLS.leaderboard;
 
 const client = createServiceClient(LEADERBOARD_URL);
 
+/** Client UI period — mapped to backend `global` for All Time. */
 export type LeaderboardPeriod = "daily" | "weekly" | "monthly" | "all";
 
+/**
+ * Real LeaderboardService ranking row shape.
+ * @see server/LeaderboardService repositories/leaderboard.repository.ts
+ */
 export interface LeaderboardEntry {
   rank: number;
   userId: string;
+  /** Denormalized public display name from UserStats (not Mongo id). */
+  userName?: string;
+  /** Legacy aliases — prefer userName. */
   username?: string;
   name?: string;
-  score?: number;
+  solvedEasy?: number;
+  solvedMedium?: number;
+  solvedHard?: number;
+  totalSolved?: number;
+  /** Legacy aliases — prefer totalSolved. */
   problemsSolved?: number;
   solvedCount?: number;
+  rating?: number;
+  score?: number;
+}
+
+export interface LeaderboardMeta {
+  total: number;
+  page: number;
+  totalPages: number;
+  period?: string;
+  from?: string;
+  to?: string;
+  message?: string;
 }
 
 export interface UserLeaderboardStats {
@@ -25,7 +49,9 @@ export interface UserLeaderboardStats {
   solvedHard?: number;
   totalSolved?: number;
   rating?: number;
+  /** 1-based global Redis rank when available; null/absent if unranked. */
   globalRank?: number | null;
+  score?: number;
 }
 
 export const leaderboardApi = {
@@ -36,24 +62,22 @@ export const leaderboardApi = {
   }) => {
     const period =
       params?.period === "all" ? "global" : params?.period || "global";
+    const { page, limit } = params || {};
     const res = await client.get("/leaderboard/", {
-      params: { ...params, period },
+      params: { period, page, limit },
     });
     return res.data as {
       success: boolean;
       data: LeaderboardEntry[];
-      meta?: {
-        total: number;
-        page: number;
-        totalPages: number;
-        period?: string;
-      };
+      meta?: LeaderboardMeta;
     };
   },
 
-  /** Own or public user stats — 404 when user has never been ranked. */
+  /** Own or looked-up user stats — 404 when user has never been ranked. */
   getUserStats: async (userId: string) => {
-    const res = await client.get(`/leaderboard/user/${encodeURIComponent(userId)}`);
+    const res = await client.get(
+      `/leaderboard/user/${encodeURIComponent(userId)}`
+    );
     return res.data as {
       success: boolean;
       message?: string;

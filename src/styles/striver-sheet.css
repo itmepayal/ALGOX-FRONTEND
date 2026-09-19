@@ -839,6 +839,14 @@
   color: var(--primary-bright);
 }
 
+.ax-rail-link span .platform-nav-premium-mark {
+  flex-shrink: 0;
+}
+
+.ax-rail-link span .platform-nav-premium-mark svg {
+  color: inherit;
+}
+
 .ax-rail-link > svg {
   color: var(--text-muted);
   flex-shrink: 0;

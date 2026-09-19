@@ -15,11 +15,6 @@ import {
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
 import { useAuthPrompt } from "../../context/AuthPromptContext";
-import { GuestPricing } from "./GuestPricing";
-
-interface GuestHomeProps {
-  onGoPricing: () => void;
-}
 
 const VALUE = [
   {
@@ -121,7 +116,7 @@ const FEATURES: Array<{
   },
 ];
 
-export const GuestHome: FC<GuestHomeProps> = ({ onGoPricing }) => {
+export const GuestHome: FC = () => {
   const { openAuth } = useAuthPrompt();
 
   const startLearning = () =>
@@ -153,8 +148,12 @@ export const GuestHome: FC<GuestHomeProps> = ({ onGoPricing }) => {
               Start Learning
               <ArrowRight size={16} aria-hidden />
             </Button>
-            <Button size="lg" variant="secondary" onClick={onGoPricing}>
-              View Pricing
+            <Button
+              size="lg"
+              variant="secondary"
+              onClick={() => openAuth({ tab: "login", title: "Welcome back" })}
+            >
+              Sign In
             </Button>
           </div>
         </div>
@@ -261,10 +260,7 @@ export const GuestHome: FC<GuestHomeProps> = ({ onGoPricing }) => {
               key={title}
               type="button"
               className="guest-feature-card"
-              onClick={() => {
-                if (premium) onGoPricing();
-                else startLearning();
-              }}
+              onClick={startLearning}
             >
               <span className="guest-feature-card-top">
                 <span className="guest-value-icon" aria-hidden>
@@ -293,14 +289,10 @@ export const GuestHome: FC<GuestHomeProps> = ({ onGoPricing }) => {
             Assist allowance, and interview tools after a verified checkout.
           </p>
         </div>
-        <Button size="lg" onClick={onGoPricing}>
-          Explore Premium
+        <Button size="lg" onClick={startLearning}>
+          Start Learning
           <ArrowRight size={16} aria-hidden />
         </Button>
-      </section>
-
-      <section id="pricing" className="guest-section" aria-label="Pricing">
-        <GuestPricing />
       </section>
 
       <section className="guest-section guest-final-cta">

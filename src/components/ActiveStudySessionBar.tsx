@@ -28,6 +28,7 @@ export const ActiveStudySessionBar: FC<Props> = ({
   const [session, setSession] = useState<StudySession | null>(null);
   const [tick, setTick] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   const refresh = useCallback(async () => {
     if (!userId) {
@@ -62,7 +63,9 @@ export const ActiveStudySessionBar: FC<Props> = ({
   void tick;
   const ms = getSessionActiveMs(session);
 
-  const act = async (fn: () => Promise<unknown>) => {
+  const act = async (fn: () => Promise<StudySession | null | unknown>) => {
+    if (busy) return;
+    setBusy(true);
     setError(null);
     try {
       await fn();
@@ -74,8 +77,19 @@ export const ActiveStudySessionBar: FC<Props> = ({
           ? err.message
           : "Session action failed"
       );
+      // Re-sync from server so we do not keep a zombie timer if end already persisted.
+      await refresh().catch(() => undefined);
+    } finally {
+      setBusy(false);
     }
   };
+
+  const handleEnd = () =>
+    void act(async () => {
+      await endStudySession(userId);
+      // Successful end: hide immediately; server is SoT (cache already cleared).
+      setSession(null);
+    });
 
   return (
     <div className="learn-session-bar" role="status">
@@ -93,6 +107,7 @@ export const ActiveStudySessionBar: FC<Props> = ({
           <button
             type="button"
             aria-label="Pause session"
+            disabled={busy}
             onClick={() => void act(() => pauseStudySession(userId))}
           >
             <Pause size={14} />
@@ -101,6 +116,7 @@ export const ActiveStudySessionBar: FC<Props> = ({
           <button
             type="button"
             aria-label="Resume session"
+            disabled={busy}
             onClick={() => void act(() => resumeStudySession(userId))}
           >
             <Play size={14} />
@@ -109,7 +125,8 @@ export const ActiveStudySessionBar: FC<Props> = ({
         <button
           type="button"
           aria-label="End session"
-          onClick={() => void act(() => endStudySession(userId))}
+          disabled={busy}
+          onClick={handleEnd}
         >
           <Square size={14} />
         </button>

@@ -206,6 +206,7 @@ export const FreeHomeDashboard: FC<FreeHomeDashboardProps> = ({
   const todayKey = toDateKey(new Date());
   const canFreeze = canAccess(user, "premium.streak_freeze");
   const canHistory = canAccess(user, "premium.challenge_history");
+  const canPlanner = canAccess(user, "premium.daily_planner");
 
   const loadRemote = useCallback(async () => {
     if (!userId) {
@@ -224,7 +225,9 @@ export const FreeHomeDashboard: FC<FreeHomeDashboardProps> = ({
         await Promise.allSettled([
           sheetProgressApi.getProgress(STRIVER_A2Z_SHEET_ID),
           progressApi.getStatus(),
-          learningApi.getPlan(todayKey),
+          canPlanner
+            ? learningApi.getPlan(todayKey)
+            : Promise.resolve({ data: null }),
           engagementApi.listMyFavourites({ limit: 6, page: 1, sort: "recent" }),
           leaderboardApi.getUserStats(userId),
           challengeApi.getToday(),
@@ -284,7 +287,7 @@ export const FreeHomeDashboard: FC<FreeHomeDashboardProps> = ({
       setRemoteLoading(false);
       setRefreshing(false);
     }
-  }, [userId, todayKey, canHistory]);
+  }, [userId, todayKey, canHistory, canPlanner]);
 
   useEffect(() => {
     setRemoteLoading(true);
@@ -302,8 +305,8 @@ export const FreeHomeDashboard: FC<FreeHomeDashboardProps> = ({
   );
 
   const roadmap = useMemo(
-    () => buildRoadmap(problems, submissions),
-    [problems, submissions]
+    () => buildRoadmap(problems, submissions, studySessions),
+    [problems, submissions, studySessions]
   );
   const weak = useMemo(() => weakTopics(roadmap), [roadmap]);
   const recommended = useMemo(

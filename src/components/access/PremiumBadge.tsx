@@ -17,11 +17,15 @@ export const PremiumBadge: FC<PremiumBadgeProps> = ({
 }) => {
   const meta =
     feature && isKnownFeature(feature) ? FEATURE_META[feature as FeatureId] : null;
+  const title =
+    meta?.description ||
+    (feature ? "Premium Feature" : "Premium Feature");
   return (
     <Badge
       variant="warning"
       className={cn("uppercase tracking-wide", className)}
-      title={meta?.description}
+      title={title}
+      aria-label={title}
     >
       {label || "Premium"}
     </Badge>

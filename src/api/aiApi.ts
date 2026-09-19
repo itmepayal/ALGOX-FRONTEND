@@ -27,6 +27,7 @@ export interface AiUsageSnapshot {
     description: string;
     premiumOnly: boolean;
   }>;
+  /** Infrastructure flag — do not surface provider details in product UI. */
   providerConfigured: boolean;
 }
 
@@ -45,6 +46,18 @@ export interface AiAssistResponse {
   provider: "gemini" | "openai" | "policy" | "none";
 }
 
+export interface AiHistoryItem {
+  feature: string;
+  success: boolean;
+  failureReason?: string;
+  problemId?: string;
+  hadCodeSnippet?: boolean;
+  codeLength?: number;
+  latencyMs?: number;
+  createdAt: string;
+  dateKey?: string;
+}
+
 /**
  * AlgoPath AI — ProblemService `/ai/*`.
  * Quota/usage are server-authoritative; never send quota/apiKey from client.
@@ -57,18 +70,18 @@ export const aiApi = {
     return res.data;
   },
 
-  getHistory: async (limit = 30) => {
+  getHistory: async (
+    limit = 30,
+    status: "all" | "success" | "failed" = "all"
+  ) => {
     const res = await problemClient.get<
-      ApiResponse<{
-        items: Array<{
-          feature: string;
-          success: boolean;
-          failureReason?: string;
-          createdAt: string;
-          provider?: string;
-        }>;
-      }>
-    >("/ai/history", { params: { limit } });
+      ApiResponse<{ items: AiHistoryItem[] }>
+    >("/ai/history", {
+      params: {
+        limit,
+        ...(status !== "all" ? { status } : {}),
+      },
+    });
     return res.data;
   },
 

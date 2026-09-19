@@ -4,6 +4,7 @@ import { authApi, type User } from "../api/authApi";
 import type { Submission, SubmissionStatus } from "../api/submissionApi";
 import { isAcceptedStatus } from "../utils/submissionUtils";
 import { ImportProgressSection } from "./ImportProgressSection";
+import { EntitlementDebugPanel } from "./access/EntitlementDebugPanel";
 
 const SUBMISSION_STATUSES: SubmissionStatus[] = [
   "PENDING", "RUNNING", "ACCEPTED", "WRONG_ANSWER", "TIME_LIMIT_EXCEEDED",
@@ -232,6 +233,8 @@ export const ProfilePanel: FC<ProfilePanelProps> = ({
             <hr style={{ margin: "24px 0", borderColor: "var(--border-subtle)", opacity: 0.4 }} />
 
             <ImportProgressSection onImported={onProgressImported} />
+
+            <EntitlementDebugPanel />
 
             <hr style={{ margin: "24px 0", borderColor: "var(--border-subtle)", opacity: 0.4 }} />
 

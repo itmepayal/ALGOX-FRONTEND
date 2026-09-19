@@ -75,6 +75,7 @@ export type AdminTab =
   | "learning-difficulty"
   | "learning-revision"
   | "learning-progress"
+  | "mock-interviews"
   | "discussions"
   | "reports"
   | "announcements"
@@ -385,6 +386,11 @@ export const ADMIN_SECONDARY_NAV: AdminNavLeaf[] = [
     label: "Learning Progress",
     permission: "analytics:view",
   },
+  {
+    id: "mock-interviews",
+    label: "Mock Interviews",
+    permission: "analytics:view",
+  },
   { id: "analytics-users", label: "User Analytics", permission: "analytics:view" },
   {
     id: "analytics-languages",
@@ -401,7 +407,7 @@ export function resolveActiveGroup(tab: AdminTab): string {
   if (tab.startsWith("realtime")) return "realtime";
   if (tab.startsWith("leaderboards")) return "leaderboards";
   if (tab === "contest-detail" || tab.startsWith("contest")) return "contests";
-  if (tab.startsWith("learning-")) return "content";
+  if (tab.startsWith("learning-") || tab === "mock-interviews") return "content";
   if (tab.startsWith("content-")) return "content";
   if (tab.startsWith("analytics")) return "analytics";
   return tab;
@@ -448,6 +454,7 @@ export const ADMIN_TITLE: Partial<Record<AdminTab, string>> = {
   "learning-difficulty": "Difficulty",
   "learning-revision": "Revision",
   "learning-progress": "Learning Progress",
+  "mock-interviews": "Mock Interviews",
   discussions: "Discussions",
   reports: "Reports",
   announcements: "Announcements",

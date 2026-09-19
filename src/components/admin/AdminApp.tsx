@@ -20,6 +20,7 @@ import {
   LazyLanguageAnalyticsPage,
   LazyLeaderboardsPage,
   LazyLearningAdminPage,
+  LazyMockInterviewsAdminPage,
   LazyNotificationsAdminPage,
   LazyProblemAnalyticsPage,
   LazyProblemBulkImportPage,
@@ -369,6 +370,7 @@ export const AdminApp: FC<AdminAppProps> = ({ onBackToUserView }) => {
             {tab === "learning-progress" && (
               <LazyLearningAdminPage mode="progress" />
             )}
+            {tab === "mock-interviews" && <LazyMockInterviewsAdminPage />}
 
             {tab === "discussions" && <LazyDiscussionsAdminPage />}
             {tab === "reports" && <LazyReportsAdminPage />}

@@ -65,6 +65,7 @@ export interface FavouriteProblem extends Problem {
   isFavourite?: boolean;
   isBookmarked?: boolean;
   isImportant?: boolean;
+  isRevision?: boolean;
   isPremium?: boolean;
   favouritedAt?: string | null;
   progressStatus?: "NOT_STARTED" | "ATTEMPTED" | "SOLVED";
@@ -225,10 +226,53 @@ export const engagementApi = {
     return res.data;
   },
 
-  /** Flat bookmark list — Dashboard sheet sync. */
-  listMyBookmarks: async () => {
-    const res = await engagementClient.get<ApiResponse<Problem[]>>(
-      `/problems/bookmarks/me`
+  /** Flat bookmark list — Dashboard sheet sync. Pass query for paged/filtered. */
+  listMyBookmarks: async (
+    query?: FavouriteListQuery
+  ): Promise<ApiResponse<Problem[] | FavouriteListResult>> => {
+    const wantsPaged = Boolean(
+      query &&
+        (query.paginated ||
+          query.page != null ||
+          query.limit != null ||
+          query.search ||
+          (query.difficulty && query.difficulty !== "all") ||
+          (query.category && query.category !== "all") ||
+          (query.solved && query.solved !== "all") ||
+          (query.accessType && query.accessType !== "all") ||
+          query.sort)
+    );
+    if (!wantsPaged) {
+      const res = await engagementClient.get<ApiResponse<Problem[]>>(
+        `/problems/bookmarks/me`
+      );
+      return res.data;
+    }
+    const res = await engagementClient.get<ApiResponse<FavouriteListResult>>(
+      `/problems/bookmarks/me`,
+      {
+        params: {
+          paginated: true,
+          page: query!.page ?? 1,
+          limit: query!.limit ?? 20,
+          search: query!.search || undefined,
+          difficulty:
+            query!.difficulty && query!.difficulty !== "all"
+              ? query!.difficulty
+              : undefined,
+          category:
+            query!.category && query!.category !== "all"
+              ? query!.category
+              : undefined,
+          solved:
+            query!.solved && query!.solved !== "all" ? query!.solved : undefined,
+          accessType:
+            query!.accessType && query!.accessType !== "all"
+              ? query!.accessType
+              : undefined,
+          sort: query!.sort || "recent",
+        },
+      }
     );
     return res.data;
   },
