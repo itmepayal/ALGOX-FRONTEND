@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useRef, useState, type FC, type MouseEvent } from "react";
 import {
   Bookmark,
+  BookOpen,
   CalendarDays,
   Check,
+  CheckCircle2,
   ChevronRight,
   Code,
   ExternalLink,
   FileText,
+  Flag,
   Flame,
   Heart,
   Info,
@@ -20,7 +23,10 @@ import {
   Timer,
   Upload,
   Lock,
+  X,
 } from "lucide-react";
+import { EmptyState } from "./ui/empty-state";
+import { Skeleton } from "./ui/skeleton";
 import type { Problem } from "../api/problemApi";
 import type { Submission } from "../api/submissionApi";
 import {
@@ -588,11 +594,19 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
   }, [submissions, studySessions]);
 
   useEffect(() => {
-    if (Object.keys(expanded).length === 0 && sheetSections.length > 0) {
-      setExpanded({ [sheetSections[0].name]: true });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [problems.length, sheetSections.length]);
+    if (sheetSections.length === 0) return;
+    setExpanded((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      for (const s of sheetSections) {
+        if (next[s.name] === undefined) {
+          next[s.name] = true; // expand topics by default so the list is visible
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [sheetSections]);
 
 
   const handleResetProgress = async () => {
@@ -993,35 +1007,43 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
           key={pid || `${prob.slug}-${itemIdx}`}
           className={`ax-row ${solved ? "solved" : attempted ? "attempted" : ""}`}
         >
-          <div className="ax-row-status">
-            {solved ? (
-              <span className="ax-check done" aria-label="Solved" title="Solved">
-                <Check size={11} strokeWidth={3} />
-              </span>
-            ) : attempted ? (
-              <span className="ax-check attempted" aria-label="Attempted" title="Attempted" />
-            ) : (
-              <span className="ax-check" aria-label="Todo" title="Not attempted" />
-            )}
-          </div>
           <span className="ax-row-num">{String(itemIdx + 1).padStart(2, "0")}</span>
-          <button
-            type="button"
-            className="ax-row-title"
-            onClick={() => onSelectProblem(prob)}
+          <div className="ax-row-main">
+            <button
+              type="button"
+              className="ax-row-title"
+              onClick={() => onSelectProblem(prob)}
+            >
+              {prob.isPremium || prob.accessLocked ? (
+                <Lock size={12} aria-hidden className="ax-row-lock" />
+              ) : null}
+              {prob.title}
+              {prob.isPremium ? (
+                <PremiumBadge className="ax-row-premium-badge" label="Premium" />
+              ) : null}
+            </button>
+            <div className="ax-row-meta">
+              <span className={`ax-diff ${diff}`}>
+                {diff.charAt(0).toUpperCase() + diff.slice(1)}
+              </span>
+              <span className="ax-row-topic">{prob.category || "General"}</span>
+            </div>
+          </div>
+          <span
+            className={`ax-row-state ${
+              solved ? "is-solved" : attempted ? "is-attempted" : "is-todo"
+            }`}
           >
-            {prob.isPremium || prob.accessLocked ? (
-              <Lock size={12} aria-hidden className="ax-row-lock" />
-            ) : null}
-            {prob.title}
-            {prob.isPremium ? (
-              <PremiumBadge className="ax-row-premium-badge" label="Premium" />
-            ) : null}
-          </button>
-          <span className={`ax-diff ${diff}`}>
-            {diff.charAt(0).toUpperCase() + diff.slice(1)}
+            {solved ? (
+              <>
+                <Check size={12} strokeWidth={2.5} aria-hidden /> Solved
+              </>
+            ) : attempted ? (
+              <>Attempted</>
+            ) : (
+              <>Not solved</>
+            )}
           </span>
-          <span className="ax-row-topic">{prob.category || "General"}</span>
           <div className="ax-row-actions">
             {resources.map((r) => (
               <button
@@ -1044,11 +1066,11 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
             <button
               type="button"
               className="ax-icon"
-              title="Open editor"
-              aria-label="Open editor"
+              title="Open problem"
+              aria-label="Open problem"
               onClick={() => onSelectProblem(prob)}
             >
-              <Code size={14} />
+              <ChevronRight size={14} />
             </button>
             {practice && (
               <button
@@ -1146,19 +1168,31 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
     <div className="ax-sheet animate-fade-in">
       <div className="ax-sheet-main">
         <header className="ax-hero">
-          <div>
-            <h1>{sheetDisplayName}</h1>
-            <p>
-              {activeCatalog.stats.topics} topics ·{" "}
-              {activeCatalog.stats.uniqueProblems} unique problems · topic-wise
-              practice. Sheet progress is independent of bookmarks, favourites,
-              revision, and global solved status.
-            </p>
-            <p className="ax-meta" style={{ marginTop: 6 }}>
-              {catalogSource === "server"
-                ? "Catalog from server"
-                : "Bundled catalog fallback"}
-            </p>
+          <div className="ax-hero-brand">
+            <span className="ax-hero-icon" aria-hidden>
+              <BookOpen size={20} strokeWidth={1.75} />
+            </span>
+            <div className="ax-hero-copy">
+              <p className="ax-hero-kicker">Learning workspace</p>
+              <h1>{sheetDisplayName}</h1>
+              <p className="ax-hero-sub">Learn DSA from A to Z</p>
+              <p className="ax-hero-stats">
+                {activeCatalog.stats.topics} Topics ·{" "}
+                {activeCatalog.stats.uniqueProblems} Problems · Topic-wise practice
+              </p>
+              <div className="ax-hero-meta-row">
+                <span
+                  className={`ax-meta ${catalogSource !== "server" ? "is-fallback" : ""}`}
+                >
+                  {catalogSource === "server"
+                    ? "Progress synced"
+                    : "Bundled catalog fallback"}
+                </span>
+                <span className="ax-meta is-plain">
+                  Last updated: {lastUpdated}
+                </span>
+              </div>
+            </div>
           </div>
           <div className="ax-hero-actions">
             <div className="ax-hero-btns">
@@ -1193,15 +1227,14 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
                 </button>
               )}
             </div>
-            <span className="ax-meta">Last updated: {lastUpdated}</span>
           </div>
         </header>
 
         {userId && importBannerVisible && (
           <div className="ax-import-banner" role="region" aria-label="Import progress">
             <div className="ax-import-banner-copy">
-              <strong>Import Progress</strong>
-              <span>Auto-fill progress from past submissions</span>
+              <strong>Import previous progress</strong>
+              <span>Sync solved problems from your past submissions.</span>
             </div>
             <div className="ax-import-banner-actions">
               <button
@@ -1223,17 +1256,66 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
                 onClick={dismissImportBanner}
                 disabled={importPreviewing || importConfirming}
               >
-                Nah, Not now
+                Not now
               </button>
             </div>
           </div>
         )}
 
+        {userId ? (
+          <section className="ax-progress-strip" aria-label="Overall progress">
+            <div className="ax-progress-strip-main">
+              <div className="ax-progress-strip-head">
+                <span className="ax-progress-kicker">Overall progress</span>
+                <strong>
+                  {progress.solved} / {progress.total || 0} solved
+                </strong>
+              </div>
+              <div className="ax-progress-strip-bar" aria-hidden>
+                <i style={{ width: `${progress.pct}%` }} />
+              </div>
+            </div>
+            <div className="ax-progress-strip-stats">
+              <div>
+                <span className="ax-diff-dot easy" aria-hidden />
+                Easy{" "}
+                <b>
+                  {progress.byDiff.easy.solved}/{progress.byDiff.easy.total}
+                </b>
+              </div>
+              <div>
+                <span className="ax-diff-dot medium" aria-hidden />
+                Medium{" "}
+                <b>
+                  {progress.byDiff.medium.solved}/{progress.byDiff.medium.total}
+                </b>
+              </div>
+              <div>
+                <span className="ax-diff-dot hard" aria-hidden />
+                Hard{" "}
+                <b>
+                  {progress.byDiff.hard.solved}/{progress.byDiff.hard.total}
+                </b>
+              </div>
+              <div className="ax-progress-strip-streak">
+                <Flame size={12} aria-hidden />
+                {streak} day streak
+              </div>
+            </div>
+          </section>
+        ) : (
+          <section className="ax-progress-strip" aria-label="Sign in for progress">
+            <p className="ax-progress-guest">
+              Sign in to track sheet progress, streaks, and synced solves.
+            </p>
+          </section>
+        )}
+
         <div className="ax-controls">
-          <div className="ax-tabs">
+          <div className="ax-tabs" role="tablist" aria-label="Sheet views">
             {(
               [
-                ["all", "All"],
+                ["all", `All (${activeCatalog.stats.uniqueProblems})`],
                 ["bookmarks", `Bookmarked (${bookmarkedIds.size})`],
                 ["favourites", `Favorites (${favouriteIds.size})`],
                 ["important", `Important (${importantIds.size})`],
@@ -1243,6 +1325,8 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
               <button
                 key={id}
                 type="button"
+                role="tab"
+                aria-selected={sheetTab === id}
                 className={`ax-tab ${sheetTab === id ? "active" : ""}`}
                 onClick={() => setSheetTab(id)}
               >
@@ -1252,13 +1336,24 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
           </div>
           <div className="ax-filters">
             <div className="ax-search">
-              <Search size={14} />
+              <Search size={14} aria-hidden />
               <input
                 value={searchQuery}
                 onChange={(e) => onSearchChange(e.target.value)}
                 placeholder="Search problems..."
                 aria-label="Search problems"
               />
+              {searchQuery ? (
+                <button
+                  type="button"
+                  className="ax-search-clear"
+                  onClick={() => onSearchChange("")}
+                  aria-label="Clear search"
+                  title="Clear search"
+                >
+                  <X size={14} />
+                </button>
+              ) : null}
             </div>
             <select
               value={statusFilter}
@@ -1293,7 +1388,7 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
                 )
               }
             >
-              <option value="all">All</option>
+              <option value="all">Access</option>
               <option value="free">Free</option>
               <option value="premium">Premium</option>
             </select>
@@ -1310,100 +1405,17 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
               ) : (
                 <Shuffle size={14} />
               )}
-              {randomFinding ? "Finding Problem…" : "Random Problem"}
+              {randomFinding ? "Finding…" : "Random"}
             </button>
           </div>
         </div>
 
-        {totalPages > 1 && onProblemPageChange && (
-          <div
-            className="ax-pagination"
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "flex-end",
-              gap: 12,
-              marginBottom: 12,
-              fontSize: "0.85rem",
-            }}
-          >
-            <span>
-              Page {problemPage} of {totalPages}
-            </span>
-            <button
-              type="button"
-              className="ax-btn"
-              disabled={problemPage <= 1 || loading}
-              onClick={() => onProblemPageChange(Math.max(1, problemPage - 1))}
-            >
-              Prev
-            </button>
-            <button
-              type="button"
-              className="ax-btn"
-              disabled={problemPage >= totalPages || loading}
-              onClick={() =>
-                onProblemPageChange(Math.min(totalPages, problemPage + 1))
-              }
-            >
-              Next
-            </button>
+        {loading && problems.length > 0 ? (
+          <div className="ax-updating" role="status" aria-live="polite">
+            <Loader2 size={12} className="animate-spin" aria-hidden />
+            Updating…
           </div>
-        )}
-
-        {userId ? (
-        <section className="ax-progress-banner" aria-label="Overall progress">
-          <div className="ax-progress-banner-head">
-            <span className="ax-progress-kicker">Overall Progress</span>
-          </div>
-          <div className="ax-progress-banner-body">
-            <div
-              className="ax-ring"
-              style={{ ["--progress-deg" as string]: progressDeg }}
-              aria-label={`${progress.pct}% complete`}
-            >
-              <div className="ax-ring-inner">
-                <strong>{progress.pct}%</strong>
-                <span>
-                  {progress.solved} / {progress.total}
-                </span>
-              </div>
-            </div>
-            <div className="ax-progress-legend">
-              <div>
-                <i className="easy" />
-                <span className="ax-diff-label">Easy</span>
-                <b>
-                  {progress.byDiff.easy.solved} / {progress.byDiff.easy.total}
-                </b>
-              </div>
-              <div>
-                <i className="medium" />
-                <span className="ax-diff-label">Medium</span>
-                <b>
-                  {progress.byDiff.medium.solved} / {progress.byDiff.medium.total}
-                </b>
-              </div>
-              <div>
-                <i className="hard" />
-                <span className="ax-diff-label">Hard</span>
-                <b>
-                  {progress.byDiff.hard.solved} / {progress.byDiff.hard.total}
-                </b>
-              </div>
-            </div>
-          </div>
-        </section>
-        ) : (
-        <section className="ax-progress-banner" aria-label="Sign in for progress">
-          <div className="ax-progress-banner-head">
-            <span className="ax-progress-kicker">Your progress</span>
-          </div>
-          <p style={{ margin: "8px 0 0", color: "var(--text-secondary)", fontSize: "0.875rem", lineHeight: 1.5 }}>
-            Create an account to track your progress. Guests can browse problems freely — solved counts and streaks appear after you sign in.
-          </p>
-        </section>
-        )}
+        ) : null}
 
         {rowError && (
           <div className="ax-error" role="alert">
@@ -1414,12 +1426,113 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
           </div>
         )}
 
-        {loading ? (
-          <div className="ax-loading">
-            <Loader2 size={28} className="animate-spin" />
+        {loading && problems.length === 0 ? (
+          <div className="ax-skel" aria-busy="true" aria-label="Loading sheet">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="ax-skel-topic">
+                <div className="ax-skel-row" style={{ gridTemplateColumns: "24px 1fr 80px 48px" }}>
+                  <Skeleton className="h-4 w-4 rounded" />
+                  <Skeleton className="h-4 w-40" />
+                  <Skeleton className="h-2 w-full rounded-full" />
+                  <Skeleton className="h-4 w-10" />
+                </div>
+                {i === 0
+                  ? Array.from({ length: 3 }).map((__, j) => (
+                      <div key={j} className="ax-skel-row">
+                        <Skeleton className="h-3 w-6" />
+                        <Skeleton className="h-4 w-3/4" />
+                        <Skeleton className="h-5 w-14 rounded" />
+                        <Skeleton className="h-3 w-16" />
+                      </div>
+                    ))
+                  : null}
+              </div>
+            ))}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="ax-empty">No problems found.</div>
+          <div className="ax-empty-panel">
+            {(() => {
+              const clearFilters = (
+                <button
+                  type="button"
+                  className="ax-btn"
+                  onClick={() => {
+                    onSearchChange("");
+                    onDifficultyChange("All");
+                    onStatusFilterChange("all");
+                    onAccessFilterChange?.("all");
+                    setSheetTab("all");
+                  }}
+                >
+                  Clear filters
+                </button>
+              );
+              if (sheetTab === "bookmarks") {
+                return (
+                  <EmptyState
+                    icon={<Bookmark size={22} strokeWidth={1.75} />}
+                    title="No bookmarked problems yet"
+                    description="Save problems while practicing and they will appear here."
+                    action={
+                      <button type="button" className="ax-btn accent" onClick={() => setSheetTab("all")}>
+                        Explore problems
+                      </button>
+                    }
+                  />
+                );
+              }
+              if (sheetTab === "favourites") {
+                return (
+                  <EmptyState
+                    icon={<Star size={22} strokeWidth={1.75} />}
+                    title="No favorite problems yet"
+                    description="Mark problems as favorites to build your shortlist."
+                    action={
+                      <button type="button" className="ax-btn accent" onClick={() => setSheetTab("all")}>
+                        Explore problems
+                      </button>
+                    }
+                  />
+                );
+              }
+              if (sheetTab === "important") {
+                return (
+                  <EmptyState
+                    icon={<Flag size={22} strokeWidth={1.75} />}
+                    title="No important problems yet"
+                    description="Flag interview-critical problems to keep them in focus."
+                    action={
+                      <button type="button" className="ax-btn accent" onClick={() => setSheetTab("all")}>
+                        Explore problems
+                      </button>
+                    }
+                  />
+                );
+              }
+              if (sheetTab === "revision") {
+                return (
+                  <EmptyState
+                    icon={<RefreshCw size={22} strokeWidth={1.75} />}
+                    title="No problems in revision"
+                    description="Add problems to revision when you want to revisit them later."
+                    action={
+                      <button type="button" className="ax-btn accent" onClick={() => setSheetTab("all")}>
+                        Explore problems
+                      </button>
+                    }
+                  />
+                );
+              }
+              return (
+                <EmptyState
+                  icon={<Search size={22} strokeWidth={1.75} />}
+                  title="No problems found"
+                  description="Try changing your search or filters."
+                  action={clearFilters}
+                />
+              );
+            })()}
+          </div>
         ) : sheetTab !== "all" ? (
           <section className="ax-topic open flat">
             <div className="ax-problem-list">{renderProblemRows(filtered)}</div>
@@ -1433,20 +1546,31 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
               const catPct = items.length
                 ? Math.round((catSolved / items.length) * 100)
                 : 0;
-              const open = expanded[category] === true;
+              const open = expanded[category] !== false;
+              const completed = items.length > 0 && catSolved === items.length;
               return (
-                <section key={category} className={`ax-topic ${open ? "open" : ""}`}>
+                <section
+                  key={category}
+                  className={`ax-topic ${open ? "open" : ""} ${completed ? "completed" : ""}`}
+                >
                   <button
                     type="button"
                     className="ax-topic-head"
                     aria-expanded={open}
                     onClick={() =>
-                      setExpanded((prev) => ({ ...prev, [category]: !prev[category] }))
+                      setExpanded((prev) => ({ ...prev, [category]: !open }))
                     }
                   >
-                    <ChevronRight size={18} className="ax-chevron" />
-                    <span className="ax-topic-name">{category}</span>
-                    <span className="ax-topic-bar">
+                    <ChevronRight size={16} className="ax-chevron" />
+                    <span className="ax-topic-name-wrap">
+                      <span className="ax-topic-name">{category}</span>
+                      <span className="ax-topic-sub">
+                        {items.length} problem{items.length === 1 ? "" : "s"} ·{" "}
+                        {catSolved} solved
+                        {completed ? " · Completed" : ""}
+                      </span>
+                    </span>
+                    <span className="ax-topic-bar" aria-hidden>
                       <i style={{ width: `${catPct}%` }} />
                     </span>
                     <span className="ax-topic-count">
@@ -1461,6 +1585,32 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
             })}
           </div>
         )}
+
+        {totalPages > 1 && onProblemPageChange ? (
+          <div className="ax-pagination">
+            <button
+              type="button"
+              className="ax-btn"
+              disabled={problemPage <= 1 || loading}
+              onClick={() => onProblemPageChange(Math.max(1, problemPage - 1))}
+            >
+              ← Previous
+            </button>
+            <span>
+              Page {problemPage} of {totalPages}
+            </span>
+            <button
+              type="button"
+              className="ax-btn"
+              disabled={problemPage >= totalPages || loading}
+              onClick={() =>
+                onProblemPageChange(Math.min(totalPages, problemPage + 1))
+              }
+            >
+              Next →
+            </button>
+          </div>
+        ) : null}
       </div>
 
       <aside className="ax-rail" aria-label="DSA progress and learning tools">

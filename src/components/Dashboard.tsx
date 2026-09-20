@@ -157,9 +157,13 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
   const submitLockRef = useRef(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  const [dashTab, setDashTab] = useState<"overview" | "submissions" | "sessions" | "security">("overview");
+  const [dashTab, setDashTab] = useState<
+    "profile" | "account" | "security" | "progress" | "sessions" | "submissions" | "audit"
+  >("profile");
   const [sessions, setSessions] = useState<any[]>([]);
   const [securityLogs, setSecurityLogs] = useState<any[]>([]);
+  const [loadingSessions, setLoadingSessions] = useState(false);
+  const [loadingSecurityLogs, setLoadingSecurityLogs] = useState(false);
   const [userSubmissions, setUserSubmissions] = useState<Submission[]>([]);
   const [loadingSubmissions, setLoadingSubmissions] = useState(false);
   const [submissionSearch, setSubmissionSearch] = useState("");
@@ -1138,8 +1142,33 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
   const handleTabChange = (tab: typeof dashTab) => {
     setDashTab(tab);
     if (tab === "submissions") loadSubmissionsList();
-    if (tab === "sessions") authApi.getActiveSessions().then((r) => r.data && setSessions(r.data as any[])).catch(() => {});
-    if (tab === "security") authApi.getSecurityLogs().then((r) => r.data && setSecurityLogs(r.data as any[])).catch(() => {});
+    if (tab === "sessions") {
+      setLoadingSessions(true);
+      authApi
+        .getActiveSessions()
+        .then((r) => {
+          const rows = Array.isArray(r.data) ? r.data : [];
+          setSessions(
+            rows.map((s: any) => ({
+              ...s,
+              id: String(s.id || s._id || ""),
+            }))
+          );
+        })
+        .catch(() => setSessions([]))
+        .finally(() => setLoadingSessions(false));
+    }
+    if (tab === "audit") {
+      setLoadingSecurityLogs(true);
+      authApi
+        .getSecurityLogs()
+        .then((r) => {
+          const rows = Array.isArray(r.data) ? r.data : [];
+          setSecurityLogs(rows);
+        })
+        .catch(() => setSecurityLogs([]))
+        .finally(() => setLoadingSecurityLogs(false));
+    }
   };
 
   const handleUpdateProfile = async (e: React.FormEvent) => {
@@ -1517,7 +1546,8 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
             activeTab !== "contests" &&
             activeTab !== "planner" &&
             activeTab !== "sessions" &&
-            activeTab !== "calendar" && (
+            activeTab !== "calendar" &&
+            activeTab !== "profile" && (
             <header className="platform-topbar">
               <span className="platform-topbar-title">
                 {activeTab === "profile" && "Profile & Settings"}
@@ -1903,6 +1933,9 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
                 deletingSubmissionId={deletingSubmissionId}
                 sessions={sessions}
                 securityLogs={securityLogs}
+                loadingSessions={loadingSessions}
+                loadingSecurityLogs={loadingSecurityLogs}
+                currentStreak={streakInfo.current}
                 onNameChange={setEditName}
                 onAvatarChange={(e) => {
                   const file = e.target.files?.[0];
@@ -1940,7 +1973,7 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
                 onClearSelectedSubmission={() => setProfileSelectedSubmission(null)}
                 onRevokeSession={async (id) => {
                   await authApi.revokeSession(id);
-                  setSessions((p) => p.filter((s) => s.id !== id));
+                  setSessions((p) => p.filter((s) => String(s.id || s._id) !== id));
                 }}
                 onLogoutAllSessions={async () => {
                   await authApi.logoutAllSessions();

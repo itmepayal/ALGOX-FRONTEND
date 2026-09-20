@@ -30,6 +30,7 @@ function statusLabel(sub?: PublicSubscription | null): string {
 
 /**
  * Compact entitlement strip — plan/expiry from AuthService snapshot only.
+ * Uses existing free-home card + PremiumBadge language (no new Premium theme).
  */
 export const SubscriptionStatusBar: FC<{
   onUpgraded?: () => void;
@@ -41,8 +42,7 @@ export const SubscriptionStatusBar: FC<{
   const sub = user?.subscription;
 
   const expiry =
-    formatDate(sub?.gracePeriodEnd) ||
-    formatDate(sub?.currentPeriodEnd);
+    formatDate(sub?.gracePeriodEnd) || formatDate(sub?.currentPeriodEnd);
 
   const refreshEntitlement = async () => {
     try {
@@ -66,10 +66,14 @@ export const SubscriptionStatusBar: FC<{
       );
       const result = await startPremiumCheckout();
       if (!result.ok) setMsg(result.message);
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const anyErr = err as {
+        response?: { data?: { message?: string } };
+        message?: string;
+      };
       setMsg(
-        err?.response?.data?.message ||
-          err?.message ||
+        anyErr?.response?.data?.message ||
+          anyErr?.message ||
           "Unable to start checkout"
       );
     } finally {
@@ -89,10 +93,14 @@ export const SubscriptionStatusBar: FC<{
         setMsg("Cancellation scheduled at period end.");
       }
       await refreshEntitlement();
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const anyErr = err as {
+        response?: { data?: { message?: string } };
+        message?: string;
+      };
       setMsg(
-        err?.response?.data?.message ||
-          err?.message ||
+        anyErr?.response?.data?.message ||
+          anyErr?.message ||
           "Unable to update subscription"
       );
     } finally {
@@ -107,7 +115,7 @@ export const SubscriptionStatusBar: FC<{
     >
       <div className="free-home-subbar-main">
         <div className="free-home-subbar-title">
-          <Crown size={16} className="text-warning" aria-hidden />
+          <Crown size={16} strokeWidth={1.75} className="text-warning" aria-hidden />
           <strong>{statusLabel(sub)}</strong>
           {premium ? <PremiumBadge /> : null}
         </div>
@@ -117,7 +125,7 @@ export const SubscriptionStatusBar: FC<{
               ? `Access through ${expiry}${
                   sub?.cancelAtPeriodEnd ? " · cancels then" : ""
                 }`
-              : "Open-ended Premium grant"
+              : "Your advanced preparation features are unlocked."
             : "Upgrade for editorials, company prep, analytics, and AI assist."}
         </p>
         {msg ? (
@@ -127,15 +135,6 @@ export const SubscriptionStatusBar: FC<{
         ) : null}
       </div>
       <div className="free-home-subbar-actions">
-        <Button
-          type="button"
-          size="sm"
-          variant="secondary"
-          onClick={() => void refreshEntitlement()}
-          disabled={busy}
-        >
-          Refresh entitlement
-        </Button>
         {premium ? (
           <Button
             type="button"
@@ -145,9 +144,9 @@ export const SubscriptionStatusBar: FC<{
             disabled={busy}
           >
             {busy ? (
-              <Loader2 size={14} className="animate-spin" />
+              <Loader2 size={14} className="animate-spin" aria-hidden />
             ) : (
-              <ExternalLink size={14} />
+              <ExternalLink size={14} aria-hidden />
             )}
             {sub?.cancelAtPeriodEnd ? "Resume plan" : "Manage subscription"}
           </Button>
@@ -158,7 +157,7 @@ export const SubscriptionStatusBar: FC<{
             onClick={() => void handleUpgrade()}
             disabled={busy}
           >
-            {busy ? <Loader2 size={14} className="animate-spin" /> : null}
+            {busy ? <Loader2 size={14} className="animate-spin" aria-hidden /> : null}
             Upgrade to Premium
           </Button>
         )}

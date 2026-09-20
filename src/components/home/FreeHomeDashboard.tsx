@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useMemo, useState, type FC } from "react";
 import {
   ArrowRight,
+  AlertTriangle,
   Bookmark,
+  CheckCircle2,
   Flame,
+  LayoutDashboard,
   Loader2,
   RefreshCw,
   Target,
@@ -10,8 +13,10 @@ import {
   AlertCircle,
   Snowflake,
   Medal,
+  WifiOff,
 } from "lucide-react";
 import type { Problem } from "../../api/problemApi";
+import { problemApi } from "../../api/problemApi";
 import type { Submission } from "../../api/submissionApi";
 import {
   engagementApi,
@@ -45,18 +50,27 @@ import {
 } from "../../utils/learningStats";
 import { normalizeDifficulty } from "../../utils/problemUtils";
 import { getProblemId } from "../../utils/workspacePersistence";
+import {
+  findProblemByIdOrSlug,
+  hasChallengeProblemRef,
+  resolveChallengeProblem,
+} from "../../utils/challengeProblem";
+import { isAcceptedStatus } from "../../utils/submissionUtils";
 import { EmptyState } from "../ui/empty-state";
 import { MetricCard } from "../ui/metric-card";
 import { Skeleton } from "../ui/skeleton";
 import { Button } from "../ui/button";
+import { Badge } from "../ui/badge";
 import { useAuth } from "../../context/AuthContext";
 import { isPremium } from "../../access/accessModel";
 import { canAccess } from "../../access/canAccess";
 import { authApi } from "../../api/authApi";
+import { getErrorToastMessage, normalizeApiError } from "../../lib/apiError";
 import { SubscriptionStatusBar } from "./SubscriptionStatusBar";
 import { PremiumPreparationSection } from "./PremiumPreparationSection";
 import { UpgradePrompt } from "../access/UpgradePrompt";
 import type { FreeHomeNavTab } from "./types";
+import "../companies/companies.css";
 
 export type { FreeHomeNavTab } from "./types";
 
@@ -70,9 +84,16 @@ interface FreeHomeDashboardProps {
   loadingSubmissions?: boolean;
   onSelectProblem: (p: Problem) => void;
   onNavigate: (tab: FreeHomeNavTab) => void;
-  /** Bump to refetch remote dashboard slices */
   refreshKey?: number;
 }
+
+type ActivityEvent = {
+  key: string;
+  at: number;
+  dateLabel: string;
+  label: string;
+  detail: string;
+};
 
 function difficultyBreakdown(
   problems: Problem[],
@@ -90,21 +111,6 @@ function difficultyBreakdown(
     else if (d === "hard") hard += 1;
   }
   return { easy, medium, hard, total: easy + medium + hard };
-}
-
-/** Deterministic daily pick removed — server DailyChallenge is canonical. */
-function findProblemByIdOrSlug(
-  problems: Problem[],
-  id: string | null,
-  slug: string | null
-): Problem | null {
-  if (!id && !slug) return null;
-  return (
-    problems.find((p) => {
-      const pid = getProblemId(p);
-      return (id && pid === id) || (slug && p.slug === slug);
-    }) || null
-  );
 }
 
 function recentOfficialSubmissions(submissions: Submission[], limit = 8) {
@@ -156,14 +162,107 @@ function recommendFromWeak(
   return out;
 }
 
+function formatDateLabel(iso?: string | number | Date | null): string {
+  if (iso == null) return "—";
+  const d = iso instanceof Date ? iso : new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function formatShortTime(iso?: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function statusLabel(status?: string): string {
+  if (!status) return "—";
+  if (isAcceptedStatus(status)) return "Accepted";
+  return status.replace(/_/g, " ");
+}
+
+function execTimeLabel(s: Submission): string {
+  if (s.executionTime == null || !Number.isFinite(Number(s.executionTime))) {
+    return "—";
+  }
+  return `${Math.round(Number(s.executionTime))} ms`;
+}
+
+function pct(n: number, d: number): number {
+  if (!d) return 0;
+  return Math.min(100, Math.max(0, Math.round((n / d) * 100)));
+}
+
+function diffVariant(
+  d: string
+): "success" | "warning" | "danger" | "default" {
+  const n = normalizeDifficulty(d);
+  if (n === "easy") return "success";
+  if (n === "medium") return "warning";
+  if (n === "hard") return "danger";
+  return "default";
+}
+
+type SectionKey =
+  | "challenge"
+  | "streak"
+  | "sheet"
+  | "progress"
+  | "favourites"
+  | "leaderboard";
+
+type SectionErrors = Partial<Record<SectionKey, string>>;
+
+const SectionError: FC<{
+  title?: string;
+  message: string;
+  onRetry?: () => void;
+  retryBusy?: boolean;
+}> = ({ title, message, onRetry, retryBusy }) => (
+  <div className="free-home-section-error" role="alert">
+    {title ? <p className="free-home-section-error-title">{title}</p> : null}
+    <p>{message}</p>
+    {onRetry ? (
+      <Button
+        type="button"
+        size="sm"
+        variant="secondary"
+        onClick={onRetry}
+        disabled={retryBusy}
+        aria-busy={retryBusy}
+        aria-label={retryBusy ? "Retrying" : "Retry loading"}
+      >
+        {retryBusy ? (
+          <>
+            <Loader2 size={14} className="animate-spin" aria-hidden />
+            Retrying…
+          </>
+        ) : (
+          "Retry"
+        )}
+      </Button>
+    ) : null}
+  </div>
+);
+
 export const FreeHomeDashboard: FC<FreeHomeDashboardProps> = ({
   userName,
   userId,
   problems,
   submissions,
   studySessions,
-  loadingProblems = false,
-  loadingSubmissions = false,
+  loadingProblems: _loadingProblems = false,
+  loadingSubmissions: _loadingSubmissions = false,
   onSelectProblem,
   onNavigate,
   refreshKey = 0,
@@ -181,8 +280,14 @@ export const FreeHomeDashboard: FC<FreeHomeDashboardProps> = ({
   const [lbStats, setLbStats] = useState<UserLeaderboardStats | null>(null);
   const [lbMissing, setLbMissing] = useState(false);
   const [remoteLoading, setRemoteLoading] = useState(true);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [remoteError, setRemoteError] = useState("");
+  const [sectionErrors, setSectionErrors] = useState<SectionErrors>({});
   const [refreshing, setRefreshing] = useState(false);
+  const [justUpdated, setJustUpdated] = useState(false);
+  const [offline, setOffline] = useState(
+    typeof navigator !== "undefined" ? !navigator.onLine : false
+  );
   const [todayChallenge, setTodayChallenge] =
     useState<TodayChallengeResponse | null>(null);
   const [streakView, setStreakView] = useState<StreakView | null>(null);
@@ -190,6 +295,18 @@ export const FreeHomeDashboard: FC<FreeHomeDashboardProps> = ({
     []
   );
   const [challengeAction, setChallengeAction] = useState("");
+  const [challengeActionTone, setChallengeActionTone] = useState<
+    "ok" | "err" | "incomplete" | ""
+  >("");
+  const [challengeRetryKind, setChallengeRetryKind] = useState<
+    "complete" | "open" | "refresh" | null
+  >(null);
+  const [challengeRetryTarget, setChallengeRetryTarget] =
+    useState<DailyChallengePublic | null>(null);
+  const [challengeStatusRefreshing, setChallengeStatusRefreshing] =
+    useState(false);
+  const [completeBusy, setCompleteBusy] = useState(false);
+  const [openChallengeBusy, setOpenChallengeBusy] = useState(false);
   const [freezeBusy, setFreezeBusy] = useState(false);
   const [historyItems, setHistoryItems] = useState<DailyChallengePublic[]>([]);
   const [historyLocked, setHistoryLocked] = useState(false);
@@ -202,6 +319,14 @@ export const FreeHomeDashboard: FC<FreeHomeDashboardProps> = ({
   const [weeklyTarget, setWeeklyTarget] = useState(5);
   const [monthlyTarget, setMonthlyTarget] = useState(20);
   const [goalsBusy, setGoalsBusy] = useState(false);
+  const [goalsMsg, setGoalsMsg] = useState<{
+    type: "ok" | "err";
+    text: string;
+  } | null>(null);
+  const [goalFieldErrors, setGoalFieldErrors] = useState<{
+    weekly?: string;
+    monthly?: string;
+  }>({});
 
   const todayKey = toDateKey(new Date());
   const canFreeze = canAccess(user, "premium.streak_freeze");
@@ -211,36 +336,49 @@ export const FreeHomeDashboard: FC<FreeHomeDashboardProps> = ({
   const loadRemote = useCallback(async () => {
     if (!userId) {
       setRemoteLoading(false);
+      setHasLoadedOnce(true);
       return;
     }
     setRemoteError("");
+    const nextErrors: SectionErrors = {};
     try {
-      const calFrom = toDateKey(
-        new Date(Date.now() - 27 * 86400000)
-      );
+      const calFrom = toDateKey(new Date(Date.now() - 27 * 86400000));
       const histFrom = toDateKey(
         new Date(Date.now() - (canHistory ? 89 : 6) * 86400000)
       );
-      const [sheetRes, statusRes, planRes, favRes, lbRes, todayRes, streakRes, calRes, histRes] =
-        await Promise.allSettled([
-          sheetProgressApi.getProgress(STRIVER_A2Z_SHEET_ID),
-          progressApi.getStatus(),
-          canPlanner
-            ? learningApi.getPlan(todayKey)
-            : Promise.resolve({ data: null }),
-          engagementApi.listMyFavourites({ limit: 6, page: 1, sort: "recent" }),
-          leaderboardApi.getUserStats(userId),
-          challengeApi.getToday(),
-          challengeApi.getStreak(),
-          challengeApi.getCalendar(calFrom, todayKey),
-          challengeApi.getHistory(histFrom, todayKey),
-        ]);
+      const [
+        sheetRes,
+        statusRes,
+        planRes,
+        favRes,
+        lbRes,
+        todayRes,
+        streakRes,
+        calRes,
+        histRes,
+      ] = await Promise.allSettled([
+        sheetProgressApi.getProgress(STRIVER_A2Z_SHEET_ID),
+        progressApi.getStatus(),
+        canPlanner
+          ? learningApi.getPlan(todayKey)
+          : Promise.resolve({ data: null }),
+        engagementApi.listMyFavourites({ limit: 6, page: 1, sort: "recent" }),
+        leaderboardApi.getUserStats(userId),
+        challengeApi.getToday(),
+        challengeApi.getStreak(),
+        challengeApi.getCalendar(calFrom, todayKey),
+        challengeApi.getHistory(histFrom, todayKey),
+      ]);
 
       if (sheetRes.status === "fulfilled") {
         setSheetProgress(sheetRes.value?.data ?? null);
+      } else {
+        nextErrors.sheet = getErrorToastMessage(sheetRes.reason);
       }
       if (statusRes.status === "fulfilled") {
         setProgressStatus(statusRes.value?.data ?? null);
+      } else {
+        nextErrors.progress = getErrorToastMessage(statusRes.reason);
       }
       if (planRes.status === "fulfilled") {
         setTodayPlan(planRes.value?.data ?? null);
@@ -249,6 +387,8 @@ export const FreeHomeDashboard: FC<FreeHomeDashboardProps> = ({
         const data = favRes.value?.data;
         setFavourites(data?.items || []);
         setFavStats(data?.stats || null);
+      } else {
+        nextErrors.favourites = getErrorToastMessage(favRes.reason);
       }
       if (lbRes.status === "fulfilled") {
         setLbStats(lbRes.value?.data ?? null);
@@ -256,15 +396,31 @@ export const FreeHomeDashboard: FC<FreeHomeDashboardProps> = ({
       } else {
         setLbStats(null);
         setLbMissing(true);
+        nextErrors.leaderboard = getErrorToastMessage(lbRes.reason);
       }
       if (todayRes.status === "fulfilled") {
-        setTodayChallenge(todayRes.value?.data ?? null);
+        const today = todayRes.value?.data ?? null;
+        setTodayChallenge(today);
+        if (today?.completed) {
+          setChallengeActionTone((prev) =>
+            prev === "incomplete" ? "" : prev
+          );
+          setChallengeRetryKind((prev) =>
+            prev === "refresh" ? null : prev
+          );
+        }
+      } else {
+        nextErrors.challenge =
+          "We couldn't retrieve the latest challenge status. Please try again.";
       }
       if (streakRes.status === "fulfilled") {
         const streak = streakRes.value?.data ?? null;
         setStreakView(streak);
         if (streak?.weeklyGoal?.target) setWeeklyTarget(streak.weeklyGoal.target);
-        if (streak?.monthlyGoal?.target) setMonthlyTarget(streak.monthlyGoal.target);
+        if (streak?.monthlyGoal?.target)
+          setMonthlyTarget(streak.monthlyGoal.target);
+      } else {
+        nextErrors.streak = getErrorToastMessage(streakRes.reason);
       }
       if (calRes.status === "fulfilled") {
         setChallengeDays(calRes.value?.data?.days || []);
@@ -274,25 +430,48 @@ export const FreeHomeDashboard: FC<FreeHomeDashboardProps> = ({
         setHistoryLocked(Boolean(histRes.value?.data?.historyLocked));
       }
 
+      setSectionErrors(nextErrors);
+
       const hardFail =
         sheetRes.status === "rejected" &&
         statusRes.status === "rejected" &&
-        favRes.status === "rejected";
+        favRes.status === "rejected" &&
+        todayRes.status === "rejected" &&
+        streakRes.status === "rejected";
       if (hardFail) {
-        setRemoteError("Some dashboard data could not be loaded. Try refresh.");
+        setRemoteError(
+          "Unable to load dashboard data. Check your connection and try again."
+        );
       }
-    } catch (err: any) {
-      setRemoteError(err?.message || "Failed to load dashboard");
+    } catch (err) {
+      const n = normalizeApiError(err);
+      setRemoteError(`${n.title}. ${n.message}`);
     } finally {
       setRemoteLoading(false);
       setRefreshing(false);
+      setHasLoadedOnce(true);
     }
   }, [userId, todayKey, canHistory, canPlanner]);
 
   useEffect(() => {
-    setRemoteLoading(true);
+    if (!hasLoadedOnce) setRemoteLoading(true);
     void loadRemote();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only refetch on loadRemote/refreshKey
   }, [loadRemote, refreshKey]);
+
+  useEffect(() => {
+    const onOff = () => setOffline(true);
+    const onOn = () => {
+      setOffline(false);
+      void loadRemote();
+    };
+    window.addEventListener("offline", onOff);
+    window.addEventListener("online", onOn);
+    return () => {
+      window.removeEventListener("offline", onOff);
+      window.removeEventListener("online", onOn);
+    };
+  }, [loadRemote]);
 
   const solvedIds = useMemo(
     () => everAcceptedProblemIds(submissions),
@@ -318,6 +497,13 @@ export const FreeHomeDashboard: FC<FreeHomeDashboardProps> = ({
     if (!ch || ch.accessLocked) return null;
     return findProblemByIdOrSlug(problems, ch.problemId, ch.problemSlug);
   }, [todayChallenge, problems]);
+
+  const challengeHasProblemRef = useMemo(() => {
+    const ch = todayChallenge?.challenge;
+    if (!ch || ch.accessLocked) return false;
+    return hasChallengeProblemRef(ch);
+  }, [todayChallenge]);
+
   const recent = useMemo(
     () => recentOfficialSubmissions(submissions),
     [submissions]
@@ -339,26 +525,122 @@ export const FreeHomeDashboard: FC<FreeHomeDashboardProps> = ({
     return keys;
   }, [todayKey]);
 
-  const handleCompleteChallenge = async () => {
+  const activityEvents = useMemo(() => {
+    const events: ActivityEvent[] = [];
+
+    if (todayChallenge?.completed && todayChallenge.challenge) {
+      const at = Date.now();
+      events.push({
+        key: `chal-${todayChallenge.dateKey}`,
+        at,
+        dateLabel: formatDateLabel(todayChallenge.dateKey),
+        label: "Completed Daily Challenge",
+        detail:
+          todayChallenge.challenge.title ||
+          dailyProblem?.title ||
+          "Today's challenge",
+      });
+    }
+
+    for (const s of recent.slice(0, 6)) {
+      const at = new Date(s.createdAt || s.updatedAt || 0).getTime();
+      if (!at) continue;
+      const pid = String(s.problemId || "");
+      const problem = problems.find(
+        (p) => getProblemId(p) === pid || p.slug === pid
+      );
+      events.push({
+        key: `sub-${s.id || s._id || `${pid}-${at}`}`,
+        at,
+        dateLabel: formatDateLabel(at),
+        label: isAcceptedStatus(s.status)
+          ? "Accepted solution"
+          : "Submitted solution",
+        detail: problem?.title || "Problem",
+      });
+    }
+
+    for (const sess of studySessions.slice(0, 4)) {
+      const at = Number(sess.endedAt || sess.updatedAt || sess.startedAt || 0);
+      if (!at) continue;
+      events.push({
+        key: `sess-${sess.id}`,
+        at,
+        dateLabel: formatDateLabel(at),
+        label:
+          sess.status === "completed"
+            ? "Completed study session"
+            : "Study session",
+        detail: sess.topic || "Practice session",
+      });
+    }
+
+    for (const item of historyItems) {
+      if (!item.completed) continue;
+      if (item.dateKey === todayChallenge?.dateKey) continue;
+      const at = new Date(`${item.dateKey}T12:00:00`).getTime();
+      events.push({
+        key: `hist-${item.dateKey}-${item.tier}`,
+        at,
+        dateLabel: formatDateLabel(item.dateKey),
+        label: "Completed Daily Challenge",
+        detail: item.title || "Challenge",
+      });
+    }
+
+    return events.sort((a, b) => b.at - a.at).slice(0, 8);
+  }, [
+    todayChallenge,
+    dailyProblem,
+    recent,
+    problems,
+    studySessions,
+    historyItems,
+  ]);
+
+  const handleOpenChallengeProblem = async (
+    challenge: DailyChallengePublic | null | undefined
+  ) => {
+    if (openChallengeBusy) return;
     setChallengeAction("");
+    setChallengeActionTone("");
+    setChallengeRetryKind(null);
+    setChallengeRetryTarget(challenge ?? null);
+    setOpenChallengeBusy(true);
     try {
-      const challengePid =
-        todayChallenge?.challenge?.problemId ||
-        (dailyProblem ? getProblemId(dailyProblem) : null);
-      const accepted = [...submissions]
-        .filter((s) => {
-          const st = String(s.status || "").toUpperCase();
-          if (st !== "ACCEPTED") return false;
-          if (!challengePid) return false;
-          return String(s.problemId) === String(challengePid);
-        })
-        .sort(
-          (a, b) =>
-            new Date(b.createdAt || 0).getTime() -
-            new Date(a.createdAt || 0).getTime()
-        )[0];
-      const submissionId = accepted?.id || accepted?._id;
-      const res = await challengeApi.complete(submissionId);
+      const result = await resolveChallengeProblem(problems, challenge, {
+        getById: (id) => problemApi.getProblemById(id),
+        getBySlug: (slug) => problemApi.getProblemBySlug(slug),
+      });
+      if (!result.ok) {
+        setChallengeActionTone("err");
+        setChallengeAction(result.message);
+        setChallengeRetryKind(
+          result.reason === "missing_identifier" ||
+            result.reason === "invalid_identifier"
+            ? "refresh"
+            : "open"
+        );
+        return;
+      }
+      onSelectProblem(result.problem);
+    } finally {
+      setOpenChallengeBusy(false);
+    }
+  };
+
+  const handleCompleteChallenge = async () => {
+    if (completeBusy || todayChallenge?.completed) return;
+    setChallengeAction("");
+    setChallengeActionTone("");
+    setChallengeRetryKind(null);
+    setChallengeRetryTarget(null);
+    setCompleteBusy(true);
+    try {
+      // Server verifies Accepted submission via SubmissionService.
+      // Do not pass a client-picked submissionId — a stale/wrong id previously
+      // short-circuited verification and blocked legitimate Accepted solutions.
+      const res = await challengeApi.complete();
       if (res.data) {
         setStreakView(res.data.streak);
         setTodayChallenge((prev) =>
@@ -366,40 +648,82 @@ export const FreeHomeDashboard: FC<FreeHomeDashboardProps> = ({
             ? { ...prev, completed: true, dateKey: res.data!.dateKey }
             : prev
         );
+        setChallengeActionTone("ok");
         setChallengeAction(
           res.data.duplicate
-            ? "Already completed today (server)."
-            : submissionId
-              ? "Challenge completed via accepted submission."
-              : "Challenge completed — streak updated on server."
+            ? "Already completed today."
+            : "Challenge completed — streak updated on server."
         );
         await loadRemote();
       }
-    } catch (err: any) {
-      setChallengeAction(
-        err?.response?.data?.message ||
-          err?.message ||
-          "Could not complete challenge"
-      );
+    } catch (err) {
+      const n = normalizeApiError(err);
+      const msg = n.message || "";
+      if (/accepted submission/i.test(msg)) {
+        // Expected app state when the user has not earned Accepted yet.
+        setChallengeActionTone("incomplete");
+        setChallengeAction("");
+        setChallengeRetryKind("refresh");
+      } else {
+        setChallengeActionTone("err");
+        setChallengeRetryKind("complete");
+        setChallengeAction(
+          msg && !/AxiosError|ERR_|HTTP \d|Internal Server|highlighted fields/i.test(msg)
+            ? msg
+            : "We couldn't mark today's challenge complete. Please try again."
+        );
+      }
+    } finally {
+      setCompleteBusy(false);
     }
+  };
+
+  const refreshChallengeStatus = async () => {
+    if (challengeStatusRefreshing) return;
+    setChallengeStatusRefreshing(true);
+    try {
+      await loadRemote();
+    } finally {
+      setChallengeStatusRefreshing(false);
+    }
+  };
+
+  const handleChallengeRetry = async () => {
+    if (challengeRetryKind === "open") {
+      void handleOpenChallengeProblem(
+        challengeRetryTarget || todayChallenge?.challenge
+      );
+      return;
+    }
+    if (challengeRetryKind === "complete") {
+      void handleCompleteChallenge();
+      return;
+    }
+    // incomplete / refresh — re-fetch server challenge state only
+    await refreshChallengeStatus();
   };
 
   const handleFreeze = async () => {
     if (!canFreeze) return;
     setFreezeBusy(true);
     setChallengeAction("");
+    setChallengeActionTone("");
     try {
       const res = await challengeApi.useFreeze();
       if (res.data) {
         setStreakView(res.data);
+        setChallengeActionTone("ok");
         setChallengeAction("Streak freeze applied for yesterday.");
         await loadRemote();
       }
-    } catch (err: any) {
+    } catch (err) {
+      const n = normalizeApiError(err);
+      setChallengeActionTone("err");
+      setChallengeRetryKind("refresh");
       setChallengeAction(
-        err?.response?.data?.message ||
-          err?.message ||
-          "Could not apply freeze"
+        n.message && !/AxiosError|ERR_/i.test(n.message)
+          ? n.message
+          : "Could not apply streak freeze. Please try again."
       );
     } finally {
       setFreezeBusy(false);
@@ -409,24 +733,42 @@ export const FreeHomeDashboard: FC<FreeHomeDashboardProps> = ({
   const handleSelectChallengeDay = async (dateKey: string) => {
     setSelectedDateKey(dateKey);
     setChallengeAction("");
+    setChallengeActionTone("");
     try {
       const res = await challengeApi.getByDate(dateKey);
-      if (res.data) {
-        setSelectedDay(res.data);
-      }
-    } catch (err: any) {
+      if (res.data) setSelectedDay(res.data);
+    } catch (err) {
+      const n = normalizeApiError(err);
       setSelectedDay(null);
+      setChallengeActionTone("err");
+      setChallengeRetryKind("refresh");
       setChallengeAction(
-        err?.response?.data?.message ||
-          err?.message ||
-          "Could not load that date"
+        n.message && !/AxiosError|ERR_/i.test(n.message)
+          ? n.message
+          : "Could not load that challenge date. Please try again."
       );
     }
   };
 
   const handleSaveGoals = async () => {
+    const errors: { weekly?: string; monthly?: string } = {};
+    if (!Number.isFinite(weeklyTarget) || weeklyTarget < 1 || weeklyTarget > 30) {
+      errors.weekly = "Enter a weekly goal between 1 and 30.";
+    }
+    if (
+      !Number.isFinite(monthlyTarget) ||
+      monthlyTarget < 1 ||
+      monthlyTarget > 90
+    ) {
+      errors.monthly = "Enter a monthly goal between 1 and 90.";
+    }
+    setGoalFieldErrors(errors);
+    if (Object.keys(errors).length) return;
+
     setGoalsBusy(true);
+    setGoalsMsg(null);
     setChallengeAction("");
+    setChallengeActionTone("");
     try {
       const res = await challengeApi.setGoals({
         weeklyGoalTarget: weeklyTarget,
@@ -434,14 +776,11 @@ export const FreeHomeDashboard: FC<FreeHomeDashboardProps> = ({
       });
       if (res.data) {
         setStreakView(res.data);
-        setChallengeAction("Challenge goals updated on server.");
+        setGoalsMsg({ type: "ok", text: "Goals saved successfully." });
       }
-    } catch (err: any) {
-      setChallengeAction(
-        err?.response?.data?.message ||
-          err?.message ||
-          "Could not update goals"
-      );
+    } catch (err) {
+      const n = normalizeApiError(err);
+      setGoalsMsg({ type: "err", text: `${n.title}. ${n.message}` });
     } finally {
       setGoalsBusy(false);
     }
@@ -453,22 +792,28 @@ export const FreeHomeDashboard: FC<FreeHomeDashboardProps> = ({
         ? Intl.DateTimeFormat().resolvedOptions().timeZone
         : "";
     if (!tz) {
+      setChallengeActionTone("err");
       setChallengeAction("Could not detect browser timezone.");
       return;
     }
     setChallengeAction("");
+    setChallengeActionTone("");
     try {
       const res = await challengeApi.setTimezone(tz);
       if (res.data) {
         setStreakView(res.data);
+        setChallengeActionTone("ok");
         setChallengeAction(`Challenge timezone set to ${tz}.`);
         await loadRemote();
       }
-    } catch (err: any) {
+    } catch (err) {
+      const n = normalizeApiError(err);
+      setChallengeActionTone("err");
+      setChallengeRetryKind("refresh");
       setChallengeAction(
-        err?.response?.data?.message ||
-          err?.message ||
-          "Could not update timezone"
+        n.message && !/AxiosError|ERR_/i.test(n.message)
+          ? n.message
+          : "Could not update challenge timezone. Please try again."
       );
     }
   };
@@ -476,27 +821,39 @@ export const FreeHomeDashboard: FC<FreeHomeDashboardProps> = ({
   const continueTopic = weak[0] || roadmap.find((t) => t.total > 0) || null;
 
   const solvedTotal =
-    progressStatus?.problemsSolved ??
-    lbStats?.totalSolved ??
-    byDiff.total;
+    progressStatus?.problemsSolved ?? lbStats?.totalSolved ?? byDiff.total;
 
   const easyCount = lbStats?.solvedEasy ?? byDiff.easy;
   const mediumCount = lbStats?.solvedMedium ?? byDiff.medium;
   const hardCount = lbStats?.solvedHard ?? byDiff.hard;
+  const attemptedCount =
+    progressStatus?.problemsAttempted ?? solvedIds.size;
 
   const planTasks = todayPlan?.tasks || [];
   const planDone = planTasks.filter((t) => t.completed).length;
 
-  const bootLoading =
-    remoteLoading || loadingProblems || loadingSubmissions;
+  const weekDone = streakView?.weeklyGoal?.completed ?? 0;
+  const weekTarget = streakView?.weeklyGoal?.target ?? weeklyTarget;
+  const monthDone = streakView?.monthlyGoal?.completed ?? 0;
+  const monthTarget = streakView?.monthlyGoal?.target ?? monthlyTarget;
+  const dayDone = todayChallenge?.completed ? 1 : 0;
+
+  const sheetPct = Math.min(
+    100,
+    Math.max(0, Math.round(Number(sheetProgress?.progress) || 0))
+  );
+
+  const bootLoading = remoteLoading && !hasLoadedOnce;
 
   const handleRefresh = () => {
+    if (refreshing) return;
     setRefreshing(true);
+    setJustUpdated(false);
     void (async () => {
       try {
         const res = await authApi.getProfile();
         if (res.data) {
-          setUser(res.data as any);
+          setUser(res.data as typeof user);
           localStorage.setItem("user", JSON.stringify(res.data));
           setEntitlementTick((n) => n + 1);
         }
@@ -504,53 +861,106 @@ export const FreeHomeDashboard: FC<FreeHomeDashboardProps> = ({
         /* keep prior entitlement */
       }
       await loadRemote();
+      setJustUpdated(true);
     })();
   };
 
-  if (bootLoading && !refreshing) {
+  const firstName = userName ? userName.split(" ")[0] : "";
+  /** Prefer server challenge dateKey / streak todayKey over browser-local date. */
+  const serverChallengeDateKey =
+    todayChallenge?.dateKey || streakView?.todayKey || null;
+  const challengeDateLabel = formatDateLabel(
+    serverChallengeDateKey || todayKey
+  );
+  const challengeDiff = normalizeDifficulty(
+    todayChallenge?.challenge?.difficulty || dailyProblem?.difficulty
+  );
+  const challengeCategory =
+    todayChallenge?.challenge?.category || dailyProblem?.category || "";
+
+
+  if (bootLoading) {
     return (
-      <div className="free-home" aria-busy="true" aria-live="polite">
+      <div className="co-page free-home" aria-busy="true" aria-live="polite">
         <Skeleton className="h-8 w-64" />
-        <Skeleton className="mt-4 h-28 w-full" />
+        <Skeleton className="mt-2 h-4 w-full max-w-md" />
+        <Skeleton className="mt-4 h-20 w-full" />
+        <div className="free-home-focus">
+          <div className="free-home-card" aria-label="Loading Daily Challenge">
+            <Skeleton className="h-5 w-40" />
+            <Skeleton className="mt-2 h-3 w-28" />
+            <Skeleton className="mt-4 h-5 w-3/4" />
+            <Skeleton className="mt-2 h-4 w-40" />
+            <div className="mt-4 flex gap-2">
+              <Skeleton className="h-8 w-28" />
+              <Skeleton className="h-8 w-28" />
+            </div>
+          </div>
+          <Skeleton className="h-48 w-full" />
+        </div>
         <div className="free-home-metrics">
           {Array.from({ length: 4 }).map((_, i) => (
             <Skeleton key={i} className="h-24 w-full" />
           ))}
         </div>
-        <Skeleton className="mt-4 h-40 w-full" />
+        <Skeleton className="mt-2 h-40 w-full" />
       </div>
     );
   }
 
   return (
-    <div className="free-home">
-      <header className="free-home-welcome">
+    <div
+      className={`co-page free-home${refreshing ? " free-home-refreshing" : ""}`}
+    >
+      <header className="co-header free-home-welcome">
         <div>
-          <p className="free-home-kicker">Dashboard</p>
-          <h1 className="free-home-title">
-            Welcome back{userName ? `, ${userName.split(" ")[0]}` : ""}
+          <p className="co-kicker">Dashboard</p>
+          <h1 className="co-title">
+            <LayoutDashboard size={22} strokeWidth={2} aria-hidden />
+            Welcome back{firstName ? `, ${firstName}` : ""}
           </h1>
-          <p className="free-home-lede">
-            Your practice snapshot from real submissions and learning data — nothing
-            invented.
+          <p className="co-lede">
+            Your practice snapshot from real submissions and learning data.
           </p>
         </div>
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          onClick={handleRefresh}
-          disabled={refreshing}
-          aria-label="Refresh dashboard"
-        >
-          {refreshing ? (
-            <Loader2 size={14} className="animate-spin" />
-          ) : (
-            <RefreshCw size={14} />
-          )}
-          Refresh
-        </Button>
+        <div className="free-home-header-actions">
+          {justUpdated && !refreshing ? (
+            <p className="free-home-updated" role="status">
+              Updated just now
+            </p>
+          ) : null}
+          <Badge variant={premiumUser ? "warning" : "default"}>
+            {premiumUser ? "Premium" : "Free"}
+          </Badge>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={handleRefresh}
+            disabled={refreshing}
+            aria-label="Refresh dashboard"
+          >
+            {refreshing ? (
+              <>
+                <Loader2 size={14} className="animate-spin" aria-hidden />
+                Refreshing…
+              </>
+            ) : (
+              <>
+                <RefreshCw size={14} aria-hidden />
+                Refresh
+              </>
+            )}
+          </Button>
+        </div>
       </header>
+
+      {offline ? (
+        <div className="free-home-offline" role="status">
+          <WifiOff size={14} aria-hidden />
+          You&apos;re offline. Some AlgoPath features may be unavailable.
+        </div>
+      ) : null}
 
       <SubscriptionStatusBar
         onUpgraded={() => setEntitlementTick((n) => n + 1)}
@@ -566,260 +976,586 @@ export const FreeHomeDashboard: FC<FreeHomeDashboardProps> = ({
         </div>
       ) : null}
 
-      {/* Daily Challenge — server canonical + streak engine */}
-      <section className="free-home-card" aria-labelledby="daily-challenge-heading">
-        <div className="free-home-card-head">
-          <h2 id="daily-challenge-heading">
-            <Target size={16} aria-hidden /> Daily Challenge
-          </h2>
-          <span className="free-home-muted">
-            {todayChallenge?.dateKey || todayKey}
-            {todayChallenge?.timezone ? ` · ${todayChallenge.timezone}` : ""}
-          </span>
-        </div>
-        {todayChallenge?.challenge?.accessLocked ? (
-          <UpgradePrompt
-            feature="premium.daily_challenge_advanced"
-            title="Advanced daily challenge"
-          />
-        ) : todayChallenge?.challenge || dailyProblem ? (
-          <div className="free-home-daily">
-            <div>
-              <p className="free-home-daily-title">
-                {todayChallenge?.challenge?.title ||
-                  dailyProblem?.title ||
-                  "Today's challenge"}
-              </p>
-              <p className="free-home-muted">
-                {normalizeDifficulty(
-                  todayChallenge?.challenge?.difficulty ||
-                    dailyProblem?.difficulty
-                )}
-                {todayChallenge?.challenge?.category
-                  ? ` · ${todayChallenge.challenge.category}`
-                  : dailyProblem?.category
-                    ? ` · ${dailyProblem.category}`
-                    : ""}
-                {todayChallenge?.completed
+      {/* Today's Focus */}
+      <div className="free-home-focus">
+        <section className="free-home-card" aria-labelledby="daily-challenge-heading">
+          <div className="free-home-card-head">
+            <h2 id="daily-challenge-heading">
+              <Target size={16} aria-hidden /> Daily Challenge
+            </h2>
+            <span className="free-home-muted">
+              {challengeDateLabel}
+              {todayChallenge
+                ? todayChallenge.completed
                   ? " · Completed"
-                  : " · Solve & mark complete on server"}
-              </p>
-              {planTasks.length > 0 ? (
-                <p className="free-home-muted" style={{ marginTop: 8 }}>
-                  Planner today: {planDone}/{planTasks.length} tasks done
+                  : " · Not completed"
+                : ""}
+            </span>
+          </div>
+
+          {sectionErrors.challenge ? (
+            <SectionError
+              title="Unable to load today's challenge"
+              message={sectionErrors.challenge}
+              onRetry={() => void loadRemote()}
+              retryBusy={remoteLoading || refreshing}
+            />
+          ) : todayChallenge?.challenge?.accessLocked ? (
+            <UpgradePrompt
+              feature="premium.daily_challenge_advanced"
+              title="Advanced daily challenge"
+            />
+          ) : todayChallenge?.challenge || dailyProblem ? (
+            <div className="free-home-daily-block">
+            <div className="free-home-daily">
+              <div>
+                <p className="free-home-daily-title">
+                  {todayChallenge?.challenge?.title ||
+                    dailyProblem?.title ||
+                    "Today's challenge"}
+                </p>
+                <div className="free-home-meta-row">
+                  {challengeDiff ? (
+                    <Badge variant={diffVariant(challengeDiff)}>
+                      {challengeDiff}
+                    </Badge>
+                  ) : null}
+                  {challengeCategory ? (
+                    <span className="free-home-muted">{challengeCategory}</span>
+                  ) : null}
+                  {todayChallenge?.completed ? (
+                    <Badge variant="success">
+                      <CheckCircle2 size={12} aria-hidden /> Completed
+                    </Badge>
+                  ) : (
+                    <Badge variant="warning">Not completed</Badge>
+                  )}
+                </div>
+                <p className="free-home-muted">
+                  {todayChallenge?.completed
+                    ? "Great work. Today's challenge is complete."
+                    : challengeActionTone === "incomplete"
+                      ? "Your challenge is ready — an Accepted submission is still required."
+                      : "Solve today's challenge and mark it complete on the server."}
+                </p>
+                {planTasks.length > 0 ? (
+                  <p className="free-home-muted" style={{ marginTop: 8 }}>
+                    Planner today: {planDone}/{planTasks.length} tasks done
+                  </p>
+                ) : null}
+              </div>
+              <div className="free-home-daily-actions">
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={
+                    openChallengeBusy ||
+                    remoteLoading ||
+                    !challengeHasProblemRef
+                  }
+                  aria-label={
+                    openChallengeBusy
+                      ? "Opening today's challenge problem"
+                      : "Open today's Daily Challenge problem"
+                  }
+                  aria-busy={openChallengeBusy}
+                  onClick={() =>
+                    void handleOpenChallengeProblem(todayChallenge?.challenge)
+                  }
+                >
+                  {openChallengeBusy ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin" aria-hidden />
+                      Opening…
+                    </>
+                  ) : (
+                    <>
+                      Open Problem <ArrowRight size={14} aria-hidden />
+                    </>
+                  )}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  disabled={
+                    Boolean(todayChallenge?.completed) || completeBusy
+                  }
+                  onClick={() => void handleCompleteChallenge()}
+                >
+                  {completeBusy ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin" aria-hidden />
+                      Completing…
+                    </>
+                  ) : todayChallenge?.completed ? (
+                    <>
+                      <CheckCircle2 size={14} aria-hidden /> Completed
+                    </>
+                  ) : (
+                    "Mark complete"
+                  )}
+                </Button>
+              </div>
+            </div>
+              {!remoteLoading &&
+              todayChallenge?.challenge &&
+              !todayChallenge.challenge.accessLocked &&
+              !challengeHasProblemRef ? (
+                <div className="free-home-chal-callout is-error" role="alert">
+                  <AlertCircle size={16} aria-hidden />
+                  <div className="free-home-chal-callout-body">
+                    <p className="free-home-chal-callout-title">
+                      Challenge problem unavailable
+                    </p>
+                    <p className="free-home-chal-callout-desc">
+                      Today&apos;s challenge is temporarily unavailable.
+                    </p>
+                    <div className="free-home-chal-callout-actions">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        disabled={challengeStatusRefreshing || remoteLoading}
+                        aria-label="Retry loading Daily Challenge"
+                        onClick={() => void refreshChallengeStatus()}
+                      >
+                        {challengeStatusRefreshing ? (
+                          <>
+                            <Loader2
+                              size={14}
+                              className="animate-spin"
+                              aria-hidden
+                            />
+                            Checking…
+                          </>
+                        ) : (
+                          "Retry"
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              {challengeActionTone === "incomplete" &&
+              !todayChallenge?.completed ? (
+                <div
+                  className="free-home-chal-callout is-incomplete"
+                  role="status"
+                  aria-live="polite"
+                >
+                  <AlertTriangle
+                    size={18}
+                    strokeWidth={1.75}
+                    className="free-home-chal-callout-icon"
+                    aria-hidden
+                  />
+                  <div className="free-home-chal-callout-body">
+                    <p className="free-home-chal-callout-title">
+                      Challenge not completed yet
+                    </p>
+                    <p className="free-home-chal-callout-desc">
+                      Submit an accepted solution for today&apos;s challenge
+                      before marking it complete.
+                    </p>
+                    <p className="free-home-chal-callout-hint">
+                      Open the problem, submit your solution, and wait for an
+                      Accepted verdict. Then retry Mark complete — the server
+                      verifies your submission.
+                    </p>
+                    <div className="free-home-chal-callout-actions">
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={
+                          openChallengeBusy ||
+                          remoteLoading ||
+                          !challengeHasProblemRef
+                        }
+                        aria-label="Open today's Daily Challenge problem"
+                        aria-busy={openChallengeBusy}
+                        onClick={() =>
+                          void handleOpenChallengeProblem(
+                            todayChallenge?.challenge
+                          )
+                        }
+                      >
+                        {openChallengeBusy ? (
+                          <>
+                            <Loader2
+                              size={14}
+                              className="animate-spin"
+                              aria-hidden
+                            />
+                            Opening…
+                          </>
+                        ) : (
+                          <>
+                            Open Problem{" "}
+                            <ArrowRight size={14} aria-hidden />
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        disabled={challengeStatusRefreshing}
+                        aria-label="Refresh Daily Challenge status from server"
+                        aria-busy={challengeStatusRefreshing}
+                        onClick={() => void handleChallengeRetry()}
+                      >
+                        {challengeStatusRefreshing ? (
+                          <>
+                            <Loader2
+                              size={14}
+                              className="animate-spin"
+                              aria-hidden
+                            />
+                            Checking…
+                          </>
+                        ) : (
+                          "Retry"
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              {challengeActionTone === "err" && challengeAction ? (
+                <div className="free-home-chal-callout is-error" role="alert">
+                  <AlertCircle size={16} aria-hidden />
+                  <div className="free-home-chal-callout-body">
+                    <p className="free-home-chal-callout-title">
+                      Unable to update challenge
+                    </p>
+                    <p className="free-home-chal-callout-desc">
+                      {challengeAction}
+                    </p>
+                    <div className="free-home-chal-callout-actions">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        disabled={
+                          challengeStatusRefreshing ||
+                          completeBusy ||
+                          openChallengeBusy
+                        }
+                        aria-label="Retry Daily Challenge action"
+                        onClick={() => void handleChallengeRetry()}
+                      >
+                        {challengeStatusRefreshing ||
+                        completeBusy ||
+                        openChallengeBusy ? (
+                          <>
+                            <Loader2
+                              size={14}
+                              className="animate-spin"
+                              aria-hidden
+                            />
+                            Retrying…
+                          </>
+                        ) : (
+                          "Retry"
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              {challengeActionTone === "ok" && challengeAction ? (
+                <p className="free-home-msg-ok" role="status">
+                  {challengeAction}
                 </p>
               ) : null}
             </div>
-            <div className="free-home-daily-actions">
-              <Button
-                type="button"
-                size="sm"
-                disabled={!dailyProblem}
-                onClick={() => dailyProblem && onSelectProblem(dailyProblem)}
-              >
-                Open <ArrowRight size={14} />
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="secondary"
-                disabled={Boolean(todayChallenge?.completed)}
-                onClick={() => void handleCompleteChallenge()}
-              >
-                {todayChallenge?.completed ? "Done" : "Mark complete"}
-              </Button>
+          ) : (
+            <EmptyState
+              compact
+              title="No challenge available yet"
+              description="The server assigns one canonical problem per date."
+              action={
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => onNavigate("problems")}
+                >
+                  Explore Problems
+                </Button>
+              }
+            />
+          )}
+
+          <div className="free-home-challenge-strip" aria-label="Challenge calendar">
+            {calendarStrip.map((key) => {
+              const day = challengeDaySet.get(key);
+              const isToday = key === (serverChallengeDateKey || todayKey);
+              const isSelected = key === selectedDateKey;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  className={`free-home-chal-day${day ? ` is-${day.kind}` : ""}${
+                    isToday ? " is-today" : ""
+                  }${isSelected ? " is-selected" : ""}`}
+                  title={day ? `${key}: ${day.kind}` : `${key}: not started`}
+                  onClick={() => void handleSelectChallengeDay(key)}
+                >
+                  {key.slice(8)}
+                </button>
+              );
+            })}
+          </div>
+
+          {selectedDay ? (
+            <div className="free-home-daily" style={{ marginTop: 10 }}>
+              <div>
+                <p className="free-home-daily-title">
+                  {selectedDay.challenge?.title || selectedDay.dateKey}
+                </p>
+                <p className="free-home-muted">
+                  {selectedDay.dateKey}
+                  {selectedDay.completed ? " · Completed" : " · Not completed"}
+                </p>
+              </div>
+              {selectedDay.challenge?.problemId ||
+              selectedDay.challenge?.problemSlug ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  disabled={openChallengeBusy}
+                  aria-label="Open challenge problem for selected day"
+                  onClick={() =>
+                    void handleOpenChallengeProblem(selectedDay.challenge)
+                  }
+                >
+                  {openChallengeBusy ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin" aria-hidden />
+                      Opening…
+                    </>
+                  ) : (
+                    "Open day"
+                  )}
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
+
+        </section>
+
+        <section className="free-home-card free-home-progress-stack" aria-label="Daily progress">
+          {sectionErrors.streak ? (
+            <SectionError
+              message={sectionErrors.streak}
+              onRetry={() => void loadRemote()}
+            />
+          ) : null}
+          <div>
+            <h2 className="free-home-section-title" style={{ marginBottom: 8 }}>
+              Daily Progress
+            </h2>
+            <div className="free-home-progress-metric">
+              <div>
+                <p className="free-home-progress-value">
+                  {dayDone} / 1
+                </p>
+                <p className="free-home-muted">Today&apos;s challenge</p>
+              </div>
+                      {todayChallenge?.completed ? (
+                <CheckCircle2
+                  size={20}
+                  aria-hidden
+                  style={{ color: "var(--success)" }}
+                />
+              ) : null}
+            </div>
+            <div
+              className="free-home-bar"
+              role="progressbar"
+              aria-valuenow={dayDone}
+              aria-valuemin={0}
+              aria-valuemax={1}
+              aria-label="Today's challenge progress"
+              style={{ marginTop: 10 }}
+            >
+              <span style={{ width: `${dayDone * 100}%` }} />
             </div>
           </div>
-        ) : (
-          <EmptyState
-            compact
-            title="No challenge available yet"
-            description="The server assigns one canonical problem per date."
-            action={
-              <Button
-                type="button"
-                size="sm"
-                variant="secondary"
-                onClick={() => onNavigate("problems")}
-              >
-                Browse sheets
-              </Button>
-            }
-          />
-        )}
 
-        <div className="free-home-challenge-strip" aria-label="Challenge calendar">
-          {calendarStrip.map((key) => {
-            const day = challengeDaySet.get(key);
-            const isToday = key === (todayChallenge?.dateKey || todayKey);
-            const isSelected = key === selectedDateKey;
-            return (
-              <button
-                key={key}
-                type="button"
-                className={`free-home-chal-day${day ? ` is-${day.kind}` : ""}${
-                  isToday ? " is-today" : ""
-                }${isSelected ? " is-selected" : ""}`}
-                title={
-                  day
-                    ? `${key}: ${day.kind}`
-                    : `${key}: not started`
-                }
-                onClick={() => void handleSelectChallengeDay(key)}
-              >
-                {key.slice(8)}
-              </button>
-            );
-          })}
-        </div>
+          <div>
+            <div className="free-home-goal-meta">
+              <span>Weekly</span>
+              <span>
+                {weekDone} / {weekTarget}
+              </span>
+            </div>
+            <div
+              className="free-home-bar thin"
+              role="progressbar"
+              aria-valuenow={weekDone}
+              aria-valuemin={0}
+              aria-valuemax={weekTarget || 1}
+              aria-label="Weekly challenge goal"
+              style={{ marginTop: 6 }}
+            >
+              <span style={{ width: `${pct(weekDone, weekTarget)}%` }} />
+            </div>
+          </div>
 
-        {selectedDay ? (
-          <div className="free-home-daily" style={{ marginTop: 10 }}>
+          <div>
+            <div className="free-home-goal-meta">
+              <span>Monthly</span>
+              <span>
+                {monthDone} / {monthTarget}
+              </span>
+            </div>
+            <div
+              className="free-home-bar thin"
+              role="progressbar"
+              aria-valuenow={monthDone}
+              aria-valuemin={0}
+              aria-valuemax={monthTarget || 1}
+              aria-label="Monthly challenge goal"
+              style={{ marginTop: 6 }}
+            >
+              <span style={{ width: `${pct(monthDone, monthTarget)}%` }} />
+            </div>
+          </div>
+
+          <div className="free-home-streak-row">
             <div>
-              <p className="free-home-daily-title">
-                {selectedDay.challenge?.title || selectedDay.dateKey}
+              <p className="free-home-muted" style={{ marginBottom: 4 }}>
+                <Flame size={14} aria-hidden style={{ verticalAlign: "middle" }} />{" "}
+                Current streak
+              </p>
+              <p className="free-home-progress-value">
+                {streakCurrent} day{streakCurrent === 1 ? "" : "s"}
               </p>
               <p className="free-home-muted">
-                {selectedDay.dateKey}
-                {selectedDay.completed ? " · Completed" : " · Not completed"}
-                {selectedDay.challenge?.difficulty
-                  ? ` · ${normalizeDifficulty(selectedDay.challenge.difficulty)}`
-                  : ""}
+                Longest {streakLongest}d · server-authoritative
               </p>
             </div>
-            {selectedDay.challenge?.problemId || selectedDay.challenge?.problemSlug ? (
+            {canFreeze ? (
               <Button
                 type="button"
                 size="sm"
                 variant="secondary"
-                onClick={() => {
-                  const p = findProblemByIdOrSlug(
-                    problems,
-                    selectedDay.challenge.problemId,
-                    selectedDay.challenge.problemSlug
-                  );
-                  if (p) onSelectProblem(p);
-                  else setChallengeAction("Problem not in local catalog cache.");
-                }}
+                disabled={freezeBusy}
+                onClick={() => void handleFreeze()}
               >
-                Open day
+                <Snowflake size={14} aria-hidden /> Freeze
+                {streakView ? ` (${streakView.freezeBalance})` : ""}
               </Button>
-            ) : null}
+            ) : (
+              <span className="free-home-muted">Freeze: Premium</span>
+            )}
           </div>
-        ) : null}
 
-        <div className="free-home-streak-row">
-          <p className="free-home-muted">
-            Week {streakView?.weeklyGoal.completed ?? 0}/
-            {streakView?.weeklyGoal.target ?? weeklyTarget}
-            {" · "}
-            Month {streakView?.monthlyGoal.completed ?? 0}/
-            {streakView?.monthlyGoal.target ?? monthlyTarget}
-            {canHistory
-              ? " · Full history"
-              : historyLocked
-                ? " · History limited (upgrade for 90 days)"
-                : " · History: last 7 days (free)"}
-          </p>
-          {canFreeze ? (
+          <div className="free-home-goals-form">
+            <label>
+              Weekly goal
+              <input
+                type="number"
+                min={1}
+                max={30}
+                value={weeklyTarget}
+                className={goalFieldErrors.weekly ? "is-invalid" : undefined}
+                onChange={(e) => {
+                  setWeeklyTarget(Number(e.target.value) || 1);
+                  setGoalFieldErrors((p) => ({ ...p, weekly: undefined }));
+                }}
+                aria-invalid={Boolean(goalFieldErrors.weekly)}
+                aria-label="Weekly challenge goal target"
+              />
+              {goalFieldErrors.weekly ? (
+                <span className="free-home-field-error">{goalFieldErrors.weekly}</span>
+              ) : null}
+            </label>
+            <label>
+              Monthly goal
+              <input
+                type="number"
+                min={1}
+                max={90}
+                value={monthlyTarget}
+                className={goalFieldErrors.monthly ? "is-invalid" : undefined}
+                onChange={(e) => {
+                  setMonthlyTarget(Number(e.target.value) || 1);
+                  setGoalFieldErrors((p) => ({ ...p, monthly: undefined }));
+                }}
+                aria-invalid={Boolean(goalFieldErrors.monthly)}
+                aria-label="Monthly challenge goal target"
+              />
+              {goalFieldErrors.monthly ? (
+                <span className="free-home-field-error">{goalFieldErrors.monthly}</span>
+              ) : null}
+            </label>
             <Button
               type="button"
               size="sm"
               variant="secondary"
-              disabled={freezeBusy}
-              onClick={() => void handleFreeze()}
+              disabled={goalsBusy}
+              onClick={() => void handleSaveGoals()}
             >
-              <Snowflake size={14} /> Freeze
-              {streakView ? ` (${streakView.freezeBalance})` : ""}
+              {goalsBusy ? (
+                <>
+                  <Loader2 size={14} className="animate-spin" aria-hidden />
+                  Saving…
+                </>
+              ) : goalsMsg?.type === "ok" ? (
+                <>
+                  <CheckCircle2 size={14} aria-hidden /> Saved
+                </>
+              ) : (
+                "Save goals"
+              )}
             </Button>
-          ) : (
-            <span className="free-home-muted">Freeze: Premium</span>
-          )}
-        </div>
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              onClick={() => void handleSyncTimezone()}
+            >
+              Sync TZ
+            </Button>
+          </div>
+          {goalsMsg ? (
+            <p
+              className={
+                goalsMsg.type === "ok" ? "free-home-msg-ok" : "free-home-msg-err"
+              }
+              role="status"
+            >
+              {goalsMsg.text}
+            </p>
+          ) : null}
 
-        <div
-          className="mock-interview-form"
-          style={{ marginTop: 10, display: "grid", gap: 8, gridTemplateColumns: "1fr 1fr auto auto" }}
-        >
-          <label className="free-home-muted">
-            Weekly goal
-            <input
-              type="number"
-              min={1}
-              max={30}
-              value={weeklyTarget}
-              onChange={(e) => setWeeklyTarget(Number(e.target.value) || 1)}
-            />
-          </label>
-          <label className="free-home-muted">
-            Monthly goal
-            <input
-              type="number"
-              min={1}
-              max={90}
-              value={monthlyTarget}
-              onChange={(e) => setMonthlyTarget(Number(e.target.value) || 1)}
-            />
-          </label>
-          <Button
-            type="button"
-            size="sm"
-            variant="secondary"
-            disabled={goalsBusy}
-            onClick={() => void handleSaveGoals()}
-          >
-            Save goals
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="secondary"
-            onClick={() => void handleSyncTimezone()}
-          >
-            Sync TZ
-          </Button>
-        </div>
-
-        {historyItems.length > 0 ? (
-          <ul className="free-home-activity" style={{ marginTop: 12 }}>
-            {historyItems.slice(0, canHistory ? 14 : 7).map((item) => (
-              <li key={`${item.dateKey}-${item.tier}`}>
-                <button
-                  type="button"
-                  className="free-home-list-row"
-                  style={{ width: "100%", textAlign: "left", background: "none", border: 0, padding: 0, cursor: "pointer" }}
-                  onClick={() => void handleSelectChallengeDay(item.dateKey)}
-                >
-                  <span className="free-home-list-main">
-                    <strong>{item.dateKey}</strong>
-                    <span className="free-home-muted">
-                      {item.title || "Challenge"}
-                      {item.completed ? " · done" : ""}
-                      {item.accessLocked ? " · locked" : ""}
-                    </span>
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        ) : null}
-
-        {streakView?.badges?.length ? (
-          <ul className="free-home-badges">
-            {streakView.badges.slice(0, 6).map((b) => (
-              <li key={b.id}>
-                <Medal size={12} aria-hidden /> {b.label}
-              </li>
-            ))}
-          </ul>
-        ) : null}
-
-        {challengeAction ? (
-          <p className="free-home-muted" role="status" style={{ marginTop: 8 }}>
-            {challengeAction}
+          <p className="free-home-muted">
+            {canHistory
+              ? "Full history"
+              : historyLocked
+                ? "History limited (upgrade for 90 days)"
+                : "History: last 7 days (free)"}
           </p>
-        ) : null}
-      </section>
+
+          {streakView?.badges?.length ? (
+            <ul className="free-home-badges">
+              {streakView.badges.slice(0, 6).map((b) => (
+                <li key={b.id}>
+                  <Medal size={12} aria-hidden /> {b.label}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </section>
+      </div>
 
       {/* Progress Overview */}
       <section aria-labelledby="progress-overview-heading">
@@ -832,40 +1568,197 @@ export const FreeHomeDashboard: FC<FreeHomeDashboardProps> = ({
             value={solvedTotal}
             hint={
               progressStatus
-                ? `${progressStatus.problemsAttempted} attempted · ${progressStatus.totalSubmissions} submissions`
-                : `${submissions.filter((s) => s.source !== "run").length} submissions loaded`
+                ? `${attemptedCount} attempted · ${progressStatus.totalSubmissions} submissions`
+                : `${attemptedCount} attempted`
             }
             icon={<Trophy size={16} />}
           />
           <MetricCard
-            label="Easy / Medium / Hard"
-            value={`${easyCount} / ${mediumCount} / ${hardCount}`}
-            hint="From accepted submissions"
-          />
-          <MetricCard
             label="Current streak"
-            value={`${streakCurrent}d`}
+            value={`${streakCurrent} days`}
             hint={`Longest ${streakLongest}d · server`}
             icon={<Flame size={16} />}
           />
           <MetricCard
             label="Contest rating"
             value={
-              lbMissing || lbStats?.rating == null
+              sectionErrors.leaderboard
                 ? "—"
-                : Math.round(Number(lbStats.rating))
+                : lbMissing || lbStats?.rating == null
+                  ? "—"
+                  : Math.round(Number(lbStats.rating))
             }
             hint={
-              lbMissing
-                ? "No leaderboard record yet"
-                : lbStats?.globalRank
-                  ? `Global rank #${lbStats.globalRank}`
-                  : "From LeaderboardService"
+              sectionErrors.leaderboard
+                ? "Data unavailable"
+                : lbMissing
+                  ? "No rating yet"
+                  : lbStats?.globalRank
+                    ? `Global rank #${lbStats.globalRank}`
+                    : "From leaderboard"
             }
             icon={<Trophy size={16} />}
           />
+          <MetricCard
+            label="Easy / Medium / Hard"
+            value={
+              solvedTotal === 0 && easyCount + mediumCount + hardCount === 0
+                ? "—"
+                : `${easyCount} / ${mediumCount} / ${hardCount}`
+            }
+            hint={
+              solvedTotal === 0 && easyCount + mediumCount + hardCount === 0
+                ? "Submit an accepted solution to start"
+                : "From accepted submissions"
+            }
+          />
         </div>
       </section>
+
+      {/* Learning grid: Continue Learning + Weak Topics */}
+      <div className="free-home-split">
+        <section className="free-home-card" aria-labelledby="continue-learning-heading">
+          <div className="free-home-card-head">
+            <h2 id="continue-learning-heading">Continue Learning</h2>
+            <button
+              type="button"
+              className="free-home-link"
+              onClick={() => onNavigate("calendar")}
+            >
+              View all →
+            </button>
+          </div>
+          {sheetProgress || continueTopic || sectionErrors.sheet ? (
+            <div className="free-home-continue-block" style={{ gap: 14 }}>
+              {sectionErrors.sheet ? (
+                <SectionError
+                  message={sectionErrors.sheet}
+                  onRetry={() => void loadRemote()}
+                />
+              ) : null}
+              {sheetProgress ? (
+                <>
+                  <div>
+                    <p className="free-home-daily-title">
+                      {sheetProgress.sheetName || "AlgoPath Sheet"}
+                    </p>
+                    <p className="free-home-muted">Learn DSA from A to Z</p>
+                  </div>
+                  <div>
+                    <div className="free-home-goal-meta" style={{ marginBottom: 6 }}>
+                      <span>Progress</span>
+                      <span>
+                        {sheetProgress.completed} / {sheetProgress.total}
+                        {" · "}
+                        {sheetPct}%
+                      </span>
+                    </div>
+                    <div
+                      className="free-home-bar"
+                      role="progressbar"
+                      aria-valuenow={sheetPct}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-label="Sheet progress"
+                    >
+                      <span style={{ width: `${sheetPct}%` }} />
+                    </div>
+                  </div>
+                </>
+              ) : !sectionErrors.sheet ? (
+                <p className="free-home-muted">Progress unavailable</p>
+              ) : null}
+              {continueTopic ? (
+                <div className="free-home-topic-callout">
+                  <p className="free-home-kicker">Current topic</p>
+                  <p className="free-home-daily-title">{continueTopic.name}</p>
+                  <p className="free-home-muted">
+                    {continueTopic.solved} / {continueTopic.total}
+                    {" · "}
+                    {continueTopic.status.replace(/_/g, " ")}
+                  </p>
+                </div>
+              ) : null}
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => onNavigate("problems")}
+              >
+                Continue Learning <ArrowRight size={14} aria-hidden />
+              </Button>
+            </div>
+          ) : (
+            <EmptyState
+              compact
+              title="No study progress yet"
+              description="Solve a problem or open the sheet to start tracking."
+              action={
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => onNavigate("problems")}
+                >
+                  Start practicing
+                </Button>
+              }
+            />
+          )}
+        </section>
+
+        <section className="free-home-card" aria-labelledby="weak-topics-heading">
+          <div className="free-home-card-head">
+            <h2 id="weak-topics-heading">Weak Topics</h2>
+            <button
+              type="button"
+              className="free-home-link"
+              onClick={() => onNavigate(premiumUser ? "analytics" : "calendar")}
+            >
+              View analysis →
+            </button>
+          </div>
+          <p className="free-home-muted" style={{ marginBottom: 12 }}>
+            Based on your actual learning activity.
+          </p>
+          {weak.length === 0 ? (
+            <EmptyState
+              compact
+              title={
+                solvedIds.size === 0
+                  ? "Not enough activity to calculate meaningful weakness"
+                  : "No weak topics detected"
+              }
+              description={
+                solvedIds.size === 0
+                  ? "Solve a few problems across topics to surface gaps."
+                  : "Keep going — topic coverage looks solid from your accepts."
+              }
+            />
+          ) : (
+            <ul className="free-home-topics">
+              {weak.map((t) => (
+                <li key={t.name}>
+                  <div className="free-home-topic-row">
+                    <strong>{t.name}</strong>
+                    <span className="free-home-muted">
+                      {t.solved}/{t.total} ({t.pct}%)
+                    </span>
+                  </div>
+                  <div
+                    className="free-home-bar thin"
+                    role="progressbar"
+                    aria-valuenow={t.pct}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-label={`${t.name} progress`}
+                  >
+                    <span style={{ width: `${t.pct}%` }} />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
 
       <PremiumPreparationSection
         userId={userId}
@@ -876,83 +1769,8 @@ export const FreeHomeDashboard: FC<FreeHomeDashboardProps> = ({
         onNavigate={onNavigate}
       />
 
-      {/* Continue Learning */}
-      <section className="free-home-card" aria-labelledby="continue-learning-heading">
-        <div className="free-home-card-head">
-          <h2 id="continue-learning-heading">Continue Learning</h2>
-          <button
-            type="button"
-            className="free-home-link"
-            onClick={() => onNavigate("calendar")}
-          >
-            Roadmap
-          </button>
-        </div>
-        {sheetProgress || continueTopic ? (
-          <div className="free-home-continue">
-            {sheetProgress ? (
-              <div className="free-home-continue-block">
-                <p className="free-home-daily-title">
-                  {sheetProgress.sheetName || "DSA Sheet"}
-                </p>
-                <p className="free-home-muted">
-                  {sheetProgress.completed}/{sheetProgress.total} complete (
-                  {Math.round(Number(sheetProgress.progress) || 0)}%)
-                </p>
-                <div
-                  className="free-home-bar"
-                  role="progressbar"
-                  aria-valuenow={Math.round(Number(sheetProgress.progress) || 0)}
-                  aria-valuemin={0}
-                  aria-valuemax={100}
-                  aria-label="Sheet progress"
-                >
-                  <span
-                    style={{
-                      width: `${Math.min(100, Math.max(0, Number(sheetProgress.progress) || 0))}%`,
-                    }}
-                  />
-                </div>
-              </div>
-            ) : null}
-            {continueTopic ? (
-              <div className="free-home-continue-block">
-                <p className="free-home-daily-title">{continueTopic.name}</p>
-                <p className="free-home-muted">
-                  {continueTopic.solved}/{continueTopic.total} ·{" "}
-                  {continueTopic.status.replace("_", " ")}
-                </p>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => onNavigate("problems")}
-                >
-                  Continue sheet
-                </Button>
-              </div>
-            ) : null}
-          </div>
-        ) : (
-          <EmptyState
-            compact
-            title="No study progress yet"
-            description="Solve a problem or open the sheet to start tracking."
-            action={
-              <Button
-                type="button"
-                size="sm"
-                onClick={() => onNavigate("problems")}
-              >
-                Start practicing
-              </Button>
-            }
-          />
-        )}
-      </section>
-
+      {/* Activity grid: Submissions + Recommended */}
       <div className="free-home-split">
-        {/* Recent Submissions */}
         <section className="free-home-card" aria-labelledby="recent-subs-heading">
           <div className="free-home-card-head">
             <h2 id="recent-subs-heading">Recent Submissions</h2>
@@ -961,21 +1779,21 @@ export const FreeHomeDashboard: FC<FreeHomeDashboardProps> = ({
               className="free-home-link"
               onClick={() => onNavigate("profile")}
             >
-              All
+              View all →
             </button>
           </div>
           {recent.length === 0 ? (
             <EmptyState
               compact
               title="No submissions yet"
-              description="Run and submit a solution to see activity here."
+              description="Run and submit a solution to start building your activity history."
               action={
                 <Button
                   type="button"
                   size="sm"
                   onClick={() => onNavigate("problems")}
                 >
-                  Open problems
+                  Explore Problems
                 </Button>
               }
             />
@@ -986,11 +1804,8 @@ export const FreeHomeDashboard: FC<FreeHomeDashboardProps> = ({
                 const problem = problems.find(
                   (p) => getProblemId(p) === pid || p.slug === pid
                 );
-                const when = s.createdAt
-                  ? new Date(s.createdAt).toLocaleString()
-                  : "—";
                 return (
-                  <li key={s.id || s._id || `${pid}-${when}`}>
+                  <li key={s.id || s._id || `${pid}-${s.createdAt}`}>
                     <button
                       type="button"
                       className="free-home-list-row"
@@ -998,19 +1813,22 @@ export const FreeHomeDashboard: FC<FreeHomeDashboardProps> = ({
                       onClick={() => problem && onSelectProblem(problem)}
                     >
                       <span className="free-home-list-main">
-                        <strong>
-                          {problem?.title || "Problem"}
-                        </strong>
+                        <strong>{problem?.title || "Problem"}</strong>
                         <span className="free-home-muted">
-                          {s.language || "—"} · {when}
+                          {s.language || "—"}
+                          {s.executionTime != null
+                            ? ` · ${execTimeLabel(s)}`
+                            : ""}
+                          {" · "}
+                          {formatShortTime(s.createdAt)}
                         </span>
                       </span>
                       <span
                         className={`free-home-verdict ${
-                          s.status === "ACCEPTED" ? "ok" : "bad"
+                          isAcceptedStatus(s.status) ? "ok" : "bad"
                         }`}
                       >
-                        {s.status || "—"}
+                        {statusLabel(s.status)}
                       </span>
                     </button>
                   </li>
@@ -1020,30 +1838,98 @@ export const FreeHomeDashboard: FC<FreeHomeDashboardProps> = ({
           )}
         </section>
 
-        {/* Saved problems */}
+        <section className="free-home-card" aria-labelledby="recommended-heading">
+          <div className="free-home-card-head">
+            <h2 id="recommended-heading">Recommended Problems</h2>
+            <button
+              type="button"
+              className="free-home-link"
+              onClick={() => onNavigate("problems")}
+            >
+              View all →
+            </button>
+          </div>
+          {recommended.length === 0 ? (
+            <EmptyState
+              compact
+              title="No recommendations yet"
+              description="Solve a few problems so we can suggest related practice from your weak topics."
+              action={
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => onNavigate("problems")}
+                >
+                  Explore Problems
+                </Button>
+              }
+            />
+          ) : (
+            <ul className="free-home-list">
+              {recommended.map((p) => (
+                <li key={getProblemId(p) || p.slug}>
+                  <button
+                    type="button"
+                    className="free-home-list-row"
+                    onClick={() => onSelectProblem(p)}
+                  >
+                    <span className="free-home-list-main">
+                      <strong>{p.title}</strong>
+                      <span className="free-home-muted">
+                        {normalizeDifficulty(p.difficulty)}
+                        {p.category ? ` · ${p.category}` : ""}
+                      </span>
+                    </span>
+                    <span className="free-home-link" aria-hidden>
+                      Solve →
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
+
+      {/* Secondary grid: Saved + Activity */}
+      <div className="free-home-split">
         <section className="free-home-card" aria-labelledby="saved-heading">
           <div className="free-home-card-head">
             <h2 id="saved-heading">
-              <Bookmark size={16} aria-hidden /> Saved problems
+              <Bookmark size={16} aria-hidden /> Saved Problems
             </h2>
             <button
               type="button"
               className="free-home-link"
               onClick={() => onNavigate("favourites")}
             >
-              Favourites
+              View all →
             </button>
           </div>
           {favourites.length === 0 ? (
-            <EmptyState
-              compact
-              title="No saved problems"
-              description={
-                favStats
-                  ? "Bookmark a problem from the workspace to see it here."
-                  : "Bookmark problems while browsing."
-              }
-            />
+            sectionErrors.favourites ? (
+              <SectionError
+                message={sectionErrors.favourites}
+                onRetry={() => void loadRemote()}
+              />
+            ) : (
+              <EmptyState
+                compact
+                title="No saved problems yet"
+                description="Bookmark problems from the workspace to build your personal list."
+                action={
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => onNavigate("problems")}
+                  >
+                    Explore Problems
+                  </Button>
+                }
+              />
+            )
           ) : (
             <>
               {favStats ? (
@@ -1063,8 +1949,9 @@ export const FreeHomeDashboard: FC<FreeHomeDashboardProps> = ({
                         <strong>{p.title}</strong>
                         <span className="free-home-muted">
                           {normalizeDifficulty(p.difficulty)}
+                          {p.category ? ` · ${p.category}` : ""}
                           {p.progressStatus
-                            ? ` · ${p.progressStatus.replace("_", " ")}`
+                            ? ` · ${p.progressStatus.replace(/_/g, " ")}`
                             : ""}
                         </span>
                       </span>
@@ -1076,131 +1963,43 @@ export const FreeHomeDashboard: FC<FreeHomeDashboardProps> = ({
             </>
           )}
         </section>
-      </div>
 
-      {/* Free-tier weak topics / recommendations — Premium uses Your Preparation instead */}
-      {!premiumUser ? (
-        <>
-      {/* Weak Topics */}
-      <section className="free-home-card" aria-labelledby="weak-topics-heading">
-        <div className="free-home-card-head">
-          <h2 id="weak-topics-heading">Weak Topics</h2>
-        </div>
-        {weak.length === 0 ? (
-          <EmptyState
-            compact
-            title={
-              solvedIds.size === 0
-                ? "Not enough activity yet"
-                : "No weak topics detected"
-            }
-            description={
-              solvedIds.size === 0
-                ? "Solve a few problems across topics to surface gaps."
-                : "Keep going — topic coverage looks solid from your accepts."
-            }
-          />
-        ) : (
-          <ul className="free-home-topics">
-            {weak.map((t) => (
-              <li key={t.name}>
-                <div className="free-home-topic-row">
-                  <strong>{t.name}</strong>
-                  <span className="free-home-muted">
-                    {t.solved}/{t.total} ({t.pct}%)
-                  </span>
-                </div>
-                <div
-                  className="free-home-bar thin"
-                  role="progressbar"
-                  aria-valuenow={t.pct}
-                  aria-valuemin={0}
-                  aria-valuemax={100}
-                  aria-label={`${t.name} progress`}
-                >
-                  <span style={{ width: `${t.pct}%` }} />
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      {/* Recommended */}
-      <section className="free-home-card" aria-labelledby="recommended-heading">
-        <div className="free-home-card-head">
-          <h2 id="recommended-heading">Recommended Problems</h2>
-        </div>
-        {recommended.length === 0 ? (
-          <EmptyState
-            compact
-            title="No recommendations yet"
-            description="Load the problem catalog or clear filters by solving fewer of them."
-          />
-        ) : (
-          <ul className="free-home-list">
-            {recommended.map((p) => (
-              <li key={getProblemId(p) || p.slug}>
-                <button
+        <section className="free-home-card" aria-labelledby="activity-heading">
+          <div className="free-home-card-head">
+            <h2 id="activity-heading">Recent Activity</h2>
+          </div>
+          {activityEvents.length === 0 ? (
+            <EmptyState
+              compact
+              title="No recent activity"
+              description="Your submissions and completed learning sessions will appear here."
+              action={
+                <Button
                   type="button"
-                  className="free-home-list-row"
-                  onClick={() => onSelectProblem(p)}
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => onNavigate("problems")}
                 >
-                  <span className="free-home-list-main">
-                    <strong>{p.title}</strong>
-                    <span className="free-home-muted">
-                      {normalizeDifficulty(p.difficulty)}
-                      {p.category ? ` · ${p.category}` : ""}
-                    </span>
-                  </span>
-                  <ArrowRight size={14} aria-hidden />
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-        </>
-      ) : null}
-
-      {/* Recent activity summary */}
-      <section className="free-home-card" aria-labelledby="activity-heading">
-        <div className="free-home-card-head">
-          <h2 id="activity-heading">Recent Activity</h2>
-        </div>
-        {streakCurrent === 0 && recent.length === 0 && studySessions.length === 0 ? (
-          <EmptyState
-            compact
-            title="No recent activity"
-            description="Submissions and completed study sessions will show up here."
-          />
-        ) : (
-          <ul className="free-home-activity">
-            <li>
-              Challenge streak: <strong>{streakCurrent}</strong> day
-              {streakCurrent === 1 ? "" : "s"} (best {streakLongest})
-            </li>
-            <li>
-              Official submissions loaded:{" "}
-              <strong>
-                {submissions.filter((s) => s.source !== "run").length}
-              </strong>
-            </li>
-            <li>
-              Study sessions on device/server:{" "}
-              <strong>{studySessions.length}</strong>
-            </li>
-            {progressStatus?.lastSubmissionDate ? (
-              <li>
-                Last submission:{" "}
-                <strong>
-                  {new Date(progressStatus.lastSubmissionDate).toLocaleString()}
-                </strong>
-              </li>
-            ) : null}
-          </ul>
-        )}
-      </section>
+                  Explore Problems
+                </Button>
+              }
+            />
+          ) : (
+            <ul className="free-home-timeline">
+              {activityEvents.map((ev) => (
+                <li key={ev.key}>
+                  <span className="free-home-timeline-dot" aria-hidden />
+                  <div>
+                    <p className="free-home-timeline-date">{ev.dateLabel}</p>
+                    <p className="free-home-timeline-label">{ev.label}</p>
+                    <p className="free-home-timeline-detail">{ev.detail}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
     </div>
   );
 };
