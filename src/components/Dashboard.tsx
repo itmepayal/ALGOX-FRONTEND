@@ -178,12 +178,14 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
   const [avatarBase64, setAvatarBase64] = useState("");
   const [updatingProfile, setUpdatingProfile] = useState(false);
   const [profileMsg, setProfileMsg] = useState("");
+  const [problemsError, setProblemsError] = useState<unknown>(null);
 
   const PROBLEM_PAGE_SIZE = 50;
 
   const fetchProblems = useCallback(async () => {
     try {
       setLoadingProblems(true);
+      setProblemsError(null);
       const difficultyParam =
         selectedDifficulty !== "All"
           ? selectedDifficulty.toLowerCase()
@@ -199,6 +201,7 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
       setTotalPages(Math.max(1, res?.meta?.totalPages ?? 1));
     } catch (err) {
       console.warn("Fetch problems failed:", err);
+      setProblemsError(err);
     } finally {
       setLoadingProblems(false);
     }
@@ -1561,7 +1564,7 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
             </header>
           )}
 
-          <main className={`platform-content ${activeTab === "problems" ? "platform-content-sheet" : ""}`}>
+          <main className="platform-content">
             {activeTab === "home" && (
               <FreeHomeDashboard
                 userName={user?.name || ""}
@@ -1584,6 +1587,8 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
               <ProblemsSheet
                 problems={problems}
                 loading={loadingProblems}
+                fetchError={problemsError}
+                onRetryFetch={fetchProblems}
                 submissions={userSubmissions}
                 searchQuery={searchQuery}
                 selectedDifficulty={selectedDifficulty}

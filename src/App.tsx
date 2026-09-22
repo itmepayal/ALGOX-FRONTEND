@@ -2,6 +2,7 @@ import { useState, useEffect, lazy, Suspense } from "react";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { PlatformSettingsProvider, usePlatformSettings } from "./context/PlatformSettingsContext";
 import { AuthPromptProvider } from "./context/AuthPromptContext";
+import { ToastProvider } from "./context/ToastContext";
 import { Dashboard } from "./components/Dashboard";
 import { BillingReturnHandler } from "./components/BillingReturnHandler";
 import { GuestApp } from "./components/guest/GuestApp";
@@ -153,7 +154,9 @@ function App() {
     <AuthProvider>
       <PlatformSettingsProvider>
         <AuthPromptProvider>
-          <AppContent />
+          <ToastProvider>
+            <AppContent />
+          </ToastProvider>
         </AuthPromptProvider>
       </PlatformSettingsProvider>
     </AuthProvider>

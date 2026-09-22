@@ -1,5 +1,5 @@
 import type { FC } from "react";
-import { Lock } from "lucide-react";
+import { Lock, Check, ArrowRight } from "lucide-react";
 import { Button } from "../ui/button";
 import { PremiumBadge } from "./PremiumBadge";
 import {
@@ -42,64 +42,88 @@ export const PremiumFeatureLock: FC<PremiumFeatureLockProps> = ({
       : undefined) ||
     [];
 
+  const titleText = title || meta?.label || "Premium Feature";
+  const descText =
+    description ||
+    meta?.description ||
+    "Unlock advanced learning tools designed for serious preparation.";
+
   return (
-    <section
-      className={cn(
-        "relative mx-auto flex w-full max-w-lg flex-col items-center gap-5 overflow-hidden rounded-2xl border border-border bg-card px-6 py-10 text-center shadow-sm",
-        className
-      )}
-      role="region"
-      aria-label="Premium feature locked"
-    >
-      <div
-        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,_hsl(var(--primary)/0.08),_transparent_60%)]"
-        aria-hidden
-      />
-      <div className="relative flex h-14 w-14 items-center justify-center rounded-full border border-border bg-background">
-        <Lock
-          size={22}
-          strokeWidth={1.75}
-          className="text-warning"
+    <div className="flex w-full flex-1 items-center justify-center py-8 px-4 sm:px-6">
+      <section
+        className={cn(
+          "relative mx-auto flex w-full max-w-2xl flex-col items-center gap-6 overflow-hidden rounded-2xl border border-border/80 bg-card px-8 py-12 text-center shadow-xl shadow-primary/5",
+          className
+        )}
+        role="region"
+        aria-label="Premium feature locked"
+      >
+        <div
+          className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,_hsl(var(--primary)/0.12),_transparent_70%)]"
           aria-hidden
         />
-      </div>
-      <div className="relative flex flex-col items-center gap-2">
-        <PremiumBadge feature={feature} />
-        <h2 className="font-primary text-xl font-semibold tracking-tight text-foreground">
-          {title || meta?.label || "Premium Feature"}
-        </h2>
-        <p className="max-w-sm font-primary text-sm leading-relaxed text-muted-foreground">
-          {description ||
-            meta?.description ||
-            "Unlock advanced learning tools designed for serious preparation."}
-        </p>
-      </div>
-      {benefitList.length > 0 ? (
-        <ul className="relative w-full max-w-xs space-y-2 text-left">
-          {benefitList.map((item) => (
-            <li
-              key={item}
-              className="flex items-start gap-2 font-primary text-sm text-foreground/90"
-            >
-              <span
-                className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-warning"
-                aria-hidden
-              />
-              {item}
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      <Button
-        type="button"
-        size="md"
-        className="relative min-w-[12rem]"
-        onClick={onUpgradeClick}
-        disabled={!onUpgradeClick}
-        aria-label={ctaLabel}
-      >
-        {ctaLabel}
-      </Button>
-    </section>
+
+        {/* LOCK ICON CONTAINER */}
+        <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 shadow-inner">
+          <Lock
+            size={26}
+            strokeWidth={2}
+            className="text-warning"
+            aria-hidden
+          />
+        </div>
+
+        {/* HEADER & TITLE */}
+        <div className="relative flex flex-col items-center gap-2 max-w-lg">
+          <PremiumBadge feature={feature} />
+          <h2 className="font-primary text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
+            {titleText}
+          </h2>
+          <p className="font-primary text-sm sm:text-base leading-relaxed text-muted-foreground max-w-md">
+            {descText}
+          </p>
+        </div>
+
+        {/* BENEFIT LIST */}
+        {benefitList.length > 0 ? (
+          <div className="relative w-full max-w-md rounded-xl border border-border/60 bg-background/50 p-4 sm:p-5 text-left">
+            <ul className="space-y-3">
+              {benefitList.map((item) => (
+                <li
+                  key={item}
+                  className="flex items-start gap-3 font-primary text-sm font-medium text-foreground/90"
+                >
+                  <Check
+                    size={16}
+                    strokeWidth={2.5}
+                    className="mt-0.5 shrink-0 text-warning"
+                    aria-hidden
+                  />
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+
+        {/* CTA BUTTON */}
+        <div className="relative flex flex-col items-center gap-3 pt-2">
+          <Button
+            type="button"
+            size="lg"
+            className="min-w-[14rem] font-semibold gap-2 shadow-lg shadow-primary/20"
+            onClick={onUpgradeClick}
+            disabled={!onUpgradeClick}
+            aria-label={ctaLabel}
+          >
+            <span>{ctaLabel}</span>
+            <ArrowRight size={16} strokeWidth={2} aria-hidden />
+          </Button>
+          <span className="font-primary text-xs text-muted-foreground/80">
+            Unlock {titleText} and build a consistent DSA practice routine.
+          </span>
+        </div>
+      </section>
+    </div>
   );
 };

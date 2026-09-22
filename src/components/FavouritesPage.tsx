@@ -7,7 +7,6 @@ import {
   type MouseEvent,
 } from "react";
 import {
-  AlertCircle,
   Bookmark,
   CheckCircle2,
   ChevronLeft,
@@ -41,7 +40,9 @@ import { hasAccessToken } from "../api/accessToken";
 import { cn } from "../lib/cn";
 import { Button } from "./ui/button";
 import { EmptyState } from "./ui/empty-state";
+import { ErrorState } from "./ui/error-state";
 import { Skeleton } from "./ui/skeleton";
+import { getErrorToastMessage } from "../lib/apiError";
 import { PremiumBadge } from "./access/PremiumBadge";
 import "./submission-analytics.css";
 import "./favourites-page.css";
@@ -53,7 +54,6 @@ interface FavouritesPageProps {
   onBookmarkChange?: (problemId: string, isBookmarked: boolean) => void;
   onFavoriteChange?: (problemId: string, isFavourite: boolean) => void;
   onExploreQuestions?: () => void;
-  /** Bump to force refetch (e.g. after workspace toggle). */
   refreshKey?: number;
 }
 
@@ -115,6 +115,7 @@ export const FavouritesPage: FC<FavouritesPageProps> = ({
   const [categories, setCategories] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [rawError, setRawError] = useState<unknown>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [toast, setToast] = useState<{
     type: "success" | "error";
@@ -224,11 +225,12 @@ export const FavouritesPage: FC<FavouritesPageProps> = ({
       setTotal(res.meta?.total ?? res.data?.stats?.total ?? 0);
       setTotalPages(res.meta?.totalPages ?? 0);
     } catch (err: any) {
+      setRawError(err);
       const statusCode = err?.response?.status;
-      if (statusCode === 401) {
+      if (statusCode === 401 || !hasAccessToken()) {
         setError("Login to view your saved problems.");
       } else {
-        setError("Unable to load your saved problems.");
+        setError(getErrorToastMessage(err));
       }
       setItems([]);
     } finally {
@@ -424,21 +426,14 @@ export const FavouritesPage: FC<FavouritesPageProps> = ({
       </header>
 
       {error ? (
-        <div className="ax-alert" role="alert">
-          <AlertCircle size={16} aria-hidden />
-          <div>
-            <strong>Unable to load your saved problems</strong>
-            <p>{error === "Unable to load your saved problems." ? "Please try again." : error}</p>
-          </div>
-          <Button
-            type="button"
-            size="sm"
-            variant="secondary"
-            onClick={() => void fetchLibrary()}
-          >
-            Retry
-          </Button>
-        </div>
+        <ErrorState
+          title="Unable to load saved problems"
+          message={error}
+          error={rawError}
+          onRetry={() => void fetchLibrary()}
+          isRetrying={loading}
+          className="mb-6"
+        />
       ) : null}
 
       <div className="ax-layout">

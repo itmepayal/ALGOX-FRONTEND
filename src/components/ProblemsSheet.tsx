@@ -4,15 +4,12 @@ import {
   BookOpen,
   CalendarDays,
   Check,
-  CheckCircle2,
+  ChevronDown,
   ChevronRight,
-  Code,
   ExternalLink,
   FileText,
   Flag,
-  Flame,
   Heart,
-  Info,
   ListTodo,
   Loader2,
   RefreshCw,
@@ -24,9 +21,16 @@ import {
   Upload,
   Lock,
   X,
+  Sparkles,
+  Layers,
+  ArrowRight,
 } from "lucide-react";
 import { EmptyState } from "./ui/empty-state";
+import { ErrorBoundary } from "./ui/error-boundary";
+import { ErrorState } from "./ui/error-state";
 import { Skeleton } from "./ui/skeleton";
+import { useToast } from "../context/ToastContext";
+import { getErrorToastMessage } from "../lib/apiError";
 import type { Problem } from "../api/problemApi";
 import type { Submission } from "../api/submissionApi";
 import {
@@ -176,6 +180,8 @@ interface ProblemsSheetProps {
   onNavigateLearning?: (tab: "calendar" | "sessions" | "planner") => void;
   /** Refresh submissions / dashboard after progress import. */
   onProgressImported?: () => void | Promise<void>;
+  fetchError?: unknown;
+  onRetryFetch?: () => void;
 }
 
 function openExternal(url: string) {
@@ -211,12 +217,16 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
   onOpenAdmin: _onOpenAdmin,
   onNavigateLearning,
   onProgressImported,
+  fetchError,
+  onRetryFetch,
 }) => {
   const { user } = useAuth();
+  const globalToast = useToast();
   const [sheetTab, setSheetTab] = useState<
     "all" | "revision" | "bookmarks" | "favourites" | "important"
   >("all");
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [selectedTopic, setSelectedTopic] = useState<string>("all");
   const [studySessions, setStudySessions] = useState<StudySession[]>([]);
   const [noteProblem, setNoteProblem] = useState<Problem | null>(null);
   const [noteDraft, setNoteDraft] = useState("");
@@ -480,7 +490,7 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
     sheetResetAt,
   ]);
 
-  /** Topic-wise sections from DSA Best Sheet (problems may appear under multiple topics). */
+  /** Topic-wise sections from DSA Best Sheet. */
   const sheetSections = useMemo(() => {
     const sections = activeCatalog.topics.map((topic) => {
       const seen = new Set<string>();
@@ -499,7 +509,6 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
       return { name: topic.name, items };
     });
 
-    // Any DB problems not present in the curated sheet
     const sheetSlugs = new Set(
       activeCatalog.uniqueProblems.map((p) => p.slug.toLowerCase())
     );
@@ -524,15 +533,100 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
     activeCatalog,
   ]);
 
+  /** Sidebar Topic Items with computed progress */
+  const topicNavItems = useMemo(() => {
+    return activeCatalog.topics.map((topic) => {
+      const seen = new Set<string>();
+      const items: Problem[] = [];
+      for (const ref of topic.problems) {
+        const hit =
+          problemBySlug.get(ref.slug.toLowerCase()) ||
+          problemBySlug.get(ref.title.trim().toLowerCase());
+        if (!hit) continue;
+        const pid = (hit.id || hit._id || hit.slug || "").toString();
+        if (seen.has(pid)) continue;
+        seen.add(pid);
+        items.push(hit);
+      }
+      const solved = items.filter((p) =>
+        isSheetCompleted(p.id || p._id, submissions, sheetResetAt)
+      ).length;
+      return {
+        name: topic.name,
+        total: items.length,
+        solved,
+        pct: items.length ? Math.round((solved / items.length) * 100) : 0,
+      };
+    });
+  }, [activeCatalog, problemBySlug, submissions, sheetResetAt]);
+
+  const visibleSections = useMemo(() => {
+    if (selectedTopic === "all") return sheetSections;
+    return sheetSections.filter((s) => s.name === selectedTopic);
+  }, [sheetSections, selectedTopic]);
+
+  const tabFiltered = useMemo(() => {
+    if (selectedTopic === "all") return filtered;
+    const sec = visibleSections.find((s) => s.name === selectedTopic);
+    return sec ? sec.items : [];
+  }, [filtered, selectedTopic, visibleSections]);
+
+  const totalFilteredCount = useMemo(() => {
+    if (sheetTab !== "all") {
+      return tabFiltered.length;
+    }
+    return visibleSections.reduce((sum, sec) => sum + sec.items.length, 0);
+  }, [sheetTab, tabFiltered.length, visibleSections]);
+
+  const PAGE_SIZE = 50;
+
+  const effectiveTotalPages = useMemo(() => {
+    if (totalFilteredCount === 0) return 0;
+
+    const hasClientFilters =
+      selectedTopic !== "all" || statusFilter !== "all" || sheetTab !== "all";
+
+    if (hasClientFilters) {
+      return Math.ceil(totalFilteredCount / PAGE_SIZE);
+    }
+
+    return totalPages > 1
+      ? totalPages
+      : Math.ceil(totalFilteredCount / PAGE_SIZE);
+  }, [totalFilteredCount, selectedTopic, statusFilter, sheetTab, totalPages]);
+
+  // Reset page to 1 whenever any filter changes
+  useEffect(() => {
+    if (onProblemPageChange && problemPage !== 1) {
+      onProblemPageChange(1);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    selectedTopic,
+    statusFilter,
+    sheetTab,
+    searchQuery,
+    selectedDifficulty,
+    accessFilter,
+  ]);
+
+  // Clamp page if current problemPage exceeds effectiveTotalPages
+  useEffect(() => {
+    if (
+      onProblemPageChange &&
+      effectiveTotalPages > 0 &&
+      problemPage > effectiveTotalPages
+    ) {
+      onProblemPageChange(effectiveTotalPages);
+    }
+  }, [effectiveTotalPages, problemPage, onProblemPageChange]);
+
   const progress = computeProgress(sheetProblems, submissions, sheetResetAt);
-  const progressDeg = `${(progress.pct / 100) * 360}deg`;
   const sheetAllComplete =
     progress.total > 0 && progress.solved >= progress.total;
 
-  /** Sheet problems that match the same filters as the visible list. */
   const sheetFiltered = useMemo(
     () => sheetProblems.filter((p) => matchesFilters(p)),
-    // matchesFilters closes over the listed deps
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       sheetProblems,
@@ -580,7 +674,7 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
           setStudySessions([]);
         }
       } catch {
-        /* ignore — streak still uses submissions */
+        /* ignore */
       }
     })();
     return () => {
@@ -600,14 +694,13 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
       let changed = false;
       for (const s of sheetSections) {
         if (next[s.name] === undefined) {
-          next[s.name] = true; // expand topics by default so the list is visible
+          next[s.name] = true;
           changed = true;
         }
       }
       return changed ? next : prev;
     });
   }, [sheetSections]);
-
 
   const handleResetProgress = async () => {
     if (resetInFlight.current || resetConfirming) return;
@@ -662,7 +755,6 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
           return;
         }
 
-        // Status=Solved list is already completed — pick among them directly.
         const effectiveMode: RandomPickMode =
           mode === "smart" && statusFilter === "solved" ? "solved-only" : mode;
 
@@ -820,14 +912,11 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
       return;
     }
     const prev = revisionIds.has(pid);
-    // Optimistic revision-only update
     onRevisionChange?.(pid, !prev);
     setRevisionBusy(pid);
     setRowError("");
     try {
       const res = await engagementApi.toggleRevision(pid);
-      // Only apply when the server explicitly returns the revision flag.
-      // Never read isBookmarked from this response.
       if (typeof res.data?.isRevision === "boolean") {
         onRevisionChange?.(pid, res.data.isRevision);
       }
@@ -856,7 +945,6 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
     setRowError("");
     try {
       const res = await engagementApi.toggleBookmark(pid);
-      // Bookmark flag only — never drive favourite UI from this response.
       const next =
         typeof res.data?.isBookmarked === "boolean"
           ? res.data.isBookmarked
@@ -868,15 +956,10 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
       });
     } catch (err: any) {
       onBookmarkChange?.(pid, prev);
-      setRowError(
-        err.response?.data?.message ||
-          err.message ||
-          "Unable to update bookmark. Please try again."
-      );
-      setToast({
-        type: "error",
-        text: "Unable to update bookmark. Please try again.",
-      });
+      const errMsg = getErrorToastMessage(err);
+      setRowError(errMsg);
+      setToast({ type: "error", text: errMsg });
+      globalToast.apiError(err, "Bookmark update failed");
     } finally {
       setBookmarkBusy(null);
     }
@@ -908,15 +991,10 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
       });
     } catch (err: any) {
       onFavoriteChange?.(pid, prev);
-      setRowError(
-        err.response?.data?.message ||
-          err.message ||
-          "Unable to update favourites. Please try again."
-      );
-      setToast({
-        type: "error",
-        text: "Unable to update favourites. Please try again.",
-      });
+      const errMsg = getErrorToastMessage(err);
+      setRowError(errMsg);
+      setToast({ type: "error", text: errMsg });
+      globalToast.apiError(err, "Favourite update failed");
     } finally {
       setFavouriteBusy(null);
     }
@@ -948,15 +1026,10 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
       });
     } catch (err: any) {
       onImportantChange?.(pid, prev);
-      setRowError(
-        err.response?.data?.message ||
-          err.message ||
-          "Unable to update important. Please try again."
-      );
-      setToast({
-        type: "error",
-        text: "Unable to update important. Please try again.",
-      });
+      const errMsg = getErrorToastMessage(err);
+      setRowError(errMsg);
+      setToast({ type: "error", text: errMsg });
+      globalToast.apiError(err, "Important update failed");
     } finally {
       setImportantBusy(null);
     }
@@ -982,6 +1055,16 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
       return;
     }
     openExternal(url);
+  };
+
+  const handleTopicClick = (topicName: string) => {
+    setSelectedTopic(topicName);
+    if (topicName !== "all") {
+      const el = document.getElementById(`topic-section-${topicName.replace(/\s+/g, "-")}`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }
   };
 
   const renderProblemRows = (items: Problem[]) =>
@@ -1030,16 +1113,17 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
             </div>
           </div>
           <span
-            className={`ax-row-state ${
-              solved ? "is-solved" : attempted ? "is-attempted" : "is-todo"
-            }`}
+            className={`ax-row-state ${solved ? "is-solved" : attempted ? "is-attempted" : "is-todo"
+              }`}
           >
             {solved ? (
               <>
                 <Check size={12} strokeWidth={2.5} aria-hidden /> Solved
               </>
             ) : attempted ? (
-              <>Attempted</>
+              <>
+                <span className="ax-dot-attempted" /> Attempted
+              </>
             ) : (
               <>Not solved</>
             )}
@@ -1063,15 +1147,6 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
                 )}
               </button>
             ))}
-            <button
-              type="button"
-              className="ax-icon"
-              title="Open problem"
-              aria-label="Open problem"
-              onClick={() => onSelectProblem(prob)}
-            >
-              <ChevronRight size={14} />
-            </button>
             {practice && (
               <button
                 type="button"
@@ -1159,581 +1234,684 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
                 <RefreshCw size={14} />
               )}
             </button>
+
+            <button
+              type="button"
+              className="ax-solve-btn"
+              title="Solve problem"
+              aria-label="Solve problem"
+              onClick={() => onSelectProblem(prob)}
+            >
+              Solve <ArrowRight size={13} />
+            </button>
           </div>
         </div>
       );
     });
 
   return (
-    <div className="ax-sheet animate-fade-in">
-      <div className="ax-sheet-main">
-        <header className="ax-hero">
-          <div className="ax-hero-brand">
-            <span className="ax-hero-icon" aria-hidden>
-              <BookOpen size={20} strokeWidth={1.75} />
+    <div className="ax-workspace animate-fade-in">
+      {/* HERO SECTION */}
+      <header className="ax-hero-compact">
+        <div className="ax-hero-left">
+          <div className="ax-hero-badge-wrap">
+            <span className="ax-hero-kicker">Learning Workspace</span>
+          </div>
+          <h1 className="ax-hero-title">
+            <BookOpen size={22} className="ax-hero-icon" />
+            {sheetDisplayName}
+          </h1>
+          <p className="ax-hero-sub">Learn DSA from A to Z</p>
+          <div className="ax-hero-meta">
+            <span className="ax-tag-pill">
+              <Layers size={13} /> {activeCatalog.stats.topics} Topics
             </span>
-            <div className="ax-hero-copy">
-              <p className="ax-hero-kicker">Learning workspace</p>
-              <h1>{sheetDisplayName}</h1>
-              <p className="ax-hero-sub">Learn DSA from A to Z</p>
-              <p className="ax-hero-stats">
-                {activeCatalog.stats.topics} Topics ·{" "}
-                {activeCatalog.stats.uniqueProblems} Problems · Topic-wise practice
-              </p>
-              <div className="ax-hero-meta-row">
-                <span
-                  className={`ax-meta ${catalogSource !== "server" ? "is-fallback" : ""}`}
-                >
-                  {catalogSource === "server"
-                    ? "Progress synced"
-                    : "Bundled catalog fallback"}
-                </span>
-                <span className="ax-meta is-plain">
-                  Last updated: {lastUpdated}
-                </span>
-              </div>
-            </div>
+            <span className="ax-tag-pill">
+              <Sparkles size={13} /> {activeCatalog.stats.uniqueProblems} Problems
+            </span>
+            <span className="ax-tag-pill is-status">
+              <span className={`ax-status-dot ${catalogSource !== "server" ? "warning" : ""}`} />
+              {catalogSource === "server" ? "Progress synced" : "Bundled catalog"}
+            </span>
+            <span className="ax-tag-pill is-date">
+              Updated {lastUpdated}
+            </span>
           </div>
-          <div className="ax-hero-actions">
-            <div className="ax-hero-btns">
-              <button
-                type="button"
-                className="ax-btn danger"
-                onClick={() => setResetConfirmOpen(true)}
-                disabled={!userId || resetConfirming}
-                title="Reset learning progress for this sheet only"
-              >
-                {resetConfirming ? (
-                  <Loader2 size={14} className="animate-spin" />
-                ) : (
-                  <RotateCcw size={14} />
-                )}
-                Reset Progress
-              </button>
-              {userId && !importBannerVisible && (
-                <button
-                  type="button"
-                  className="ax-btn accent"
-                  onClick={() => void startImportProgress()}
-                  disabled={importPreviewing || importConfirming}
-                  title="Restore solved/attempted progress from your past submissions"
-                >
-                  {importPreviewing ? (
-                    <Loader2 size={14} className="animate-spin" />
-                  ) : (
-                    <Upload size={14} />
-                  )}
-                  {importPreviewing ? "Analyzing…" : "Import Progress"}
-                </button>
-              )}
-            </div>
-          </div>
-        </header>
-
-        {userId && importBannerVisible && (
-          <div className="ax-import-banner" role="region" aria-label="Import progress">
-            <div className="ax-import-banner-copy">
-              <strong>Import previous progress</strong>
-              <span>Sync solved problems from your past submissions.</span>
-            </div>
-            <div className="ax-import-banner-actions">
-              <button
-                type="button"
-                className="ax-btn accent"
-                onClick={() => void startImportProgress()}
-                disabled={importPreviewing || importConfirming}
-              >
-                {importPreviewing ? (
-                  <Loader2 size={14} className="animate-spin" />
-                ) : (
-                  <Upload size={14} />
-                )}
-                Import
-              </button>
-              <button
-                type="button"
-                className="ax-btn"
-                onClick={dismissImportBanner}
-                disabled={importPreviewing || importConfirming}
-              >
-                Not now
-              </button>
-            </div>
-          </div>
-        )}
-
-        {userId ? (
-          <section className="ax-progress-strip" aria-label="Overall progress">
-            <div className="ax-progress-strip-main">
-              <div className="ax-progress-strip-head">
-                <span className="ax-progress-kicker">Overall progress</span>
-                <strong>
-                  {progress.solved} / {progress.total || 0} solved
-                </strong>
-              </div>
-              <div className="ax-progress-strip-bar" aria-hidden>
-                <i style={{ width: `${progress.pct}%` }} />
-              </div>
-            </div>
-            <div className="ax-progress-strip-stats">
-              <div>
-                <span className="ax-diff-dot easy" aria-hidden />
-                Easy{" "}
-                <b>
-                  {progress.byDiff.easy.solved}/{progress.byDiff.easy.total}
-                </b>
-              </div>
-              <div>
-                <span className="ax-diff-dot medium" aria-hidden />
-                Medium{" "}
-                <b>
-                  {progress.byDiff.medium.solved}/{progress.byDiff.medium.total}
-                </b>
-              </div>
-              <div>
-                <span className="ax-diff-dot hard" aria-hidden />
-                Hard{" "}
-                <b>
-                  {progress.byDiff.hard.solved}/{progress.byDiff.hard.total}
-                </b>
-              </div>
-              <div className="ax-progress-strip-streak">
-                <Flame size={12} aria-hidden />
-                {streak} day streak
-              </div>
-            </div>
-          </section>
-        ) : (
-          <section className="ax-progress-strip" aria-label="Sign in for progress">
-            <p className="ax-progress-guest">
-              Sign in to track sheet progress, streaks, and synced solves.
-            </p>
-          </section>
-        )}
-
-        <div className="ax-controls">
-          <div className="ax-tabs" role="tablist" aria-label="Sheet views">
-            {(
-              [
-                ["all", `All (${activeCatalog.stats.uniqueProblems})`],
-                ["bookmarks", `Bookmarked (${bookmarkedIds.size})`],
-                ["favourites", `Favorites (${favouriteIds.size})`],
-                ["important", `Important (${importantIds.size})`],
-                ["revision", `Revision (${revisionIds.size})`],
-              ] as const
-            ).map(([id, label]) => (
-              <button
-                key={id}
-                type="button"
-                role="tab"
-                aria-selected={sheetTab === id}
-                className={`ax-tab ${sheetTab === id ? "active" : ""}`}
-                onClick={() => setSheetTab(id)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          <div className="ax-filters">
-            <div className="ax-search">
-              <Search size={14} aria-hidden />
-              <input
-                value={searchQuery}
-                onChange={(e) => onSearchChange(e.target.value)}
-                placeholder="Search problems..."
-                aria-label="Search problems"
-              />
-              {searchQuery ? (
-                <button
-                  type="button"
-                  className="ax-search-clear"
-                  onClick={() => onSearchChange("")}
-                  aria-label="Clear search"
-                  title="Clear search"
-                >
-                  <X size={14} />
-                </button>
-              ) : null}
-            </div>
-            <select
-              value={statusFilter}
-              aria-label="Status"
-              onChange={(e) =>
-                onStatusFilterChange(
-                  e.target.value as "all" | "solved" | "attempted" | "unsolved"
-                )
-              }
-            >
-              <option value="all">All status</option>
-              <option value="solved">Solved</option>
-              <option value="attempted">Attempted</option>
-              <option value="unsolved">Unsolved</option>
-            </select>
-            <select
-              value={selectedDifficulty}
-              aria-label="Difficulty"
-              onChange={(e) => onDifficultyChange(e.target.value)}
-            >
-              <option value="All">Difficulty</option>
-              <option value="Easy">Easy</option>
-              <option value="Medium">Medium</option>
-              <option value="Hard">Hard</option>
-            </select>
-            <select
-              value={accessFilter}
-              aria-label="Access"
-              onChange={(e) =>
-                onAccessFilterChange?.(
-                  e.target.value as "all" | "free" | "premium"
-                )
-              }
-            >
-              <option value="all">Access</option>
-              <option value="free">Free</option>
-              <option value="premium">Premium</option>
-            </select>
+        </div>
+        <div className="ax-hero-right">
+          <button
+            type="button"
+            className="ax-btn danger"
+            onClick={() => setResetConfirmOpen(true)}
+            disabled={!userId || resetConfirming}
+            title="Reset learning progress for this sheet only"
+          >
+            {resetConfirming ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <RotateCcw size={14} />
+            )}
+            Reset Progress
+          </button>
+          {userId && (
             <button
               type="button"
-              className="ax-btn ax-btn-random"
-              onClick={() => runRandomPick("smart")}
-              disabled={randomFinding || loading}
-              title="Pick a random unsolved problem from this sheet (respects filters)"
-              aria-label="Random Problem"
+              className="ax-btn accent"
+              onClick={() => void startImportProgress()}
+              disabled={importPreviewing || importConfirming}
+              title="Restore solved/attempted progress from past submissions"
             >
-              {randomFinding ? (
+              {importPreviewing ? (
                 <Loader2 size={14} className="animate-spin" />
               ) : (
-                <Shuffle size={14} />
+                <Upload size={14} />
               )}
-              {randomFinding ? "Finding…" : "Random"}
+              {importPreviewing ? "Analyzing…" : "Import Progress"}
+            </button>
+          )}
+        </div>
+      </header>
+
+      {/* IMPORT BANNER */}
+      {userId && importBannerVisible && (
+        <div className="ax-import-banner" role="region" aria-label="Import progress">
+          <div className="ax-import-banner-copy">
+            <strong>Import previous progress</strong>
+            <span>Sync solved problems from your past submissions.</span>
+          </div>
+          <div className="ax-import-banner-actions">
+            <button
+              type="button"
+              className="ax-btn accent"
+              onClick={() => void startImportProgress()}
+              disabled={importPreviewing || importConfirming}
+            >
+              {importPreviewing ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <Upload size={14} />
+              )}
+              Import
+            </button>
+            <button
+              type="button"
+              className="ax-btn"
+              onClick={dismissImportBanner}
+              disabled={importPreviewing || importConfirming}
+            >
+              Not now
             </button>
           </div>
         </div>
+      )}
 
-        {loading && problems.length > 0 ? (
-          <div className="ax-updating" role="status" aria-live="polite">
-            <Loader2 size={12} className="animate-spin" aria-hidden />
-            Updating…
+      {/* PROGRESS OVERVIEW CARD */}
+      {userId ? (
+        <section className="ax-progress-bar-card" aria-label="Your progress">
+          <div className="ax-progress-card-header">
+            <span className="ax-progress-kicker">YOUR PROGRESS</span>
           </div>
-        ) : null}
 
-        {rowError && (
-          <div className="ax-error" role="alert">
-            {rowError}
-            <button type="button" onClick={() => setRowError("")} aria-label="Dismiss">
-              ×
-            </button>
-          </div>
-        )}
-
-        {loading && problems.length === 0 ? (
-          <div className="ax-skel" aria-busy="true" aria-label="Loading sheet">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="ax-skel-topic">
-                <div className="ax-skel-row" style={{ gridTemplateColumns: "24px 1fr 80px 48px" }}>
-                  <Skeleton className="h-4 w-4 rounded" />
-                  <Skeleton className="h-4 w-40" />
-                  <Skeleton className="h-2 w-full rounded-full" />
-                  <Skeleton className="h-4 w-10" />
-                </div>
-                {i === 0
-                  ? Array.from({ length: 3 }).map((__, j) => (
-                      <div key={j} className="ax-skel-row">
-                        <Skeleton className="h-3 w-6" />
-                        <Skeleton className="h-4 w-3/4" />
-                        <Skeleton className="h-5 w-14 rounded" />
-                        <Skeleton className="h-3 w-16" />
-                      </div>
-                    ))
-                  : null}
+          <div className="ax-progress-main-row">
+            <div className="ax-progress-info-left">
+              <div className="ax-progress-headline">
+                <span className="ax-progress-num">
+                  {progress.solved} / {progress.total || 0}
+                </span>
+                <span className="ax-progress-sub">
+                  solved · {progress.pct}% complete
+                </span>
               </div>
-            ))}
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="ax-empty-panel">
-            {(() => {
-              const clearFilters = (
-                <button
-                  type="button"
-                  className="ax-btn"
-                  onClick={() => {
-                    onSearchChange("");
-                    onDifficultyChange("All");
-                    onStatusFilterChange("all");
-                    onAccessFilterChange?.("all");
-                    setSheetTab("all");
-                  }}
-                >
-                  Clear filters
-                </button>
-              );
-              if (sheetTab === "bookmarks") {
-                return (
-                  <EmptyState
-                    icon={<Bookmark size={22} strokeWidth={1.75} />}
-                    title="No bookmarked problems yet"
-                    description="Save problems while practicing and they will appear here."
-                    action={
-                      <button type="button" className="ax-btn accent" onClick={() => setSheetTab("all")}>
-                        Explore problems
-                      </button>
-                    }
-                  />
-                );
-              }
-              if (sheetTab === "favourites") {
-                return (
-                  <EmptyState
-                    icon={<Star size={22} strokeWidth={1.75} />}
-                    title="No favorite problems yet"
-                    description="Mark problems as favorites to build your shortlist."
-                    action={
-                      <button type="button" className="ax-btn accent" onClick={() => setSheetTab("all")}>
-                        Explore problems
-                      </button>
-                    }
-                  />
-                );
-              }
-              if (sheetTab === "important") {
-                return (
-                  <EmptyState
-                    icon={<Flag size={22} strokeWidth={1.75} />}
-                    title="No important problems yet"
-                    description="Flag interview-critical problems to keep them in focus."
-                    action={
-                      <button type="button" className="ax-btn accent" onClick={() => setSheetTab("all")}>
-                        Explore problems
-                      </button>
-                    }
-                  />
-                );
-              }
-              if (sheetTab === "revision") {
-                return (
-                  <EmptyState
-                    icon={<RefreshCw size={22} strokeWidth={1.75} />}
-                    title="No problems in revision"
-                    description="Add problems to revision when you want to revisit them later."
-                    action={
-                      <button type="button" className="ax-btn accent" onClick={() => setSheetTab("all")}>
-                        Explore problems
-                      </button>
-                    }
-                  />
-                );
-              }
-              return (
-                <EmptyState
-                  icon={<Search size={22} strokeWidth={1.75} />}
-                  title="No problems found"
-                  description="Try changing your search or filters."
-                  action={clearFilters}
+              <div className="ax-progress-track" aria-hidden>
+                <div
+                  className="ax-progress-fill"
+                  style={{ width: `${Math.max(progress.pct, progress.solved > 0 ? 2 : 0)}%` }}
                 />
-              );
-            })()}
-          </div>
-        ) : sheetTab !== "all" ? (
-          <section className="ax-topic open flat">
-            <div className="ax-problem-list">{renderProblemRows(filtered)}</div>
-          </section>
-        ) : (
-          <div className="ax-topics">
-            {sheetSections.map(({ name: category, items }) => {
-              const catSolved = items.filter((p) =>
-                isSheetCompleted(p.id || p._id, submissions, sheetResetAt)
-              ).length;
-              const catPct = items.length
-                ? Math.round((catSolved / items.length) * 100)
-                : 0;
-              const open = expanded[category] !== false;
-              const completed = items.length > 0 && catSolved === items.length;
-              return (
-                <section
-                  key={category}
-                  className={`ax-topic ${open ? "open" : ""} ${completed ? "completed" : ""}`}
-                >
-                  <button
-                    type="button"
-                    className="ax-topic-head"
-                    aria-expanded={open}
-                    onClick={() =>
-                      setExpanded((prev) => ({ ...prev, [category]: !open }))
-                    }
-                  >
-                    <ChevronRight size={16} className="ax-chevron" />
-                    <span className="ax-topic-name-wrap">
-                      <span className="ax-topic-name">{category}</span>
-                      <span className="ax-topic-sub">
-                        {items.length} problem{items.length === 1 ? "" : "s"} ·{" "}
-                        {catSolved} solved
-                        {completed ? " · Completed" : ""}
-                      </span>
-                    </span>
-                    <span className="ax-topic-bar" aria-hidden>
-                      <i style={{ width: `${catPct}%` }} />
-                    </span>
-                    <span className="ax-topic-count">
-                      {catSolved} / {items.length}
-                    </span>
-                  </button>
-                  <div className={`ax-topic-body ${open ? "open" : ""}`}>
-                    <div className="ax-problem-list">{renderProblemRows(items)}</div>
-                  </div>
-                </section>
-              );
-            })}
-          </div>
-        )}
-
-        {totalPages > 1 && onProblemPageChange ? (
-          <div className="ax-pagination">
-            <button
-              type="button"
-              className="ax-btn"
-              disabled={problemPage <= 1 || loading}
-              onClick={() => onProblemPageChange(Math.max(1, problemPage - 1))}
-            >
-              ← Previous
-            </button>
-            <span>
-              Page {problemPage} of {totalPages}
-            </span>
-            <button
-              type="button"
-              className="ax-btn"
-              disabled={problemPage >= totalPages || loading}
-              onClick={() =>
-                onProblemPageChange(Math.min(totalPages, problemPage + 1))
-              }
-            >
-              Next →
-            </button>
-          </div>
-        ) : null}
-      </div>
-
-      <aside className="ax-rail" aria-label="DSA progress and learning tools">
-        <div className="ax-rail-card">
-          <div className="ax-rail-card-head">
-            <h3>{userId ? "AlgoPath Progress" : "Browse the sheet"}</h3>
-            {userId ? (
-            <span
-              className="ax-rail-info"
-              title={`${progress.pct}% of sheet solved · ${streak} day streak`}
-              aria-label={`${progress.pct}% complete, ${streak} day streak`}
-            >
-              <Info size={14} strokeWidth={2} />
-            </span>
-            ) : null}
-          </div>
-
-          {userId ? (
-          <>
-          <div className="ax-rail-progress">
-            <div
-              className="ax-ring md"
-              style={{ ["--progress-deg" as string]: progressDeg }}
-              aria-hidden
-            >
-              <div className="ax-ring-inner">
-                <strong>
-                  {progress.solved}
-                  <span className="ax-ring-sep">/</span>
-                  {progress.total || 0}
-                </strong>
               </div>
             </div>
 
-            <div className="ax-rail-legend">
-              <div>
-                <i className="easy" />
-                <span className="ax-diff-label">Easy</span>
-                <b>
+            <div className="ax-progress-stats-right">
+              <div className="ax-stat-block">
+                <span className="ax-stat-label">
+                  <span className="ax-diff-dot easy" /> EASY
+                </span>
+                <b className="ax-stat-val">
                   {progress.byDiff.easy.solved} / {progress.byDiff.easy.total}
                 </b>
               </div>
-              <div>
-                <i className="medium" />
-                <span className="ax-diff-label">Medium</span>
-                <b>
+              <div className="ax-stat-block">
+                <span className="ax-stat-label">
+                  <span className="ax-diff-dot medium" /> MEDIUM
+                </span>
+                <b className="ax-stat-val">
                   {progress.byDiff.medium.solved} / {progress.byDiff.medium.total}
                 </b>
               </div>
-              <div>
-                <i className="hard" />
-                <span className="ax-diff-label">Hard</span>
-                <b>
+              <div className="ax-stat-block">
+                <span className="ax-stat-label">
+                  <span className="ax-diff-dot hard" /> HARD
+                </span>
+                <b className="ax-stat-val">
                   {progress.byDiff.hard.solved} / {progress.byDiff.hard.total}
+                </b>
+              </div>
+              <div className="ax-stat-block is-streak">
+                <span className="ax-stat-label">STREAK</span>
+                <b className="ax-stat-val">
+                  {streak === 1 ? "1 day" : `${streak} days`}
                 </b>
               </div>
             </div>
           </div>
+        </section>
+      ) : (
+        <section className="ax-progress-guest-card" aria-label="Sign in for progress">
+          <p className="ax-progress-guest-text">
+            Sign in to track sheet progress, streaks, and synced solves across your account.
+          </p>
+        </section>
+      )}
 
-          <p className="ax-rail-streak">
-            <Flame size={13} strokeWidth={2} aria-hidden />
-            {streak} day streak
-          </p>
-          </>
-          ) : (
-          <p style={{ margin: 0, color: "var(--text-secondary)", fontSize: "0.85rem", lineHeight: 1.5 }}>
-            Open any problem to preview the statement. Sign in to save favourites, submit, and track a streak.
-          </p>
-          )}
+      {/* SEGMENTED NAVIGATION TABS */}
+      <nav className="ax-nav-tabs" role="tablist" aria-label="Sheet views">
+        {(
+          [
+            ["all", "All", activeCatalog.stats.uniqueProblems],
+            ["bookmarks", "Bookmarked", bookmarkedIds.size],
+            ["favourites", "Favorites", favouriteIds.size],
+            ["important", "Important", importantIds.size],
+            ["revision", "Revision", revisionIds.size],
+          ] as const
+        ).map(([id, label, count]) => (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            aria-selected={sheetTab === id}
+            className={`ax-tab-btn ${sheetTab === id ? "active" : ""}`}
+            onClick={() => setSheetTab(id)}
+          >
+            <span>{label}</span>
+            <span className="ax-tab-badge">{count}</span>
+          </button>
+        ))}
+      </nav>
+
+      {/* SEARCH + FILTER TOOLBAR */}
+      <div className="ax-filter-toolbar">
+        <div className="ax-search-box">
+          <Search size={14} className="ax-search-icon" aria-hidden />
+          <input
+            value={searchQuery}
+            onChange={(e) => onSearchChange(e.target.value)}
+            placeholder="Search problems by title, slug, or topic..."
+            aria-label="Search problems"
+          />
+          {searchQuery ? (
+            <button
+              type="button"
+              className="ax-search-clear"
+              onClick={() => onSearchChange("")}
+              aria-label="Clear search"
+              title="Clear search"
+            >
+              <X size={14} />
+            </button>
+          ) : null}
         </div>
 
-        <div className="ax-rail-links">
-          {(
-            [
-              {
-                id: "calendar" as const,
-                label: "Calendar + Roadmap",
-                Icon: CalendarDays,
-              },
-              { id: "sessions" as const, label: "Sessions", Icon: Timer },
-              {
-                id: "planner" as const,
-                label: "Daily Planner",
-                Icon: ListTodo,
-              },
-            ] as const
-          ).map(({ id, label, Icon }) => {
-            const nav = getPlatformNavItem(id);
-            const feature = nav?.premiumFeature;
-            const locked = Boolean(feature && !canAccess(user, feature));
-            const isPremium = Boolean(feature);
-            const tip = locked
-              ? `${label} — Premium feature — Upgrade to unlock`
-              : isPremium
-                ? `${label} — Premium feature — Included in your plan`
-                : label;
-            return (
-              <button
-                key={id}
-                type="button"
-                className="ax-rail-link"
-                title={tip}
-                aria-label={tip}
-                onClick={() => {
-                  if (feature && locked) {
-                    setPendingPremiumNav(id, feature);
-                  }
-                  onNavigateLearning?.(id);
-                }}
-              >
-                <span>
-                  <Icon size={15} strokeWidth={1.75} /> {label}
-                  {isPremium ? (
-                    <PremiumNavIndicator locked={locked} variant="inline" />
-                  ) : null}
+        <div className="ax-filter-group">
+          <select
+            className="ax-select"
+            value={statusFilter}
+            aria-label="Status"
+            onChange={(e) =>
+              onStatusFilterChange(
+                e.target.value as "all" | "solved" | "attempted" | "unsolved"
+              )
+            }
+          >
+            <option value="all">All status</option>
+            <option value="solved">Solved</option>
+            <option value="attempted">Attempted</option>
+            <option value="unsolved">Unsolved</option>
+          </select>
+
+          <select
+            className="ax-select"
+            value={selectedDifficulty}
+            aria-label="Difficulty"
+            onChange={(e) => onDifficultyChange(e.target.value)}
+          >
+            <option value="All">Difficulty</option>
+            <option value="Easy">Easy</option>
+            <option value="Medium">Medium</option>
+            <option value="Hard">Hard</option>
+          </select>
+
+          <select
+            className="ax-select"
+            value={accessFilter}
+            aria-label="Access"
+            onChange={(e) =>
+              onAccessFilterChange?.(
+                e.target.value as "all" | "free" | "premium"
+              )
+            }
+          >
+            <option value="all">Access</option>
+            <option value="free">Free</option>
+            <option value="premium">Premium</option>
+          </select>
+
+          <button
+            type="button"
+            className="ax-btn ax-btn-random"
+            onClick={() => runRandomPick("smart")}
+            disabled={randomFinding || loading}
+            title="Pick a random unsolved problem from this sheet"
+            aria-label="Random Problem"
+          >
+            {randomFinding ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <Shuffle size={14} />
+            )}
+            {randomFinding ? "Finding…" : "Random Problem"}
+          </button>
+        </div>
+      </div>
+
+      {loading && problems.length > 0 ? (
+        <div className="ax-updating" role="status" aria-live="polite">
+          <Loader2 size={12} className="animate-spin" aria-hidden />
+          Updating problem status…
+        </div>
+      ) : null}
+
+      {rowError && (
+        <div className="ax-error" role="alert">
+          {rowError}
+          <button type="button" onClick={() => setRowError("")} aria-label="Dismiss">
+            ×
+          </button>
+        </div>
+      )}
+
+      {/* MAIN THREE-COLUMN WORKSPACE BODY */}
+      <div className="ax-workspace-body">
+        {/* LEFT SIDEBAR: TOPIC NAVIGATION */}
+        <aside className="ax-topic-sidebar" aria-label="Topic navigation">
+          <div className="ax-sidebar-header">
+            <h3>Topics</h3>
+            <span className="ax-sidebar-count">{topicNavItems.length}</span>
+          </div>
+
+          <div className="ax-topic-select-mobile">
+            <select
+              value={selectedTopic}
+              onChange={(e) => handleTopicClick(e.target.value)}
+              aria-label="Select Topic"
+            >
+              <option value="all">All Topics ({activeCatalog.stats.topics})</option>
+              {topicNavItems.map((t) => (
+                <option key={t.name} value={t.name}>
+                  {t.name} ({t.solved}/{t.total})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="ax-topic-nav-list">
+            <button
+              type="button"
+              className={`ax-topic-nav-item ${selectedTopic === "all" ? "active" : ""}`}
+              onClick={() => handleTopicClick("all")}
+            >
+              <div className="ax-topic-nav-label">
+                <span>All Topics</span>
+                <span className="ax-topic-nav-badge">
+                  {progress.solved}/{progress.total}
                 </span>
-                <ChevronRight size={15} strokeWidth={2} aria-hidden />
-              </button>
-            );
-          })}
-        </div>
-      </aside>
+              </div>
+              <div className="ax-topic-mini-track">
+                <div
+                  className="ax-topic-mini-fill"
+                  style={{ width: `${progress.pct}%` }}
+                />
+              </div>
+            </button>
 
+            {topicNavItems.map((t) => (
+              <button
+                key={t.name}
+                type="button"
+                className={`ax-topic-nav-item ${selectedTopic === t.name ? "active" : ""}`}
+                onClick={() => handleTopicClick(t.name)}
+              >
+                <div className="ax-topic-nav-label">
+                  <span className="ax-topic-name-text">{t.name}</span>
+                  <span className="ax-topic-nav-badge">
+                    {t.solved}/{t.total}
+                  </span>
+                </div>
+                <div className="ax-topic-mini-track">
+                  <div
+                    className="ax-topic-mini-fill"
+                    style={{ width: `${t.pct}%` }}
+                  />
+                </div>
+              </button>
+            ))}
+          </div>
+        </aside>
+
+        {/* CENTER PANEL: PROBLEM LIST */}
+        <main className="ax-center-panel" role="region" aria-label="Problem List">
+          <ErrorBoundary fallbackTitle="Unable to render sheet content">
+            {loading && problems.length > 0 && (
+              <div
+                className="flex items-center gap-2 rounded-lg border border-border bg-card/60 px-3 py-1.5 text-xs text-muted-foreground mb-3"
+                role="status"
+                aria-live="polite"
+              >
+                <Loader2 size={13} className="animate-spin text-accent-foreground" />
+                <span>Refreshing sheet content…</span>
+              </div>
+            )}
+
+            {loading && problems.length === 0 ? (
+              <div className="ax-skel" aria-busy="true" aria-label="Loading sheet">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="ax-skel-topic">
+                    <div className="ax-skel-row" style={{ gridTemplateColumns: "24px 1fr 80px 48px" }}>
+                      <Skeleton className="h-4 w-4 rounded" />
+                      <Skeleton className="h-4 w-40" />
+                      <Skeleton className="h-2 w-full rounded-full" />
+                      <Skeleton className="h-4 w-10" />
+                    </div>
+                    {i === 0
+                      ? Array.from({ length: 3 }).map((__, j) => (
+                        <div key={j} className="ax-skel-row">
+                          <Skeleton className="h-3 w-6" />
+                          <Skeleton className="h-4 w-3/4" />
+                          <Skeleton className="h-5 w-14 rounded" />
+                          <Skeleton className="h-3 w-16" />
+                        </div>
+                      ))
+                      : null}
+                  </div>
+                ))}
+              </div>
+            ) : fetchError && problems.length === 0 ? (
+              <div className="ax-empty-panel">
+                <ErrorState
+                  error={fetchError}
+                  onRetry={onRetryFetch}
+                  isRetrying={loading}
+                />
+              </div>
+            ) : totalFilteredCount === 0 ? (
+            <div className="ax-empty-panel">
+              {(() => {
+                const clearFilters = (
+                  <button
+                    type="button"
+                    className="ax-btn"
+                    onClick={() => {
+                      onSearchChange("");
+                      onDifficultyChange("All");
+                      onStatusFilterChange("all");
+                      onAccessFilterChange?.("all");
+                      setSheetTab("all");
+                      setSelectedTopic("all");
+                      if (onProblemPageChange) onProblemPageChange(1);
+                    }}
+                  >
+                    Clear filters
+                  </button>
+                );
+                if (selectedTopic !== "all") {
+                  return (
+                    <EmptyState
+                      icon={<Search size={22} strokeWidth={1.75} />}
+                      title="No problems found"
+                      description={`There are no problems available for "${selectedTopic}" with the current filters.`}
+                      action={clearFilters}
+                    />
+                  );
+                }
+                if (sheetTab === "bookmarks") {
+                  return (
+                    <EmptyState
+                      icon={<Bookmark size={22} strokeWidth={1.75} />}
+                      title="No bookmarked problems yet"
+                      description="Save problems while practicing to find them later."
+                      action={
+                        <button type="button" className="ax-btn accent" onClick={() => setSheetTab("all")}>
+                          Explore problems
+                        </button>
+                      }
+                    />
+                  );
+                }
+                if (sheetTab === "favourites") {
+                  return (
+                    <EmptyState
+                      icon={<Star size={22} strokeWidth={1.75} />}
+                      title="No favorite problems yet"
+                      description="Mark problems as favorites to build your practice shortlist."
+                      action={
+                        <button type="button" className="ax-btn accent" onClick={() => setSheetTab("all")}>
+                          Explore problems
+                        </button>
+                      }
+                    />
+                  );
+                }
+                if (sheetTab === "important") {
+                  return (
+                    <EmptyState
+                      icon={<Flag size={22} strokeWidth={1.75} />}
+                      title="No important problems yet"
+                      description="Flag interview-critical problems to keep them in focus."
+                      action={
+                        <button type="button" className="ax-btn accent" onClick={() => setSheetTab("all")}>
+                          Explore problems
+                        </button>
+                      }
+                    />
+                  );
+                }
+                if (sheetTab === "revision") {
+                  return (
+                    <EmptyState
+                      icon={<RefreshCw size={22} strokeWidth={1.75} />}
+                      title="No problems in revision"
+                      description="Add problems to revision when you want to revisit them later."
+                      action={
+                        <button type="button" className="ax-btn accent" onClick={() => setSheetTab("all")}>
+                          Explore problems
+                        </button>
+                      }
+                    />
+                  );
+                }
+                return (
+                  <EmptyState
+                    icon={<Search size={22} strokeWidth={1.75} />}
+                    title="No problems found"
+                    description="Try changing your search query or status/difficulty filters."
+                    action={clearFilters}
+                  />
+                );
+              })()}
+            </div>
+          ) : sheetTab !== "all" ? (
+            <section className="ax-topic-card open flat">
+              <div className="ax-problem-list">{renderProblemRows(tabFiltered)}</div>
+            </section>
+          ) : (
+            <div className="ax-topics-wrapper">
+              {visibleSections.map(({ name: category, items }) => {
+                const catSolved = items.filter((p) =>
+                  isSheetCompleted(p.id || p._id, submissions, sheetResetAt)
+                ).length;
+                const catPct = items.length
+                  ? Math.round((catSolved / items.length) * 100)
+                  : 0;
+                const open = expanded[category] !== false;
+                const completed = items.length > 0 && catSolved === items.length;
+                const topicId = `topic-section-${category.replace(/\s+/g, "-")}`;
+
+                return (
+                  <section
+                    key={category}
+                    id={topicId}
+                    className={`ax-topic-card ${open ? "open" : ""} ${completed ? "completed" : ""}`}
+                  >
+                    <button
+                      type="button"
+                      className="ax-topic-card-head"
+                      aria-expanded={open}
+                      onClick={() =>
+                        setExpanded((prev) => ({ ...prev, [category]: !open }))
+                      }
+                    >
+                      <ChevronDown size={16} className="ax-topic-chevron" />
+                      <div className="ax-topic-info">
+                        <span className="ax-topic-title">{category}</span>
+                        <span className="ax-topic-meta">
+                          {items.length} problem{items.length === 1 ? "" : "s"} · {catSolved} solved
+                          {completed ? " · Completed" : ""}
+                        </span>
+                      </div>
+                      <div className="ax-topic-head-progress">
+                        <div className="ax-topic-head-track" aria-hidden>
+                          <div className="ax-topic-head-fill" style={{ width: `${catPct}%` }} />
+                        </div>
+                        <span className="ax-topic-head-count">
+                          {catSolved} / {items.length}
+                        </span>
+                      </div>
+                    </button>
+                    <div className={`ax-topic-card-body ${open ? "open" : ""}`}>
+                      <div className="ax-problem-list">{renderProblemRows(items)}</div>
+                    </div>
+                  </section>
+                );
+              })}
+            </div>
+          )}
+
+          {effectiveTotalPages > 1 && totalFilteredCount > 0 && onProblemPageChange ? (
+            <div className="ax-pagination">
+              <button
+                type="button"
+                className="ax-btn"
+                disabled={problemPage <= 1 || loading}
+                onClick={() => onProblemPageChange(Math.max(1, problemPage - 1))}
+              >
+                ← Previous
+              </button>
+              <span className="ax-pagination-info">
+                Page {problemPage} of {effectiveTotalPages}
+              </span>
+              <button
+                type="button"
+                className="ax-btn"
+                disabled={problemPage >= effectiveTotalPages || loading}
+                onClick={() =>
+                  onProblemPageChange(Math.min(effectiveTotalPages, problemPage + 1))
+                }
+              >
+                Next →
+              </button>
+            </div>
+          ) : null}
+          </ErrorBoundary>
+        </main>
+
+        {/* RIGHT SIDEBAR: LEARNING TOOLS */}
+        <aside className="ax-tools-sidebar" aria-label="Learning tools">
+          <div className="ax-tools-header">
+            <h3>Learning Tools</h3>
+          </div>
+
+          <div className="ax-tool-cards">
+            {(
+              [
+                {
+                  id: "calendar" as const,
+                  label: "Calendar & Roadmap",
+                  desc: "Plan your learning journey",
+                  Icon: CalendarDays,
+                },
+                {
+                  id: "sessions" as const,
+                  label: "Sessions",
+                  desc: "Track focused practice time",
+                  Icon: Timer,
+                },
+                {
+                  id: "planner" as const,
+                  label: "Daily Planner",
+                  desc: "Plan today's DSA tasks",
+                  Icon: ListTodo,
+                },
+              ] as const
+            ).map(({ id, label, desc, Icon }) => {
+              const nav = getPlatformNavItem(id);
+              const feature = nav?.premiumFeature;
+              const locked = Boolean(feature && !canAccess(user, feature));
+              const isPremium = Boolean(feature);
+              const tip = locked
+                ? `${label} — Premium feature — Upgrade to unlock`
+                : isPremium
+                  ? `${label} — Premium feature — Included in your plan`
+                  : label;
+
+              return (
+                <div
+                  key={id}
+                  className="ax-tool-card"
+                  onClick={() => {
+                    if (feature && locked) {
+                      setPendingPremiumNav(id, feature);
+                    }
+                    onNavigateLearning?.(id);
+                  }}
+                  title={tip}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      if (feature && locked) setPendingPremiumNav(id, feature);
+                      onNavigateLearning?.(id);
+                    }
+                  }}
+                >
+                  <div className="ax-tool-card-icon">
+                    <Icon size={18} />
+                  </div>
+                  <div className="ax-tool-card-body">
+                    <span className="ax-tool-card-title">{label}</span>
+                    <p className="ax-tool-card-desc">{desc}</p>
+                  </div>
+                  <div className="ax-tool-card-right">
+                    {isPremium ? (
+                      <PremiumNavIndicator locked={locked} variant="inline" />
+                    ) : null}
+                    <ChevronRight size={16} className="ax-tool-chevron" />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </aside>
+      </div>
+
+      {/* NOTE MODAL */}
       {noteProblem && (
         <div
           className="dsa-note-overlay"
@@ -1786,6 +1964,7 @@ export const ProblemsSheet: FC<ProblemsSheetProps> = ({
         </div>
       )}
 
+      {/* CONFIRM DIALOGS */}
       <ConfirmDialog
         open={importPreviewOpen}
         title="Import Progress"

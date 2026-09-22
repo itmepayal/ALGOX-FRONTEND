@@ -10,7 +10,10 @@ export {
   CardTitle,
 } from "./card";
 export { EmptyState } from "./empty-state";
+export { ErrorBoundary } from "./error-boundary";
+export { ErrorState } from "./error-state";
 export { Input } from "./input";
 export type { InputProps } from "./input";
 export { MetricCard } from "./metric-card";
 export { Skeleton } from "./skeleton";
+
