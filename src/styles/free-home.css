@@ -312,6 +312,142 @@
   color: var(--text-secondary);
 }
 
+/* Subscription status bar */
+.free-home-subbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 14px 18px;
+  border-radius: 12px;
+}
+
+.free-home-subbar.is-free {
+  border-color: color-mix(in srgb, var(--primary) 25%, var(--border-subtle));
+  background: color-mix(in srgb, var(--primary) 4%, var(--bg-card));
+}
+
+.free-home-subbar.is-premium {
+  border-color: color-mix(in srgb, var(--warning) 30%, var(--border-subtle));
+  background: color-mix(in srgb, var(--warning) 4%, var(--bg-card));
+}
+
+.free-home-subbar-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.free-home-subbar-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.free-home-subbar-label {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.free-home-subbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Saved problems summary grid */
+.free-home-saved-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.free-home-saved-metric {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+  text-align: left;
+}
+
+.free-home-saved-metric:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-card-hover);
+}
+
+.free-home-saved-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.free-home-saved-value {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-main);
+  font-family: var(--font-technical);
+}
+
+/* Overview card grid */
+.free-home-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+}
+
+.free-home-subhead {
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 650;
+  color: var(--text-main);
+}
+
+/* Premium Preparation features list */
+.free-home-prep-features {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.free-home-prep-features li {
+  font-size: 0.84rem;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.free-home-prep-headline {
+  margin: 0 0 6px;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+@media (max-width: 768px) {
+  .free-home-saved-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .free-home-overview-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+
 /* Legacy form layout (still used by other panels) */
 .mock-interview-form {
   display: grid;

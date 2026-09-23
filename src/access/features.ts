@@ -44,25 +44,28 @@ export const FEATURE_META: Record<
     description: "Guided problem hints",
   },
   "premium.company_questions": {
-    label: "Company questions",
-    description: "Company-tagged interview questions",
+    label: "Company Preparation",
+    description:
+      "Prepare with focused practice designed around your target companies.",
   },
   "premium.study_plans": {
     label: "Study plans",
     description: "Structured premium study plans",
   },
   "premium.mock_interview": {
-    label: "Mock interview",
-    description: "Timed mock interview sessions",
+    label: "Mock Interviews",
+    description:
+      "Practice realistic technical interviews with real problems, timing, and judge-backed results.",
   },
   "premium.ai": {
-    label: "AI assist",
+    label: "AlgoPath AI",
     description:
-      "AlgoPath AI learning assistant — Premium members only",
+      "Get intelligent support throughout your DSA learning journey.",
   },
   "premium.analytics": {
-    label: "Advanced analytics",
-    description: "Deeper personal performance analytics",
+    label: "Analytics",
+    description:
+      "Understand your solving progress and learning performance with detailed insights.",
   },
   "premium.code_analysis": {
     label: "Code analysis",
@@ -73,8 +76,9 @@ export const FEATURE_META: Record<
     description: "Interactive debugging tools",
   },
   "premium.virtual_contest": {
-    label: "Virtual contest",
-    description: "Virtual contest participation",
+    label: "Virtual Practice",
+    description:
+      "Replay the contest under timed conditions and test your problem-solving speed.",
   },
   "premium.priority_judge": {
     label: "Priority judge",
@@ -93,24 +97,24 @@ export const FEATURE_META: Record<
     description: "Preserve streaks across a missed day",
   },
   "premium.spaced_repetition": {
-    label: "Spaced repetition",
+    label: "Revision Queue",
     description:
-      "Advanced revision scheduling, reschedule controls, and personalized review recommendations",
+      "Keep important problems organized and maintain a consistent revision routine.",
   },
   "premium.daily_planner": {
     label: "Daily Planner",
     description:
-      "Personalized daily plans, revision tasks, and day-by-day DSA progress",
+      "Plan your DSA journey with an intelligent daily schedule.",
   },
   "premium.study_sessions": {
-    label: "Study Sessions",
+    label: "Sessions",
     description:
-      "Focused coding and study sessions with timers, history, and productivity stats",
+      "Organize focused coding and study sessions around your learning goals.",
   },
   "premium.learning_calendar": {
-    label: "Calendar + Roadmap",
+    label: "Your Learning Calendar",
     description:
-      "Plan your DSA preparation with scheduled practice, roadmap tracking, and review planning.",
+      "Organize your learning journey with a structured calendar and study schedule.",
   },
 };
 
@@ -119,8 +123,7 @@ export const FEATURE_BENEFITS: Partial<Record<FeatureId, readonly string[]>> = {
   "premium.ai": [
     "Progressive smart hints without full solutions",
     "Code analysis for bugs and complexity",
-    "Personalized learning recommendations",
-    "Interview-style coaching and reasoning practice",
+    "Personalized learning and interview coaching",
   ],
   "premium.daily_planner": [
     "Create personalized daily plans",
@@ -128,19 +131,39 @@ export const FEATURE_BENEFITS: Partial<Record<FeatureId, readonly string[]>> = {
     "Monitor daily completion and streaks",
   ],
   "premium.study_sessions": [
-    "Start, pause, and complete focus sessions",
-    "Review session history and duration",
-    "Analyze consistency and productivity",
+    "Start, pause, and complete focus study timers",
+    "Review session history, duration, and topic logs",
+    "Analyze study productivity and consistency metrics",
   ],
   "premium.learning_calendar": [
-    "Plan problems on a monthly roadmap",
-    "Schedule revisions and study sessions",
-    "Track completed activity by day",
+    "Plan problems and topics on a monthly calendar",
+    "Schedule review cards and focus sessions",
+    "Track daily DSA activity and completion milestones",
   ],
   "premium.company_questions": [
     "Company-specific interview problem sets",
     "Difficulty and topic distribution insights",
     "Track preparation progress per company",
+  ],
+  "premium.mock_interview": [
+    "Realistic timed technical interview sessions",
+    "Targeted company and topic interview sets",
+    "Comprehensive performance and timing analytics",
+  ],
+  "premium.analytics": [
+    "Deep submission history and acceptance rate trends",
+    "Topic strength and weakness diagnostic metrics",
+    "Solving consistency and streak tracking",
+  ],
+  "premium.spaced_repetition": [
+    "Spaced-repetition card scheduling and review queues",
+    "Custom reschedule controls and mastery tracking",
+    "Automatic review recommendations from accepted solves",
+  ],
+  "premium.virtual_contest": [
+    "Replay contests under timed conditions",
+    "Practice without affecting original ranking",
+    "Test and improve problem-solving speed",
   ],
 };
 

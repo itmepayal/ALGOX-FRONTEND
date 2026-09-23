@@ -31,7 +31,9 @@ import { canAccess } from "../access/canAccess";
 import { useAuth } from "../context/AuthContext";
 import { formatDisplayDate } from "../lib/formatDisplayDate";
 import { cn } from "../lib/cn";
-import { UpgradePrompt } from "./access/UpgradePrompt";
+import { PremiumFeatureLock } from "./access/PremiumFeatureLock";
+import { PremiumUpgradeModal } from "./access/PremiumUpgradeModal";
+import { setPendingPremiumNav } from "../access/pendingPremiumNav";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { EmptyState } from "./ui/empty-state";
@@ -185,6 +187,7 @@ export const ContestsPanel: FC<Props> = ({
   const [virtualBusy, setVirtualBusy] = useState(false);
   const [virtualAnalytics, setVirtualAnalytics] =
     useState<VirtualContestAnalytics | null>(null);
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
 
   const historyBySlug = useMemo(() => {
     const map = new Map<string, ContestHistoryPayload["items"][number]>();
@@ -426,8 +429,8 @@ export const ContestsPanel: FC<Props> = ({
     } catch (err: any) {
       setError(
         err?.response?.data?.message ||
-          err?.message ||
-          "Unable to start virtual practice."
+        err?.message ||
+        "Unable to start virtual practice."
       );
     } finally {
       setVirtualBusy(false);
@@ -709,36 +712,47 @@ export const ContestsPanel: FC<Props> = ({
                     timed conditions without affecting the original ranking.
                   </p>
                 </div>
-                <div className="ct-practice-body">
-                  <ul className="ct-practice-facts">
-                    <li>
-                      <span className="ct-stat-label">Mode</span>
-                      <strong>Virtual Practice</strong>
-                    </li>
-                    {duration ? (
-                      <li>
-                        <span className="ct-stat-label">Duration</span>
-                        <strong>{duration}</strong>
-                      </li>
-                    ) : null}
-                    {problemCount > 0 ? (
-                      <li>
-                        <span className="ct-stat-label">Problems</span>
-                        <strong>{problemCount}</strong>
-                      </li>
-                    ) : null}
-                  </ul>
-                  <p className="ct-practice-why">
-                    Replay the contest under timed conditions and test your
-                    problem-solving speed.
-                  </p>
-                  {!virtualOk ? (
-                    <UpgradePrompt
+                {!virtualOk ? (
+                  <div className="ct-practice-premium-wrap">
+                    <PremiumFeatureLock
                       feature="premium.virtual_contest"
                       title="Virtual Practice"
-                      description="Upgrade to unlock virtual replay of ended contests. Practice mode never affects rating."
+                      description="Replay the contest under timed conditions and test your problem-solving speed."
+                      benefits={[
+                        "Replay contests under timed conditions",
+                        "Practice without affecting original ranking",
+                        "Test and improve problem-solving speed",
+                      ]}
+                      onUpgradeClick={() => {
+                        setPendingPremiumNav("contests", "premium.virtual_contest");
+                        setUpgradeOpen(true);
+                      }}
                     />
-                  ) : (
+                  </div>
+                ) : (
+                  <div className="ct-practice-body">
+                    <ul className="ct-practice-facts">
+                      <li>
+                        <span className="ct-stat-label">Mode</span>
+                        <strong>Virtual Practice</strong>
+                      </li>
+                      {duration ? (
+                        <li>
+                          <span className="ct-stat-label">Duration</span>
+                          <strong>{duration}</strong>
+                        </li>
+                      ) : null}
+                      {problemCount > 0 ? (
+                        <li>
+                          <span className="ct-stat-label">Problems</span>
+                          <strong>{problemCount}</strong>
+                        </li>
+                      ) : null}
+                    </ul>
+                    <p className="ct-practice-why">
+                      Replay the contest under timed conditions and test your
+                      problem-solving speed.
+                    </p>
                     <div className="ct-practice-actions">
                       <Button
                         type="button"
@@ -767,8 +781,8 @@ export const ContestsPanel: FC<Props> = ({
                         Practice Mode
                       </Button>
                     </div>
-                  )}
-                </div>
+                  </div>
+                )}
               </section>
             ) : null}
 
@@ -1222,6 +1236,14 @@ export const ContestsPanel: FC<Props> = ({
           })}
         </ul>
       )}
+
+      <PremiumUpgradeModal
+        open={upgradeOpen}
+        onClose={() => setUpgradeOpen(false)}
+        feature="premium.virtual_contest"
+        title="Virtual Practice is a Premium feature"
+        description="Upgrade to Premium to unlock virtual replay of ended contests."
+      />
     </div>
   );
 };

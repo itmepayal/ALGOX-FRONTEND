@@ -94,6 +94,13 @@ function asPagedResult(
   return null;
 }
 
+function formatStatCount(val: number | null | undefined, loading: boolean): string {
+  if (val == null && loading) return "—";
+  const num = Math.max(0, Number(val) || 0);
+  if (num > 9999) return "9999+";
+  return num.toLocaleString();
+}
+
 export const FavouritesPage: FC<FavouritesPageProps> = ({
   submissions,
   userId,
@@ -134,7 +141,6 @@ export const FavouritesPage: FC<FavouritesPageProps> = ({
   const [limit] = useState(20);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
-  const [filtersOpen, setFiltersOpen] = useState(false);
 
   useEffect(() => {
     const t = window.setTimeout(() => {
@@ -228,9 +234,20 @@ export const FavouritesPage: FC<FavouritesPageProps> = ({
       setRawError(err);
       const statusCode = err?.response?.status;
       if (statusCode === 401 || !hasAccessToken()) {
-        setError("Login to view your saved problems.");
+        setError("Your session has expired. Please sign in again.");
+      } else if (statusCode === 403) {
+        setError("You don't have permission to access this collection.");
+      } else if (statusCode >= 500) {
+        setError("AlgoPath couldn't load your problems. Please try again in a moment.");
+      } else if (err?.code === "ERR_NETWORK" || (typeof navigator !== "undefined" && !navigator.onLine)) {
+        setError("You're offline. Check your connection and try again.");
       } else {
-        setError(getErrorToastMessage(err));
+        const msg = getErrorToastMessage(err);
+        setError(
+          msg && !/AxiosError|TypeError|ERR_|Internal Server|HTTP \d/i.test(msg)
+            ? msg
+            : "Couldn't load your problems. Please try again."
+        );
       }
       setItems([]);
     } finally {
@@ -304,7 +321,7 @@ export const FavouritesPage: FC<FavouritesPageProps> = ({
     const pid = normalizeProblemId(p.id || p._id);
     if (!pid || busyId) return;
     if (!hasAccessToken()) {
-      setToast({ type: "error", text: "Login to manage favourites." });
+      setToast({ type: "error", text: "Your session has expired. Please sign in again." });
       return;
     }
 
@@ -322,15 +339,18 @@ export const FavouritesPage: FC<FavouritesPageProps> = ({
 
     try {
       await engagementApi.removeFavorite(pid);
-      setToast({ type: "success", text: "Removed from favourites" });
+      setToast({ type: "success", text: "Removed from favorites" });
       await fetchLibrary();
-    } catch {
+    } catch (err) {
       setItems(prevItems);
       setStats(prevStats);
       onFavoriteChange?.(pid, true);
+      const msg = getErrorToastMessage(err);
       setToast({
         type: "error",
-        text: "Unable to update favourites. Please try again.",
+        text: msg && !/AxiosError|ERR_|HTTP \d/i.test(msg)
+          ? msg
+          : "Couldn't update favorite. Your change wasn't saved. Please try again.",
       });
     } finally {
       setBusyId(null);
@@ -349,7 +369,6 @@ export const FavouritesPage: FC<FavouritesPageProps> = ({
     bookmarked: summary?.bookmarked ?? 0,
     important: summary?.important ?? 0,
     revision: summary?.revision ?? 0,
-    // Favorites and bookmarks are independent stores (no invented unique merge).
     total: (summary?.favourites ?? 0) + (summary?.bookmarked ?? 0),
   };
 
@@ -373,6 +392,17 @@ export const FavouritesPage: FC<FavouritesPageProps> = ({
   const showIdCollectionInfo =
     !loading && !error && isIdOnlyCollection && total > 0;
 
+  const collectionName =
+    collection === "favorites"
+      ? "Favorites"
+      : collection === "bookmarked"
+        ? "Bookmarked"
+        : collection === "important"
+          ? "Important"
+          : collection === "revision"
+            ? "Revision"
+            : "All Saved";
+
   const emptyCopy = (() => {
     if (collection === "bookmarked") {
       return {
@@ -382,11 +412,27 @@ export const FavouritesPage: FC<FavouritesPageProps> = ({
         cta: "Browse Problems",
       };
     }
-    if (collection === "favorites" || collection === "all") {
+    if (collection === "favorites") {
       return {
         title: "No favorite problems yet",
         description:
-          "Use the heart icon on any problem to save it to your favorites.",
+          "Save problems you want to revisit by using the heart icon on any problem.",
+        cta: "Explore Questions",
+      };
+    }
+    if (collection === "important") {
+      return {
+        title: "No important problems yet",
+        description:
+          "Mark problems as important from a problem page or sheet row.",
+        cta: "Browse Problems",
+      };
+    }
+    if (collection === "revision") {
+      return {
+        title: "No problems in your revision queue yet",
+        description:
+          "Accepted solves can automatically enter your revision queue.",
         cta: "Explore Questions",
       };
     }
@@ -404,24 +450,16 @@ export const FavouritesPage: FC<FavouritesPageProps> = ({
 
   return (
     <div className="co-page ax-page mp-page">
-      <header className="ax-header">
+      <header className="ax-header mp-header">
         <div className="mp-header-main">
-          <p className="ax-kicker">Problem library</p>
-          <h1 className="co-title">
-            <Heart size={22} aria-hidden className="ax-icon" />
+          <p className="ax-kicker">PROBLEM LIBRARY</p>
+          <h1 className="co-title flex items-center gap-2">
+            <Heart size={22} aria-hidden className="ax-icon text-rose-500" />
             My Problems
           </h1>
           <p className="ax-lede">
-            Your saved problems, favorites, important questions, and revision
-            items in one place.
+            Organize the problems you want to revisit, practice, and master.
           </p>
-          <div className="ax-trust-row">
-            <span className="mp-info-note">
-              <Info size={14} aria-hidden />
-              Favorites use the heart icon. Older saves from when the sheet used
-              “favourites” remain available under Bookmarked.
-            </span>
-          </div>
         </div>
       </header>
 
@@ -436,271 +474,222 @@ export const FavouritesPage: FC<FavouritesPageProps> = ({
         />
       ) : null}
 
-      <div className="ax-layout">
-        <section className="co-panel ax-panel" aria-label="Overview">
-          <div className="ax-section-head">
-            <div>
-              <p className="ax-kicker">Overview</p>
-              <h2 className="ax-section-title">Your collections</h2>
-              <p className="ax-section-meta">
-                Counts from your personalization summary.
-              </p>
-            </div>
-          </div>
-          <div className="ax-summary ax-summary-5 mp-overview">
-            {(
-              [
-                ["Favorites", overview.favorites, "Preferred", "favorites"],
-                ["Bookmarked", overview.bookmarked, "Saved problems", "bookmarked"],
-                ["Important", overview.important, "Marked important", "important"],
-                ["Revision", overview.revision, "In revision", "revision"],
-                ["Total", overview.total, "Favorites + bookmarks", "all"],
-              ] as const
-            ).map(([label, value, hint, key]) => (
+      <div className="ax-layout mp-layout">
+        {/* Collection Summary horizontal cards */}
+        <section className="co-panel ax-panel mp-summary-panel" aria-label="Overview">
+          <div className="mp-summary-grid">
+            <button
+              type="button"
+              className={cn(
+                "mp-summary-card",
+                collection === "favorites" && "is-active"
+              )}
+              onClick={() => setCollectionAndReset("favorites")}
+            >
+              <div className="mp-summary-head">
+                <Heart size={15} className="text-rose-500" />
+                <span>Favorites</span>
+              </div>
+              <strong className="mp-summary-val">
+                {formatStatCount(overview.favorites, loading)}
+              </strong>
+            </button>
+
+            <button
+              type="button"
+              className={cn(
+                "mp-summary-card",
+                collection === "bookmarked" && "is-active"
+              )}
+              onClick={() => setCollectionAndReset("bookmarked")}
+            >
+              <div className="mp-summary-head">
+                <Bookmark size={15} className="text-primary" />
+                <span>Bookmarked</span>
+                <span
+                  className="mp-info-tooltip"
+                  title="Favorites use the heart icon. Older saves from when the sheet used favourites remain available under Bookmarked."
+                >
+                  <Info size={13} className="text-muted-foreground" />
+                </span>
+              </div>
+              <strong className="mp-summary-val">
+                {formatStatCount(overview.bookmarked, loading)}
+              </strong>
+            </button>
+
+            <button
+              type="button"
+              className={cn(
+                "mp-summary-card",
+                collection === "important" && "is-active"
+              )}
+              onClick={() => setCollectionAndReset("important")}
+            >
+              <div className="mp-summary-head">
+                <Star size={15} className="text-amber-400" />
+                <span>Important</span>
+              </div>
+              <strong className="mp-summary-val">
+                {formatStatCount(overview.important, loading)}
+              </strong>
+            </button>
+
+            <button
+              type="button"
+              className={cn(
+                "mp-summary-card",
+                collection === "revision" && "is-active"
+              )}
+              onClick={() => setCollectionAndReset("revision")}
+            >
+              <div className="mp-summary-head">
+                <RotateCcw size={15} className="text-indigo-400" />
+                <span>Revision</span>
+              </div>
+              <strong className="mp-summary-val">
+                {formatStatCount(overview.revision, loading)}
+              </strong>
+            </button>
+
+            {summary != null ? (
               <button
-                key={key}
                 type="button"
                 className={cn(
-                  "ax-stat",
-                  collection === key && "is-active"
+                  "mp-summary-card",
+                  collection === "all" && "is-active"
                 )}
-                onClick={() => setCollectionAndReset(key)}
+                onClick={() => setCollectionAndReset("all")}
               >
-                <span className="ax-stat-label">{label}</span>
-                <strong className="ax-stat-value">
-                  {summary == null && loading ? "—" : value}
+                <div className="mp-summary-head">
+                  <Circle size={15} className="text-emerald-400" />
+                  <span>All Saved</span>
+                </div>
+                <strong className="mp-summary-val">
+                  {formatStatCount(overview.total, loading)}
                 </strong>
-                <span className="ax-stat-hint">{hint}</span>
               </button>
-            ))}
+            ) : null}
           </div>
         </section>
 
-        <section className="co-panel ax-panel" aria-label="Progress">
-          <div className="ax-section-head">
+        {/* Main Problem Workspace */}
+        <section className="co-panel ax-panel mp-workspace-panel" aria-label="Problems">
+          <div className="mp-workspace-head">
             <div>
-              <p className="ax-kicker">Progress</p>
-              <h2 className="ax-section-title">Solving progress</h2>
+              <p className="ax-kicker">WORKSPACE</p>
+              <h2 className="ax-section-title">Problem Library</h2>
               <p className="ax-section-meta">
-                Based on the current collection list
-                {collection === "favorites" || collection === "all"
-                  ? " (favorites)"
-                  : collection === "bookmarked"
-                    ? " (bookmarked)"
-                    : ""}.
+                Progress in {collectionName}:{" "}
+                {loading ? (
+                  <Skeleton className="inline-block h-3.5 w-52 align-middle ml-1" />
+                ) : (
+                  <>
+                    <span className="font-semibold text-main">
+                      Solved {stats.solved} · Attempted {stats.attempted} · Unsolved {stats.unsolved}
+                    </span>{" "}
+                    (Easy {stats.easy} · Medium {stats.medium} · Hard {stats.hard})
+                  </>
+                )}
               </p>
             </div>
-          </div>
-          <div className="ax-metrics ax-metrics-3 mp-progress">
-            {(
-              [
-                ["Solved", stats.solved],
-                ["Attempted", stats.attempted],
-                ["Unsolved", stats.unsolved],
-              ] as const
-            ).map(([label, value]) => (
-              <div key={label} className="ax-metric">
-                <span className="ax-metric-label">{label}</span>
-                <strong className="ax-metric-value">
-                  {loading && !isIdOnlyCollection ? (
-                    <Skeleton className="h-7 w-10" />
-                  ) : (
-                    value
+
+            <div className="mp-tabs" role="tablist" aria-label="Collection">
+              {(
+                [
+                  ["all", "All"],
+                  ["favorites", "Favorites"],
+                  ["bookmarked", "Bookmarked"],
+                  ["important", "Important"],
+                  ["revision", "Revision"],
+                ] as const
+              ).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  role="tab"
+                  aria-selected={collection === id}
+                  className={cn(
+                    "mp-tab",
+                    collection === id && "is-active"
                   )}
-                </strong>
-              </div>
-            ))}
-          </div>
-          <div className="ax-diff-row" style={{ marginTop: 12 }}>
-            <div className="ax-diff-chip">
-              <span>Easy</span>
-              <strong>{loading ? "—" : stats.easy}</strong>
-            </div>
-            <div className="ax-diff-chip">
-              <span>Medium</span>
-              <strong>{loading ? "—" : stats.medium}</strong>
-            </div>
-            <div className="ax-diff-chip">
-              <span>Hard</span>
-              <strong>{loading ? "—" : stats.hard}</strong>
+                  onClick={() => setCollectionAndReset(id)}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
           </div>
-        </section>
 
-        <section className="co-panel ax-panel" aria-label="Problems">
-          <div className="ax-section-head">
-            <div>
-              <p className="ax-kicker">Problems</p>
-              <h2 className="ax-section-title">Problem library</h2>
-              <p className="ax-section-meta">
-                Filter and browse your saved problems.
-              </p>
-            </div>
-            <Button
-              type="button"
-              size="sm"
-              variant="secondary"
-              className="mp-filters-toggle"
-              onClick={() => setFiltersOpen((v) => !v)}
-              aria-expanded={filtersOpen}
-            >
-              Filters
-            </Button>
-          </div>
+          {/* Sleek Toolbar */}
+          <div className="mp-toolbar">
+            <label className="mp-search">
+              <Search size={14} aria-hidden />
+              <input
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                placeholder="Search problems by title..."
+                aria-label="Search problems"
+                disabled={isIdOnlyCollection}
+              />
+              {searchInput ? (
+                <button
+                  type="button"
+                  className="mp-search-clear"
+                  onClick={() => setSearchInput("")}
+                  aria-label="Clear search input"
+                  title="Clear search"
+                >
+                  ✕
+                </button>
+              ) : null}
+            </label>
 
-          <div
-            className={cn(
-              "ax-filters mp-filters",
-              filtersOpen && "is-open"
-            )}
-          >
-            <div className="ax-filter-row">
-              <span className="ax-filter-label">Collection</span>
-              <div className="ax-chips" role="tablist" aria-label="Collection">
-                {(
-                  [
-                    ["all", "All"],
-                    ["favorites", "Favorites"],
-                    ["bookmarked", "Bookmarked"],
-                    ["important", "Important"],
-                    ["revision", "Revision"],
-                  ] as const
-                ).map(([id, label]) => (
-                  <button
-                    key={id}
-                    type="button"
-                    role="tab"
-                    aria-selected={collection === id}
-                    className={cn(
-                      "ax-chip",
-                      collection === id && "ax-chip-active"
-                    )}
-                    onClick={() => setCollectionAndReset(id)}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="ax-filter-row">
-              <span className="ax-filter-label">Difficulty</span>
-              <div className="ax-chips" role="group" aria-label="Difficulty">
-                {(
-                  [
-                    ["all", "All"],
-                    ["easy", "Easy"],
-                    ["medium", "Medium"],
-                    ["hard", "Hard"],
-                  ] as const
-                ).map(([id, label]) => (
-                  <button
-                    key={id}
-                    type="button"
-                    className={cn(
-                      "ax-chip",
-                      difficulty === id && "ax-chip-active"
-                    )}
-                    aria-pressed={difficulty === id}
-                    disabled={isIdOnlyCollection}
-                    onClick={() => {
-                      setDifficulty(id);
-                      setPage(1);
-                    }}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="ax-filter-row">
-              <span className="ax-filter-label">Status</span>
-              <div className="ax-chips" role="group" aria-label="Status">
-                {(
-                  [
-                    ["all", "All"],
-                    ["solved", "Solved"],
-                    ["attempted", "Attempted"],
-                    ["unsolved", "Unsolved"],
-                  ] as const
-                ).map(([id, label]) => (
-                  <button
-                    key={id}
-                    type="button"
-                    className={cn(
-                      "ax-chip",
-                      status === id && "ax-chip-active"
-                    )}
-                    aria-pressed={status === id}
-                    disabled={isIdOnlyCollection}
-                    onClick={() => {
-                      setStatus(id);
-                      setPage(1);
-                    }}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="ax-filter-row">
-              <span className="ax-filter-label">Access</span>
-              <div className="ax-chips" role="group" aria-label="Access">
-                {(
-                  [
-                    ["all", "All"],
-                    ["free", "Free"],
-                    ["premium", "Premium"],
-                  ] as const
-                ).map(([id, label]) => (
-                  <button
-                    key={id}
-                    type="button"
-                    className={cn(
-                      "ax-chip",
-                      accessType === id && "ax-chip-active"
-                    )}
-                    aria-pressed={accessType === id}
-                    disabled={isIdOnlyCollection}
-                    onClick={() => {
-                      setAccessType(id);
-                      setPage(1);
-                    }}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="ax-filter-row mp-filter-controls">
-              <label className="mp-search">
-                <Search size={14} aria-hidden />
-                <input
-                  value={searchInput}
-                  onChange={(e) => setSearchInput(e.target.value)}
-                  placeholder="Search problems…"
-                  aria-label="Search problems"
-                  disabled={isIdOnlyCollection}
-                />
-              </label>
+            <div className="mp-toolbar-selects">
               <select
-                value={sort}
-                aria-label="Sort"
+                value={difficulty}
+                aria-label="Difficulty"
                 disabled={isIdOnlyCollection}
                 onChange={(e) => {
-                  setSort(e.target.value as FavouriteSort);
+                  setDifficulty(e.target.value);
                   setPage(1);
                 }}
               >
-                <option value="recent">Recently Added</option>
-                <option value="oldest">Oldest Added</option>
-                <option value="title_asc">Title A-Z</option>
-                <option value="title_desc">Title Z-A</option>
-                <option value="difficulty">Difficulty</option>
+                <option value="all">Difficulty: All</option>
+                <option value="easy">Easy</option>
+                <option value="medium">Medium</option>
+                <option value="hard">Hard</option>
               </select>
+
+              <select
+                value={status}
+                aria-label="Status"
+                disabled={isIdOnlyCollection}
+                onChange={(e) => {
+                  setStatus(e.target.value as FavouriteSolvedFilter);
+                  setPage(1);
+                }}
+              >
+                <option value="all">Status: All</option>
+                <option value="solved">Solved</option>
+                <option value="attempted">Attempted</option>
+                <option value="unsolved">Unsolved</option>
+              </select>
+
+              <select
+                value={accessType}
+                aria-label="Access"
+                disabled={isIdOnlyCollection}
+                onChange={(e) => {
+                  setAccessType(e.target.value as FavouriteAccessFilter);
+                  setPage(1);
+                }}
+              >
+                <option value="all">Access: All</option>
+                <option value="free">Free</option>
+                <option value="premium">Premium</option>
+              </select>
+
               {categories.length > 0 && !isIdOnlyCollection ? (
                 <select
                   value={category}
@@ -718,6 +707,22 @@ export const FavouritesPage: FC<FavouritesPageProps> = ({
                   ))}
                 </select>
               ) : null}
+
+              <select
+                value={sort}
+                aria-label="Sort"
+                disabled={isIdOnlyCollection}
+                onChange={(e) => {
+                  setSort(e.target.value as FavouriteSort);
+                  setPage(1);
+                }}
+              >
+                <option value="recent">Sort: Recently Added</option>
+                <option value="oldest">Sort: Oldest Added</option>
+                <option value="title_asc">Sort: Title A-Z</option>
+                <option value="title_desc">Sort: Title Z-A</option>
+                <option value="difficulty">Sort: Difficulty</option>
+              </select>
             </div>
           </div>
 
@@ -778,17 +783,29 @@ export const FavouritesPage: FC<FavouritesPageProps> = ({
             <EmptyState
               compact
               icon={<Search size={18} strokeWidth={1.75} aria-hidden />}
-              title="No cards match the current filter"
-              description="Try adjusting collection, difficulty, status, or search."
+              title="No problems match your filters"
+              description="Try adjusting your search terms or clearing active filters."
               action={
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="secondary"
-                  onClick={resetFilters}
-                >
-                  Clear filters
-                </Button>
+                <div className="flex items-center gap-2">
+                  {search ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => setSearchInput("")}
+                    >
+                      Clear search
+                    </Button>
+                  ) : null}
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    onClick={resetFilters}
+                  >
+                    Clear filters
+                  </Button>
+                </div>
               }
             />
           ) : null}
@@ -861,6 +878,7 @@ export const FavouritesPage: FC<FavouritesPageProps> = ({
                     collection === "favorites" ||
                     collection === "all" ||
                     Boolean(p.isFavourite);
+                  const title = p.title || "Untitled Problem";
                   return (
                     <li key={pid} className={`mp-row status-${solvedStatus}`}>
                       {collection === "bookmarked" ? (
@@ -905,7 +923,9 @@ export const FavouritesPage: FC<FavouritesPageProps> = ({
                         className="mp-main"
                         onClick={() => onSelectProblem(p)}
                       >
-                        <span className="mp-name">{p.title}</span>
+                        <span className="mp-name" title={title}>
+                          {title}
+                        </span>
                         <span className="mp-meta">
                           <span className={`mp-diff mp-diff-${diff}`}>
                             {diff}

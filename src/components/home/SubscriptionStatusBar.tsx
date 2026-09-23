@@ -1,11 +1,11 @@
 import { useState, type FC } from "react";
 import { Crown, ExternalLink, Loader2 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
-import { isPremium, type PublicSubscription } from "../../access/accessModel";
+import { isPremium } from "../../access/accessModel";
 import { authApi } from "../../api/authApi";
 import { billingApi } from "../../api/billingApi";
 import { Button } from "../ui/button";
-import { PremiumBadge } from "../access/PremiumBadge";
+import { Badge } from "../ui/badge";
 
 function formatDate(iso?: string | null): string | null {
   if (!iso) return null;
@@ -18,20 +18,7 @@ function formatDate(iso?: string | null): string | null {
   });
 }
 
-function statusLabel(sub?: PublicSubscription | null): string {
-  if (!sub || sub.plan !== "PREMIUM") return "Free";
-  if (sub.status === "grace") return "Premium (grace)";
-  if (sub.status === "canceled" && sub.cancelAtPeriodEnd) {
-    return "Premium (cancels at period end)";
-  }
-  if (sub.status === "active") return "Premium";
-  return `Premium (${sub.status})`;
-}
 
-/**
- * Compact entitlement strip — plan/expiry from AuthService snapshot only.
- * Uses existing free-home card + PremiumBadge language (no new Premium theme).
- */
 export const SubscriptionStatusBar: FC<{
   onUpgraded?: () => void;
 }> = ({ onUpgraded }) => {
@@ -73,8 +60,8 @@ export const SubscriptionStatusBar: FC<{
       };
       setMsg(
         anyErr?.response?.data?.message ||
-          anyErr?.message ||
-          "Unable to start checkout"
+        anyErr?.message ||
+        "Unable to start checkout"
       );
     } finally {
       setBusy(false);
@@ -100,8 +87,8 @@ export const SubscriptionStatusBar: FC<{
       };
       setMsg(
         anyErr?.response?.data?.message ||
-          anyErr?.message ||
-          "Unable to update subscription"
+        anyErr?.message ||
+        "Unable to update subscription"
       );
     } finally {
       setBusy(false);
@@ -110,24 +97,24 @@ export const SubscriptionStatusBar: FC<{
 
   return (
     <section
-      className="free-home-card free-home-subbar"
-      aria-label="Subscription status"
+      className={`free-home-card free-home-subbar ${premium ? "is-premium" : "is-free"}`}
+      aria-label="Account and subscription status"
     >
       <div className="free-home-subbar-main">
         <div className="free-home-subbar-title">
-          <Crown size={16} strokeWidth={1.75} className="text-warning" aria-hidden />
-          <strong>{statusLabel(sub)}</strong>
-          {premium ? <PremiumBadge /> : null}
+          <Crown size={15} strokeWidth={2} className={premium ? "text-warning" : "text-muted"} aria-hidden />
+          <Badge variant={premium ? "warning" : "default"}>
+            {premium ? "PREMIUM" : "FREE"}
+          </Badge>
+          <strong className="free-home-subbar-label">
+            {premium ? "Your premium learning experience is active." : "Upgrade for editorials, company preparation, analytics and AI assist."}
+          </strong>
         </div>
-        <p className="free-home-muted">
-          {premium
-            ? expiry
-              ? `Access through ${expiry}${
-                  sub?.cancelAtPeriodEnd ? " · cancels then" : ""
-                }`
-              : "Your advanced preparation features are unlocked."
-            : "Upgrade for editorials, company prep, analytics, and AI assist."}
-        </p>
+        {expiry && premium ? (
+          <p className="free-home-muted" style={{ marginTop: 2 }}>
+            Access through {expiry}{sub?.cancelAtPeriodEnd ? " · cancels at period end" : ""}
+          </p>
+        ) : null}
         {msg ? (
           <p className="free-home-muted" role="status">
             {msg}
@@ -136,20 +123,22 @@ export const SubscriptionStatusBar: FC<{
       </div>
       <div className="free-home-subbar-actions">
         {premium ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="secondary"
-            onClick={() => void handleManage()}
-            disabled={busy}
-          >
-            {busy ? (
-              <Loader2 size={14} className="animate-spin" aria-hidden />
-            ) : (
-              <ExternalLink size={14} aria-hidden />
-            )}
-            {sub?.cancelAtPeriodEnd ? "Resume plan" : "Manage subscription"}
-          </Button>
+          sub?.cancelAtPeriodEnd ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              onClick={() => void handleManage()}
+              disabled={busy}
+            >
+              {busy ? (
+                <Loader2 size={14} className="animate-spin" aria-hidden />
+              ) : (
+                <ExternalLink size={14} aria-hidden />
+              )}
+              Resume plan
+            </Button>
+          ) : null
         ) : (
           <Button
             type="button"

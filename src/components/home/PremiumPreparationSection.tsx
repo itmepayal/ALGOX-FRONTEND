@@ -4,7 +4,6 @@ import {
   Brain,
   Briefcase,
   ClipboardList,
-  Crown,
   LineChart,
   Loader2,
   RotateCcw,
@@ -31,8 +30,8 @@ import { normalizeDifficulty } from "../../utils/problemUtils";
 import { getProblemId } from "../../utils/workspacePersistence";
 import { EmptyState } from "../ui/empty-state";
 import { UpgradePrompt } from "../access/UpgradePrompt";
-import { PremiumBadge } from "../access/PremiumBadge";
 import { Button } from "../ui/button";
+import { Badge } from "../ui/badge";
 import { companyApi, type CompanyCard } from "../../api/companyApi";
 import type { FreeHomeNavTab } from "./types";
 
@@ -272,48 +271,49 @@ export const PremiumPreparationSection: FC<PremiumPreparationSectionProps> = ({
   if (!premium) {
     return (
       <section
-        className="free-home-prep"
+        className="free-home-card free-home-prep-card"
         aria-labelledby="premium-prep-locked"
       >
-        <header className="free-home-prep-head">
-          <h2 id="premium-prep-locked" className="free-home-section-title">
+        <div className="free-home-card-head">
+          <h2 id="premium-prep-locked" className="free-home-section-title" style={{ margin: 0 }}>
             Your Preparation
           </h2>
-          <p className="free-home-muted">
-            Premium preparation features for your interview journey.
+          <Badge variant="warning">PREMIUM</Badge>
+        </div>
+        <div className="free-home-prep-content">
+          <h3 className="free-home-prep-headline">Unlock personalized interview preparation</h3>
+          <p className="free-home-muted" style={{ marginBottom: 14 }}>
+            Get company-specific practice, revision coaching, mock interviews, personalized recommendations and AI assistance.
           </p>
-        </header>
-
-        <article className="free-home-premium-card" aria-label="AlgoPath Premium">
-          <div className="free-home-premium-badge">
-            <Crown size={14} strokeWidth={2} aria-hidden />
-            <PremiumBadge label="Premium" />
+          <ul className="free-home-prep-features">
+            <li>✓ Company preparation</li>
+            <li>✓ Revision coaching</li>
+            <li>✓ Mock interviews</li>
+            <li>✓ Personalized recommendations</li>
+            <li>✓ AI assist</li>
+          </ul>
+          <div style={{ marginTop: 16 }}>
+            <Button
+              type="button"
+              size="sm"
+              disabled={upgradeBusy}
+              onClick={() => void startUpgrade()}
+              aria-label="Upgrade to Premium"
+            >
+              {upgradeBusy ? (
+                <>
+                  <Loader2 size={14} className="animate-spin" aria-hidden />
+                  Processing…
+                </>
+              ) : (
+                <>
+                  Upgrade to Premium
+                  <ArrowRight size={14} aria-hidden />
+                </>
+              )}
+            </Button>
           </div>
-          <h3 className="free-home-premium-title">Unlock Premium preparation</h3>
-          <p className="free-home-premium-desc">
-            Personalized recommendations, company sets, revision coaching,
-            interview readiness, and AI assist.
-          </p>
-          <Button
-            type="button"
-            size="sm"
-            disabled={upgradeBusy}
-            onClick={() => void startUpgrade()}
-            aria-label="Upgrade to Premium"
-          >
-            {upgradeBusy ? (
-              <>
-                <Loader2 size={14} className="animate-spin" aria-hidden />
-                Processing…
-              </>
-            ) : (
-              <>
-                Upgrade to Premium
-                <ArrowRight size={14} aria-hidden />
-              </>
-            )}
-          </Button>
-        </article>
+        </div>
       </section>
     );
   }

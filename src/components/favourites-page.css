@@ -33,31 +33,137 @@
   color: var(--primary);
 }
 
-.mp-overview button.ax-stat {
-  width: 100%;
+/* Collection summary horizontal cards (~72-90px height) */
+.mp-summary-panel {
+  padding: 12px 16px;
 }
 
-.mp-progress .ax-metric-value {
-  min-height: 1.6rem;
+.mp-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px;
 }
 
-.mp-filters-toggle {
-  display: none;
+.mp-summary-card {
+  height: 76px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
 }
 
-.mp-filter-controls {
-  gap: 8px;
+.mp-summary-card:hover {
+  border-color: color-mix(in srgb, var(--primary) 35%, var(--border-subtle));
+  background: var(--bg-card-hover, var(--bg-elevated));
+}
+
+.mp-summary-card.is-active {
+  border-color: color-mix(in srgb, var(--primary) 60%, var(--border-subtle));
+  background: color-mix(in srgb, var(--primary) 10%, var(--bg-card));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 30%, transparent);
+}
+
+.mp-summary-head {
+  display: flex;
   align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  font-weight: 650;
+  color: var(--text-muted);
+}
+
+.mp-info-tooltip {
+  display: inline-flex;
+  align-items: center;
+  cursor: help;
+  margin-left: 2px;
+}
+
+.mp-summary-val {
+  font-size: 1.35rem;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+  color: var(--text-main);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Workspace panel & Header */
+.mp-workspace-panel {
+  padding: 20px;
+}
+
+.mp-workspace-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 14px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.mp-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--bg-card) 90%, black);
+  overflow-x: auto;
+}
+
+.mp-tab {
+  padding: 5px 12px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.mp-tab:hover {
+  color: var(--text-main);
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+}
+
+.mp-tab.is-active {
+  background: var(--primary);
+  color: #ffffff;
+  font-weight: 650;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+/* Toolbar */
+.mp-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
 }
 
 .mp-search {
-  flex: 1 1 180px;
+  flex: 1 1 240px;
   display: flex;
   align-items: center;
   gap: 8px;
   min-width: 0;
-  padding: 0 10px;
-  border-radius: 10px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 8px;
   border: 1px solid var(--border-subtle);
   background: var(--bg-card);
   color: var(--text-muted);
@@ -69,20 +175,47 @@
   background: transparent;
   color: var(--text-main);
   font: inherit;
-  padding: 8px 0;
+  font-size: 0.82rem;
   outline: none;
 }
 
-.mp-filter-controls select {
+.mp-search-clear {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.85rem;
+  padding: 0 4px;
+  line-height: 1;
+  transition: color 0.15s ease;
+}
+
+.mp-search-clear:hover {
+  color: var(--text-main);
+}
+
+.mp-toolbar-selects {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.mp-toolbar-selects select {
   height: 36px;
-  min-width: 140px;
   padding: 0 10px;
-  border-radius: 10px;
+  border-radius: 8px;
   border: 1px solid var(--border-subtle);
   background: var(--bg-card);
   color: var(--text-main);
   font: inherit;
   font-size: 0.8rem;
+  font-weight: 550;
+  cursor: pointer;
+}
+
+.mp-toolbar-selects select:hover {
+  border-color: color-mix(in srgb, var(--primary) 35%, var(--border-subtle));
 }
 
 .mp-active-filters {

@@ -71,7 +71,6 @@ import {
 import { mockInterviewApi } from "../api/mockInterviewApi";
 import { InterviewTimer } from "./InterviewTimer";
 import { AiAssistantPanel } from "./AiAssistantPanel";
-import { AlgoPathAiPremiumLanding } from "./AlgoPathAiPremiumLanding";
 import { SubmissionAnalyticsPanel } from "./SubmissionAnalyticsPanel";
 import { SpacedRepetitionPanel } from "./SpacedRepetitionPanel";
 import { canAccess } from "../access/canAccess";
@@ -207,7 +206,6 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
     }
   }, [problemPage, debouncedSearch, selectedDifficulty, accessFilter]);
 
-  // Workspace chrome: status sync only (no 1s parent tick — InterviewTimer owns display)
   useEffect(() => {
     if (!activeMockInterviewSessionId) {
       setActiveMockInterviewMeta(null);
@@ -250,7 +248,6 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
     };
   }, [activeMockInterviewSessionId]);
 
-  // Soft-refresh interview when returning from Problem Workspace (panel stays mounted).
   const prevInterviewTabRef = useRef(false);
   useEffect(() => {
     const onInterview = activeTab === "interview";
@@ -361,11 +358,11 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
           );
           return bm
             ? {
-                ...p,
-                isBookmarked: true,
-                likeCount: bm.likeCount ?? p.likeCount,
-                dislikeCount: bm.dislikeCount ?? p.dislikeCount,
-              }
+              ...p,
+              isBookmarked: true,
+              likeCount: bm.likeCount ?? p.likeCount,
+              dislikeCount: bm.dislikeCount ?? p.dislikeCount,
+            }
             : { ...p, isBookmarked: ids.has(pid) };
         })
       );
@@ -924,11 +921,11 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
       const data = err.response?.data;
       const fieldErrors = Array.isArray(data?.errors)
         ? data.errors
-            .map((e: { path?: string; message?: string }) =>
-              e.path ? `${e.path}: ${e.message}` : e.message
-            )
-            .filter(Boolean)
-            .join("; ")
+          .map((e: { path?: string; message?: string }) =>
+            e.path ? `${e.path}: ${e.message}` : e.message
+          )
+          .filter(Boolean)
+          .join("; ")
         : "";
       persistError =
         fieldErrors ||
@@ -1044,7 +1041,7 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
     const totalHint =
       selectedProblem.totalTestcaseCount ??
       (selectedProblem.publicTestcaseCount ?? 0) +
-        (selectedProblem.hiddenTestcaseCount ?? 0);
+      (selectedProblem.hiddenTestcaseCount ?? 0);
 
     // Optimistic pending card — avoids stacking "Submitting..." + "Judging..."
     setSubmissionResult({
@@ -1238,14 +1235,14 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
     return cats.size
       ? [...cats]
       : [
-          "Arrays",
-          "Strings",
-          "Binary Search",
-          "Linked List",
-          "Trees",
-          "Graphs",
-          "Dynamic Programming",
-        ];
+        "Arrays",
+        "Strings",
+        "Binary Search",
+        "Linked List",
+        "Trees",
+        "Graphs",
+        "Dynamic Programming",
+      ];
   }, [problems]);
 
   const bumpLearning = useCallback(() => {
@@ -1364,28 +1361,28 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
         <nav className="platform-navbar-nav" aria-label="Primary">
           {navItems.map(
             ({ id, label, icon: Icon, isPremiumNav, premiumLocked, premiumFeature, tooltip }) => (
-            <button
-              key={id}
-              type="button"
-              className={`platform-navbar-link ${activeTab === id ? "active" : ""}`}
-              aria-label={tooltip}
-              title={tooltip}
-              onClick={() =>
-                handlePlatformNav(id, premiumFeature, premiumLocked)
-              }
-            >
-              <span className="platform-navbar-link-icon" aria-hidden>
-                <Icon size={16} strokeWidth={1.75} />
-              </span>
-              <span className="platform-navbar-link-label">{label}</span>
-              {isPremiumNav ? (
-                <PremiumNavIndicator
-                  locked={premiumLocked}
-                  variant="navbar"
-                />
-              ) : null}
-            </button>
-          )
+              <button
+                key={id}
+                type="button"
+                className={`platform-navbar-link ${activeTab === id ? "active" : ""}`}
+                aria-label={tooltip}
+                title={tooltip}
+                onClick={() =>
+                  handlePlatformNav(id, premiumFeature, premiumLocked)
+                }
+              >
+                <span className="platform-navbar-link-icon" aria-hidden>
+                  <Icon size={16} strokeWidth={1.75} />
+                </span>
+                <span className="platform-navbar-link-label">{label}</span>
+                {isPremiumNav ? (
+                  <PremiumNavIndicator
+                    locked={premiumLocked}
+                    variant="navbar"
+                  />
+                ) : null}
+              </button>
+            )
           )}
         </nav>
 
@@ -1462,29 +1459,29 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
                 premiumFeature,
                 tooltip,
               }) => (
-              <button
-                key={id}
-                type="button"
-                aria-label={tooltip}
-                aria-current={activeTab === id ? "page" : undefined}
-                className={`platform-nav-item ${activeTab === id ? "active" : ""}`}
-                onClick={() =>
-                  handlePlatformNav(id, premiumFeature, premiumLocked)
-                }
-                title={tooltip}
-              >
-                <span className="platform-nav-icon">
-                  <Icon size={20} strokeWidth={1.75} />
-                  {isPremiumNav ? (
-                    <PremiumNavIndicator locked={premiumLocked} />
-                  ) : null}
-                </span>
-                <span className="platform-nav-tooltip" role="tooltip">
-                  {tooltip}
-                </span>
-                <span className="platform-nav-label">{label}</span>
-              </button>
-            )
+                <button
+                  key={id}
+                  type="button"
+                  aria-label={tooltip}
+                  aria-current={activeTab === id ? "page" : undefined}
+                  className={`platform-nav-item ${activeTab === id ? "active" : ""}`}
+                  onClick={() =>
+                    handlePlatformNav(id, premiumFeature, premiumLocked)
+                  }
+                  title={tooltip}
+                >
+                  <span className="platform-nav-icon">
+                    <Icon size={20} strokeWidth={1.75} />
+                    {isPremiumNav ? (
+                      <PremiumNavIndicator locked={premiumLocked} />
+                    ) : null}
+                  </span>
+                  <span className="platform-nav-tooltip" role="tooltip">
+                    {tooltip}
+                  </span>
+                  <span className="platform-nav-label">{label}</span>
+                </button>
+              )
             )}
           </nav>
           <div className="platform-sidebar-bottom">
@@ -1551,18 +1548,18 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
             activeTab !== "sessions" &&
             activeTab !== "calendar" &&
             activeTab !== "profile" && (
-            <header className="platform-topbar">
-              <span className="platform-topbar-title">
-                {activeTab === "profile" && "Profile & Settings"}
-              </span>
-              <div className="platform-topbar-actions">
-                <span className="platform-chip platform-chip-streak">
-                  <Flame size={14} fill="currentColor" aria-hidden />{" "}
-                  {streakInfo.current} Day Streak
+              <header className="platform-topbar">
+                <span className="platform-topbar-title">
+                  {activeTab === "profile" && "Profile & Settings"}
                 </span>
-              </div>
-            </header>
-          )}
+                <div className="platform-topbar-actions">
+                  <span className="platform-chip platform-chip-streak">
+                    <Flame size={14} fill="currentColor" aria-hidden />{" "}
+                    {streakInfo.current} Day Streak
+                  </span>
+                </div>
+              </header>
+            )}
 
           <main className="platform-content">
             {activeTab === "home" && (
@@ -1662,111 +1659,107 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
 
             {(activeTab === "interview" ||
               Boolean(activeMockInterviewSessionId)) && (
-              <div
-                hidden={activeTab !== "interview"}
-                aria-hidden={activeTab !== "interview"}
-              >
-                <PremiumGate
-                  feature="premium.mock_interview"
-                  title="Mock Interview"
-                  description="Timed mock interviews with real problem sets — Premium members only."
+                <div
+                  hidden={activeTab !== "interview"}
+                  aria-hidden={activeTab !== "interview"}
                 >
-                  <MockInterviewPanel
-                    refreshKey={mockInterviewSyncKey + learningRefreshKey}
-                    preferredCompany={preferredMockCompany}
-                    lastSubmission={(() => {
-                      const official = [...userSubmissions]
-                        .filter((s) => s.source !== "run")
-                        .sort((a, b) => {
-                          const ta = new Date(
-                            a.createdAt || a.updatedAt || 0
-                          ).getTime();
-                          const tb = new Date(
-                            b.createdAt || b.updatedAt || 0
-                          ).getTime();
-                          return tb - ta;
-                        })[0];
-                      if (!official) return null;
-                      const id = String(
-                        (official as any).id || (official as any)._id || ""
-                      );
-                      const problemId = String(official.problemId || "");
-                      return id && problemId ? { id, problemId } : null;
-                    })()}
-                    onActiveSessionChange={handleActiveMockSessionChange}
-                    onOpenProblem={(p, mockSid, interviewLanguage) => {
-                      setSelectedProblem(p);
-                      setProblemInLocation(p.slug);
-                      if (interviewLanguage) {
-                        setSelectedLanguage(interviewLanguage);
-                      } else if (activeMockInterviewMeta?.language) {
-                        setSelectedLanguage(activeMockInterviewMeta.language);
-                      }
-                      setActiveTab("problems");
-                      if (mockSid) {
-                        setActiveMockInterviewSessionId(mockSid);
-                        setActiveContestId(null);
-                        setActiveVirtualContestSessionId(null);
-                      }
-                    }}
-                    onViewSubmission={async ({
-                      submissionId,
-                      problemId,
-                      problemSlug,
-                    }) => {
-                      try {
-                        let problem: Problem | null = null;
-                        if (problemSlug) {
-                          try {
-                            const bySlug =
-                              await problemApi.getProblemBySlug(problemSlug);
-                            problem = bySlug.data || null;
-                          } catch {
-                            /* fall through */
-                          }
+                  <PremiumGate
+                    feature="premium.mock_interview"
+                    title="Mock Interview"
+                    description="Timed mock interviews with real problem sets — Premium members only."
+                  >
+                    <MockInterviewPanel
+                      refreshKey={mockInterviewSyncKey + learningRefreshKey}
+                      preferredCompany={preferredMockCompany}
+                      lastSubmission={(() => {
+                        const official = [...userSubmissions]
+                          .filter((s) => s.source !== "run")
+                          .sort((a, b) => {
+                            const ta = new Date(
+                              a.createdAt || a.updatedAt || 0
+                            ).getTime();
+                            const tb = new Date(
+                              b.createdAt || b.updatedAt || 0
+                            ).getTime();
+                            return tb - ta;
+                          })[0];
+                        if (!official) return null;
+                        const id = String(
+                          (official as any).id || (official as any)._id || ""
+                        );
+                        const problemId = String(official.problemId || "");
+                        return id && problemId ? { id, problemId } : null;
+                      })()}
+                      onActiveSessionChange={handleActiveMockSessionChange}
+                      onOpenProblem={(p, mockSid, interviewLanguage) => {
+                        setSelectedProblem(p);
+                        setProblemInLocation(p.slug);
+                        if (interviewLanguage) {
+                          setSelectedLanguage(interviewLanguage);
+                        } else if (activeMockInterviewMeta?.language) {
+                          setSelectedLanguage(activeMockInterviewMeta.language);
                         }
-                        if (!problem) {
-                          const byId =
-                            await problemApi.getProblemById(problemId);
-                          problem = byId.data || null;
-                        }
-                        if (!problem) return;
-                        const subRes =
-                          await submissionApi.getSubmissionById(submissionId);
-                        setSelectedProblem(problem);
-                        setProblemInLocation(problem.slug);
                         setActiveTab("problems");
-                        if (subRes?.data) {
-                          setSelectedSubmission(subRes.data);
+                        if (mockSid) {
+                          setActiveMockInterviewSessionId(mockSid);
+                          setActiveContestId(null);
+                          setActiveVirtualContestSessionId(null);
                         }
-                      } catch (err) {
-                        console.warn("View mock interview submission failed:", err);
-                      }
-                    }}
-                  />
-                </PremiumGate>
-              </div>
-            )}
+                      }}
+                      onViewSubmission={async ({
+                        submissionId,
+                        problemId,
+                        problemSlug,
+                      }) => {
+                        try {
+                          let problem: Problem | null = null;
+                          if (problemSlug) {
+                            try {
+                              const bySlug =
+                                await problemApi.getProblemBySlug(problemSlug);
+                              problem = bySlug.data || null;
+                            } catch {
+                              /* fall through */
+                            }
+                          }
+                          if (!problem) {
+                            const byId =
+                              await problemApi.getProblemById(problemId);
+                            problem = byId.data || null;
+                          }
+                          if (!problem) return;
+                          const subRes =
+                            await submissionApi.getSubmissionById(submissionId);
+                          setSelectedProblem(problem);
+                          setProblemInLocation(problem.slug);
+                          setActiveTab("problems");
+                          if (subRes?.data) {
+                            setSelectedSubmission(subRes.data);
+                          }
+                        } catch (err) {
+                          console.warn("View mock interview submission failed:", err);
+                        }
+                      }}
+                    />
+                  </PremiumGate>
+                </div>
+              )}
 
             {activeTab === "ai" && (
               <PremiumGate
                 feature="premium.ai"
                 title="AlgoPath AI"
-                description="AI learning assistant — Premium members only."
-                loadingFallback={
-                  <AlgoPathAiPremiumLanding state="loading" />
-                }
-                fallback={<AlgoPathAiPremiumLanding state="locked" />}
+                description="Get intelligent support throughout your DSA learning journey."
               >
                 <AiAssistantPanel
                   refreshKey={learningRefreshKey}
                   problemId={
                     selectedProblem
                       ? String(
-                          (selectedProblem as any).id ||
-                            (selectedProblem as any)._id ||
-                            ""
-                        ) || null
+                        (selectedProblem as any).id ||
+                        (selectedProblem as any)._id ||
+                        ""
+                      ) || null
                       : null
                   }
                   problemTitle={selectedProblem?.title || null}
@@ -1778,7 +1771,7 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
               <PremiumGate
                 feature="premium.analytics"
                 title="Analytics"
-                description="Deeper personal performance analytics — Premium members only."
+                description="Understand your solving progress and learning performance with detailed insights."
               >
                 <SubmissionAnalyticsPanel
                   refreshKey={learningRefreshKey}
@@ -1809,29 +1802,35 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
             )}
 
             {activeTab === "reviews" && (
-              <SpacedRepetitionPanel
-                refreshKey={learningRefreshKey}
-                onOpenProblem={async (pid) => {
-                  const local = problems.find(
-                    (x: any) =>
-                      String(x.id || x._id) === String(pid)
-                  );
-                  if (local) {
-                    setSelectedProblem(local);
-                    setActiveTab("problems");
-                    return;
-                  }
-                  try {
-                    const res = await problemApi.getProblemById(pid);
-                    if (res.data) {
-                      setSelectedProblem(res.data);
+              <PremiumGate
+                feature="premium.spaced_repetition"
+                title="Revision Queue"
+                description="Keep important problems organized and maintain a consistent revision routine."
+              >
+                <SpacedRepetitionPanel
+                  refreshKey={learningRefreshKey}
+                  onOpenProblem={async (pid) => {
+                    const local = problems.find(
+                      (x: any) =>
+                        String(x.id || x._id) === String(pid)
+                    );
+                    if (local) {
+                      setSelectedProblem(local);
                       setActiveTab("problems");
+                      return;
                     }
-                  } catch {
-                    /* leave user on reviews if problem cannot open */
-                  }
-                }}
-              />
+                    try {
+                      const res = await problemApi.getProblemById(pid);
+                      if (res.data) {
+                        setSelectedProblem(res.data);
+                        setActiveTab("problems");
+                      }
+                    } catch {
+                      /* leave user on reviews if problem cannot open */
+                    }
+                  }}
+                />
+              </PremiumGate>
             )}
 
             {activeTab === "calendar" && (

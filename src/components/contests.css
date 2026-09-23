@@ -2,7 +2,8 @@
 
 .ct-page {
   width: 100%;
-  max-width: none;
+  max-width: 1160px;
+  margin: 0 auto;
   box-sizing: border-box;
 }
 
@@ -418,7 +419,10 @@
   display: flex;
   flex-direction: column;
   gap: 0;
-  max-width: 920px;
+  width: 100%;
+  max-width: 1080px;
+  margin: 0 auto;
+  box-sizing: border-box;
 }
 
 .ct-hero {
@@ -554,6 +558,13 @@
   font-size: 0.72rem;
   font-weight: 600;
   color: var(--text-muted);
+}
+
+.ct-practice-premium-wrap {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 16px;
 }
 
 .ct-practice-block .ct-practice-body {
