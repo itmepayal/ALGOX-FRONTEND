@@ -147,7 +147,11 @@
    Tailwind spacing utilities (unlayered > @layer utilities). */
 
 html,
-body {
+body,
+#root {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   height: 100%;
 }
 

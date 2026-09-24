@@ -336,116 +336,6 @@ export const PremiumPreparationSection: FC<PremiumPreparationSectionProps> = ({
         )}
       </header>
 
-      {/* Weak Topics (premium prep framing) */}
-      <article className="free-home-card" aria-labelledby="prep-weak">
-        <div className="free-home-card-head">
-          <h3 id="prep-weak">Weak Topics</h3>
-        </div>
-        {weak.length === 0 ? (
-          <EmptyState
-            compact
-            title="No weak topics flagged"
-            description="Keep solving across categories to refine this view."
-          />
-        ) : (
-          <ul className="free-home-topics">
-            {weak.map((t) => (
-              <li key={t.name}>
-                <div className="free-home-topic-row">
-                  <strong>{t.name}</strong>
-                  <span className="free-home-muted">
-                    {t.solved}/{t.total} ({t.pct}%)
-                  </span>
-                </div>
-                <div className="free-home-bar thin">
-                  <span style={{ width: `${t.pct}%` }} />
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </article>
-
-      {/* Personalized recommendations */}
-      <article className="free-home-card" aria-labelledby="prep-recos">
-        <div className="free-home-card-head">
-          <h3 id="prep-recos">
-            <Sparkles size={16} aria-hidden /> Recommended Problems
-          </h3>
-        </div>
-        {personalized.length === 0 ? (
-          <EmptyState
-            compact
-            title="No personalized picks yet"
-            description="Solve more problems so recommendations can target your gaps."
-          />
-        ) : (
-          <ul className="free-home-list">
-            {personalized.map((p) => (
-              <li key={getProblemId(p) || p.slug}>
-                <button
-                  type="button"
-                  className="free-home-list-row"
-                  onClick={() => onSelectProblem(p)}
-                >
-                  <span className="free-home-list-main">
-                    <strong>{p.title}</strong>
-                    <span className="free-home-muted">
-                      {normalizeDifficulty(p.difficulty)}
-                      {p.category ? ` · ${p.category}` : ""}
-                    </span>
-                  </span>
-                  <ArrowRight size={14} aria-hidden />
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </article>
-
-      {/* Revision Due */}
-      <article className="free-home-card" aria-labelledby="prep-revision">
-        <div className="free-home-card-head">
-          <h3 id="prep-revision">
-            <RotateCcw size={16} aria-hidden /> Revision Due
-          </h3>
-          <button
-            type="button"
-            className="free-home-link"
-            onClick={() => onNavigate("reviews")}
-          >
-            Spaced reviews
-          </button>
-        </div>
-        {revisionProblems.length === 0 ? (
-          <EmptyState
-            compact
-            title="Revision queue empty"
-            description="Official ACCEPTED solves seed spaced-repetition cards. Open Reviews for due/overdue queues."
-          />
-        ) : (
-          <ul className="free-home-list">
-            {revisionProblems.map((p) => (
-              <li key={getProblemId(p) || p.slug}>
-                <button
-                  type="button"
-                  className="free-home-list-row"
-                  onClick={() => onSelectProblem(p)}
-                >
-                  <span className="free-home-list-main">
-                    <strong>{p.title}</strong>
-                    <span className="free-home-muted">
-                      {normalizeDifficulty(p.difficulty)}
-                    </span>
-                  </span>
-                  <ArrowRight size={14} aria-hidden />
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </article>
-
       {/* Company Preparation */}
       <article className="free-home-card" aria-labelledby="prep-company">
         <div className="free-home-card-head">
@@ -504,7 +394,10 @@ export const PremiumPreparationSection: FC<PremiumPreparationSectionProps> = ({
             <div>
               {readiness ? (
                 <>
-                  <p className="free-home-daily-title">{readiness.score}/100</p>
+                  <p className="free-home-kpi-value">
+                    {readiness.score}
+                    <span> / 100</span>
+                  </p>
                   <p className="free-home-muted">{readiness.label}</p>
                   <p className="free-home-muted" style={{ marginTop: 8 }}>
                     Prep heuristic from coverage/acceptance — not a mock interview
@@ -535,36 +428,41 @@ export const PremiumPreparationSection: FC<PremiumPreparationSectionProps> = ({
           {!allowAnalytics ? (
             <UpgradePrompt feature="premium.analytics" />
           ) : analytics ? (
-            <ul className="free-home-activity">
+            <ul className="free-home-stat-rows">
               <li>
-                Acceptance rate:{" "}
+                <span>Acceptance rate</span>
                 <strong>
                   {Math.round(Number(analytics.acceptanceRate || 0))}%
                 </strong>
               </li>
               <li>
-                Accepted / total:{" "}
+                <span>Accepted / total</span>
                 <strong>
-                  {analytics.acceptedSubmissions ?? 0}/
+                  {analytics.acceptedSubmissions ?? 0} /{" "}
                   {analytics.totalSubmissions ?? 0}
                 </strong>
               </li>
               <li>
-                Analytics streak:{" "}
-                <strong>{analytics.currentStreak ?? 0}</strong> (max{" "}
-                {analytics.maxStreak ?? 0})
+                <span>Analytics streak</span>
+                <strong>
+                  {analytics.currentStreak ?? 0}
+                  <span className="free-home-muted">
+                    {" "}
+                    (max {analytics.maxStreak ?? 0})
+                  </span>
+                </strong>
               </li>
               <li>
-                Topic signals:{" "}
+                <span>Topic signals</span>
                 <strong>{analytics.topicStrengths?.length ?? 0}</strong>
               </li>
-              <li>
+              <li className="free-home-stat-rows-action">
                 <button
                   type="button"
                   className="free-home-link"
                   onClick={() => onNavigate("analytics")}
                 >
-                  Open submission analytics
+                  Open submission analytics →
                 </button>
               </li>
             </ul>
@@ -661,7 +559,7 @@ export const PremiumPreparationSection: FC<PremiumPreparationSectionProps> = ({
           )}
         </article>
 
-        <article className="free-home-card" aria-labelledby="prep-ai">
+        <article className="free-home-card free-home-ai-card" aria-labelledby="prep-ai">
           <div className="free-home-card-head">
             <h3 id="prep-ai">
               <Brain size={16} aria-hidden /> AI Assistance
@@ -693,6 +591,116 @@ export const PremiumPreparationSection: FC<PremiumPreparationSectionProps> = ({
           </div>
         </article>
       </div>
+      {/* Weak Topics (premium prep framing) */}
+      <article className="free-home-card free-home-card-quiet" aria-labelledby="prep-weak">
+        <div className="free-home-card-head">
+          <h3 id="prep-weak">Weak Topics</h3>
+        </div>
+        {weak.length === 0 ? (
+          <EmptyState
+            compact
+            title="No weak topics flagged"
+            description="Keep solving across categories to refine this view."
+          />
+        ) : (
+          <ul className="free-home-topics">
+            {weak.map((t) => (
+              <li key={t.name}>
+                <div className="free-home-topic-row">
+                  <strong>{t.name}</strong>
+                  <span className="free-home-muted">
+                    {t.solved}/{t.total} ({t.pct}%)
+                  </span>
+                </div>
+                <div className="free-home-bar thin">
+                  <span style={{ width: `${t.pct}%` }} />
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </article>
+
+      {/* Personalized recommendations */}
+      <article className="free-home-card free-home-card-quiet" aria-labelledby="prep-recos">
+        <div className="free-home-card-head">
+          <h3 id="prep-recos">
+            <Sparkles size={16} aria-hidden /> Recommended Problems
+          </h3>
+        </div>
+        {personalized.length === 0 ? (
+          <EmptyState
+            compact
+            title="No personalized picks yet"
+            description="Solve more problems so recommendations can target your gaps."
+          />
+        ) : (
+          <ul className="free-home-list">
+            {personalized.map((p) => (
+              <li key={getProblemId(p) || p.slug}>
+                <button
+                  type="button"
+                  className="free-home-list-row"
+                  onClick={() => onSelectProblem(p)}
+                >
+                  <span className="free-home-list-main">
+                    <strong>{p.title}</strong>
+                    <span className="free-home-muted">
+                      {normalizeDifficulty(p.difficulty)}
+                      {p.category ? ` · ${p.category}` : ""}
+                    </span>
+                  </span>
+                  <ArrowRight size={14} aria-hidden />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </article>
+
+      {/* Revision Due */}
+      <article className="free-home-card free-home-card-quiet" aria-labelledby="prep-revision">
+        <div className="free-home-card-head">
+          <h3 id="prep-revision">
+            <RotateCcw size={16} aria-hidden /> Revision Due
+          </h3>
+          <button
+            type="button"
+            className="free-home-link"
+            onClick={() => onNavigate("reviews")}
+          >
+            Spaced reviews
+          </button>
+        </div>
+        {revisionProblems.length === 0 ? (
+          <EmptyState
+            compact
+            title="Revision queue empty"
+            description="Official ACCEPTED solves seed spaced-repetition cards. Open Reviews for due/overdue queues."
+          />
+        ) : (
+          <ul className="free-home-list">
+            {revisionProblems.map((p) => (
+              <li key={getProblemId(p) || p.slug}>
+                <button
+                  type="button"
+                  className="free-home-list-row"
+                  onClick={() => onSelectProblem(p)}
+                >
+                  <span className="free-home-list-main">
+                    <strong>{p.title}</strong>
+                    <span className="free-home-muted">
+                      {normalizeDifficulty(p.difficulty)}
+                    </span>
+                  </span>
+                  <ArrowRight size={14} aria-hidden />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </article>
+
     </section>
   );
 };

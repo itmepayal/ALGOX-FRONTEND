@@ -106,10 +106,10 @@ export const SubscriptionStatusBar: FC<{
           <Badge variant={premium ? "warning" : "default"}>
             {premium ? "PREMIUM" : "FREE"}
           </Badge>
-          <strong className="free-home-subbar-label">
-            {premium ? "Your premium learning experience is active." : "Upgrade for editorials, company preparation, analytics and AI assist."}
-          </strong>
         </div>
+        <strong className="free-home-subbar-label">
+          {premium ? "Your premium learning experience is active." : "Upgrade for editorials, company preparation, analytics and AI assist."}
+        </strong>
         {expiry && premium ? (
           <p className="free-home-muted" style={{ marginTop: 2 }}>
             Access through {expiry}{sub?.cancelAtPeriodEnd ? " · cancels at period end" : ""}

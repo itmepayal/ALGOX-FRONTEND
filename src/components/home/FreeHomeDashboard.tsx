@@ -858,6 +858,7 @@ export const FreeHomeDashboard: FC<FreeHomeDashboardProps> = ({
       {/* 1. DASHBOARD HEADER */}
       <header className="co-header free-home-welcome">
         <div>
+          <p className="free-home-kicker">Your learning overview</p>
           <h1 className="free-home-title">
             {getGreeting(firstName)} 👋
           </h1>
@@ -1174,7 +1175,8 @@ export const FreeHomeDashboard: FC<FreeHomeDashboardProps> = ({
             </div>
           </div>
 
-          <div style={{ marginTop: 12 }}>
+          <div className="free-home-progress-goals">
+            <div>
             <div className="free-home-goal-meta">
               <span>Weekly</span>
               <span>
@@ -1182,7 +1184,7 @@ export const FreeHomeDashboard: FC<FreeHomeDashboardProps> = ({
               </span>
             </div>
             <div
-              className="free-home-bar thin"
+              className="free-home-bar thin free-home-bar-week"
               role="progressbar"
               aria-valuenow={weekDone}
               aria-valuemin={0}
@@ -1194,7 +1196,7 @@ export const FreeHomeDashboard: FC<FreeHomeDashboardProps> = ({
             </div>
           </div>
 
-          <div style={{ marginTop: 12 }}>
+            <div>
             <div className="free-home-goal-meta">
               <span>Monthly</span>
               <span>
@@ -1202,7 +1204,7 @@ export const FreeHomeDashboard: FC<FreeHomeDashboardProps> = ({
               </span>
             </div>
             <div
-              className="free-home-bar thin"
+              className="free-home-bar thin free-home-bar-month"
               role="progressbar"
               aria-valuenow={monthDone}
               aria-valuemin={0}
@@ -1212,6 +1214,7 @@ export const FreeHomeDashboard: FC<FreeHomeDashboardProps> = ({
             >
               <span style={{ width: `${pct(monthDone, monthTarget)}%` }} />
             </div>
+            </div>
           </div>
         </section>
       </div>
@@ -1220,24 +1223,28 @@ export const FreeHomeDashboard: FC<FreeHomeDashboardProps> = ({
       <section aria-label="Key Metrics">
         <div className="free-home-metrics">
           <MetricCard
+            className="free-home-kpi"
             label="Problems Solved"
             value={solvedTotal}
             hint={`${attemptedCount} attempted`}
             icon={<Trophy size={16} />}
           />
           <MetricCard
+            className="free-home-kpi"
             label="Current Streak"
             value={`${streakCurrent} days`}
             hint={`Longest ${streakLongest} days`}
             icon={<CalendarDays size={16} />}
           />
           <MetricCard
+            className="free-home-kpi"
             label="Longest Streak"
             value={`${streakLongest} days`}
             hint="Longest streak"
             icon={<CalendarDays size={16} />}
           />
           <MetricCard
+            className="free-home-kpi"
             label="Contest Rating"
             value={
               sectionErrors.leaderboard
@@ -1345,7 +1352,7 @@ export const FreeHomeDashboard: FC<FreeHomeDashboardProps> = ({
       {/* 2-COLUMN MAIN CONTENT GRID */}
       <div className="free-home-split">
         {/* LEFT COLUMN */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+        <div className="free-home-col">
           {/* 6. CONTINUE LEARNING */}
           <section className="free-home-card" aria-labelledby="continue-learning-heading">
             <div className="free-home-card-head">
@@ -1415,6 +1422,7 @@ export const FreeHomeDashboard: FC<FreeHomeDashboardProps> = ({
                 <Button
                   type="button"
                   size="sm"
+                  className="free-home-continue-cta"
                   onClick={() => onNavigate("problems")}
                 >
                   Continue Learning <ArrowRight size={14} aria-hidden />
@@ -1564,7 +1572,7 @@ export const FreeHomeDashboard: FC<FreeHomeDashboardProps> = ({
         </div>
 
         {/* RIGHT COLUMN */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+        <div className="free-home-col">
           {/* 8. YOUR PREPARATION — PREMIUM SECTION */}
           <PremiumPreparationSection
             userId={userId}

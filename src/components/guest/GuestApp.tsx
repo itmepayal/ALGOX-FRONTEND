@@ -106,7 +106,7 @@ export const GuestApp: FC = () => {
           scrollToTop();
         }}
       />
-      <div className="guest-main">
+      <div className="guest-main guest-container">
         {!selectedProblem ? (
           <GuestHome />
         ) : (

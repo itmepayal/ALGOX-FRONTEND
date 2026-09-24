@@ -14,29 +14,88 @@ export const GuestFooter: FC<GuestFooterProps> = ({ onGoHome }) => {
 
   return (
     <footer className="guest-footer">
-      <div className="guest-footer-inner">
-        <div className="guest-footer-brand">
+      <div className="guest-footer-inner guest-container">
+        <button type="button" className="guest-footer-brand" onClick={onGoHome}>
           <BrandMark size={28} />
           <div>
             <strong>{platformName}</strong>
             <p>Structured DSA practice for technical interviews.</p>
           </div>
-        </div>
+        </button>
 
         <div className="guest-footer-cols">
           <div>
             <h3>Product</h3>
             <ul>
-              <li>
-                <button type="button" onClick={onGoHome}>
-                  Home
-                </button>
-              </li>
+              {(
+                [
+                  ["Problems", "Sign in to explore problems."],
+                  ["Sheets", "Sign in to open structured DSA sheets."],
+                  ["Learn", "Sign in to open the learning library."],
+                  ["Contests", "Sign in to browse contests."],
+                ] as const
+              ).map(([label, message]) => (
+                <li key={label}>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      openAuth({
+                        tab: "signup",
+                        title: "Create your AlgoPath account",
+                        message,
+                      })
+                    }
+                  >
+                    {label}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div>
+            <h3>Platform</h3>
+            <ul>
+              {(
+                [
+                  ["Discuss", "Sign in to read and join discussions."],
+                  ["Roadmaps", "Sign in to open roadmaps."],
+                  [
+                    "AI Assist",
+                    "AlgoPath AI offers daily Free credits. Premium raises the allowance.",
+                  ],
+                  ["Analytics", "Sign in to view analytics. Deeper insights are Premium."],
+                ] as const
+              ).map(([label, message]) => (
+                <li key={label}>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      openAuth({
+                        tab: "signup",
+                        title: "Create your AlgoPath account",
+                        message,
+                      })
+                    }
+                  >
+                    {label}
+                  </button>
+                </li>
+              ))}
             </ul>
           </div>
           <div>
             <h3>Account</h3>
             <ul>
+              <li>
+                <button
+                  type="button"
+                  onClick={() =>
+                    openAuth({ tab: "login", title: "Welcome back" })
+                  }
+                >
+                  Sign In
+                </button>
+              </li>
               <li>
                 <button
                   type="button"
@@ -50,24 +109,15 @@ export const GuestFooter: FC<GuestFooterProps> = ({ onGoHome }) => {
                   Get Started
                 </button>
               </li>
-              <li>
-                <button
-                  type="button"
-                  onClick={() =>
-                    openAuth({ tab: "login", title: "Welcome back" })
-                  }
-                >
-                  Login
-                </button>
-              </li>
             </ul>
           </div>
         </div>
       </div>
-      <div className="guest-footer-bottom">
+      <div className="guest-footer-bottom guest-container">
         <span>
           © {new Date().getFullYear()} {platformName}
         </span>
+        <span>Designed &amp; Developed by Payal Yadav</span>
       </div>
     </footer>
   );

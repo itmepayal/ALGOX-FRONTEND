@@ -3,31 +3,35 @@
 .admin-dash {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 24px;
+  width: 100%;
+  min-width: 0;
 }
 
 .admin-dash-header {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 16px;
 }
 
 .admin-dash-header h2 {
   margin: 0;
-  font-family: var(--admin-display, "Poppins", sans-serif);
-  font-size: 1.35rem;
+  font-family: var(--font-primary);
+  font-size: 1.5rem;
   font-weight: 700;
-  letter-spacing: -0.03em;
-  color: var(--admin-text);
+  letter-spacing: -0.02em;
+  color: var(--text-main);
+  line-height: 1.2;
 }
 
 .admin-dash-sub {
   margin: 4px 0 0;
-  font-size: 0.85rem;
-  color: var(--admin-muted);
+  font-size: 0.84rem;
+  color: var(--text-secondary);
   line-height: 1.45;
+  max-width: 42rem;
 }
 
 .admin-dash-actions {
@@ -39,31 +43,31 @@
 
 .admin-dash-updated {
   font-size: 0.72rem;
-  color: var(--admin-muted);
+  color: var(--text-muted);
   font-variant-numeric: tabular-nums;
 }
 
 .admin-dash-banner {
   padding: 10px 14px;
-  border-radius: var(--admin-radius-sm);
-  border: 1px solid color-mix(in srgb, var(--chart-2) 35%, var(--border));
-  background: color-mix(in srgb, var(--chart-2) 10%, transparent);
-  color: var(--foreground);
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--warning) 35%, var(--border-subtle));
+  background: color-mix(in srgb, var(--warning) 10%, var(--bg-card));
+  color: var(--text-main);
   font-size: 0.82rem;
 }
 
 .admin-seg {
   display: inline-flex;
-  border: 1px solid var(--admin-border);
-  border-radius: var(--admin-radius-sm);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
   overflow: hidden;
-  background: var(--admin-surface-2);
+  background: var(--bg-elevated);
 }
 
 .admin-seg button {
   border: none;
   background: transparent;
-  color: var(--admin-muted);
+  color: var(--text-muted);
   font: inherit;
   font-size: 0.75rem;
   font-weight: 600;
@@ -72,48 +76,192 @@
 }
 
 .admin-seg button:hover {
-  color: var(--admin-text);
-  background: color-mix(in srgb, var(--primary) 8%, transparent);
+  color: var(--text-main);
+  background: var(--primary-subtle);
 }
 
 .admin-seg button.active {
-  color: var(--primary-foreground, #fff);
-  background: var(--primary);
+  color: var(--text-main);
+  background: var(--primary-subtle);
+  box-shadow: inset 0 -2px 0 var(--primary);
 }
 
 .admin-seg button:focus-visible {
-  outline: 2px solid var(--ring);
-  outline-offset: -2px;
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--primary-subtle);
   z-index: 1;
 }
 
 .admin-dash-kpis {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
+  gap: 16px;
+  align-items: stretch;
+}
+
+.admin-dash-kpis > * {
+  height: 100%;
+  min-height: 112px;
+  min-width: 0;
+}
+
+.admin-dash-kpis .text-2xl {
+  font-size: 1.75rem;
+  line-height: 1.15;
+  letter-spacing: -0.03em;
+}
+
+.admin-dash-kpis .p-4 {
+  padding: 20px;
+}
+
+.admin-dash .bg-card {
+  background: var(--bg-card);
+  border-color: var(--border-subtle);
+  color: var(--text-main);
+  box-shadow: none;
+  border-radius: 12px;
+}
+
+.admin-dash .admin-dash-panel-head {
+  border-bottom: none;
+  padding: 16px 16px 4px;
+  min-height: 44px;
+}
+
+.admin-dash .admin-dash-panel-body {
+  padding: 8px 16px 16px;
+}
+
+.admin-dash .admin-dash-panel-flush {
+  padding: 0 0 8px;
+}
+
+.admin-dash-usage .admin-dash-panel-head .admin-dash-muted {
+  max-width: 28rem;
+  text-align: right;
 }
 
 .admin-dash-kpi-skel {
   min-height: 108px;
-  border-radius: var(--admin-radius);
+  border-radius: 12px;
 }
 
 .admin-dash-row {
   display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
-  gap: 12px;
-  align-items: stretch;
+  grid-template-columns: minmax(0, 1.8fr) minmax(300px, 1fr);
+  gap: 16px;
+  align-items: start;
 }
 
-.admin-dash-row > .admin-dash-panel-wide {
-  grid-column: span 1;
+.admin-dash-row > * {
+  min-width: 0;
+}
+
+.admin-dash-row-health {
+  grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
+}
+
+.admin-dash-row-recent {
+  grid-template-columns: minmax(0, 1.8fr) minmax(300px, 1fr);
 }
 
 .admin-dash-panel {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  height: 100%;
+  height: auto;
+}
+
+.admin-dash-usage {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  min-width: 0;
+}
+
+.admin-dash-panel-title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--text-main);
+}
+
+.admin-dash-muted {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.admin-dash-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  border: none;
+  border-radius: 0;
+}
+
+.admin-dash-table {
+  width: 100%;
+  min-width: 640px;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.admin-dash-table th,
+.admin-dash-table td {
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--border-subtle);
+  vertical-align: middle;
+}
+
+.admin-dash-table th:not(:first-child),
+.admin-dash-table td:not(:first-child):not(:last-child) {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-dash-table th:last-child,
+.admin-dash-table td:last-child {
+  text-align: left;
+  color: var(--text-muted);
+  max-width: 220px;
+}
+
+.admin-dash-table th {
+  font-size: 0.68rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: var(--bg-elevated);
+}
+
+.admin-dash-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.admin-dash-table tbody tr:hover td {
+  background: color-mix(in srgb, var(--primary) 5%, transparent);
+}
+
+.admin-dash-chart {
+  width: 100%;
+  min-height: 260px;
+}
+
+.admin-dash-chart-sm {
+  min-height: 200px;
+}
+
+.admin-dash-row > .admin-dash-panel-wide {
+  grid-column: span 1;
 }
 
 .admin-dash-panel-head {
@@ -159,11 +307,17 @@
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) auto minmax(48px, auto);
   align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  border-radius: var(--admin-radius-sm);
-  background: var(--admin-surface-2);
-  border: 1px solid var(--admin-border);
+  gap: 12px;
+  min-height: 36px;
+  padding: 6px 0;
+  border-radius: 0;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.admin-dash-health-list li:last-child {
+  border-bottom: none;
 }
 
 .admin-dash-health-name {
@@ -192,9 +346,11 @@
 .admin-dash-rt-metric {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 76px;
   padding: 12px;
-  border-radius: var(--admin-radius-sm);
+  border-radius: 10px;
   border: 1px solid var(--admin-border);
   background: var(--admin-surface-2);
 }
@@ -217,16 +373,7 @@
 .admin-dash-unavailable {
   font-size: 0.78rem;
   font-weight: 500;
-  color: var(--admin-muted);
-}
-
-.admin-dash-chart {
-  width: 100%;
-  min-height: 220px;
-}
-
-.admin-dash-chart-sm {
-  min-height: 200px;
+  color: var(--text-muted);
 }
 
 .admin-dash-verdict-grid {
@@ -262,7 +409,7 @@
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 0;
 }
 
 .admin-dash-user-row {
@@ -278,6 +425,15 @@
   color: inherit;
   text-align: left;
   cursor: pointer;
+}
+
+.admin-dash-user-row {
+  border-bottom: 1px solid var(--border-subtle);
+  border-radius: 0;
+}
+
+.admin-dash-user-list li:last-child .admin-dash-user-row {
+  border-bottom: none;
 }
 
 .admin-dash-user-row:hover {
@@ -340,6 +496,11 @@
 
 .admin-dash-qa-btn {
   gap: 8px;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 8px;
+  font-size: 0.8125rem;
+  font-weight: 600;
 }
 
 .admin-dash-ellipsis {
@@ -374,7 +535,7 @@
 }
 
 .admin-skel-chart {
-  min-height: 220px;
+  min-height: 260px;
 }
 
 .admin-skel-list {
@@ -392,7 +553,9 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .admin-dash-row {
+  .admin-dash-row,
+  .admin-dash-row-health,
+  .admin-dash-row-recent {
     grid-template-columns: 1fr;
   }
 }
@@ -413,5 +576,9 @@
 
   .admin-dash-health-meta {
     display: none;
+  }
+
+  .admin-dash-usage .admin-dash-panel-head .admin-dash-muted {
+    text-align: left;
   }
 }

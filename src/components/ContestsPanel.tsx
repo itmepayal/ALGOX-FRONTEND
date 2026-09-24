@@ -2,17 +2,31 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type FC,
 } from "react";
 import {
+  AlertCircle,
   ArrowLeft,
   ArrowRight,
+  Award,
+  Calendar,
+  Clock,
+  Crown,
+  FileCode,
   Info,
   Loader2,
+  Medal,
+  Play,
   RefreshCw,
+  Search,
+  Sparkles,
+  Timer,
+  TrendingUp,
   Trophy,
-  AlertCircle,
+  UserCheck,
+  Users,
 } from "lucide-react";
 import {
   contestApi,
@@ -31,7 +45,6 @@ import { canAccess } from "../access/canAccess";
 import { useAuth } from "../context/AuthContext";
 import { formatDisplayDate } from "../lib/formatDisplayDate";
 import { cn } from "../lib/cn";
-import { PremiumFeatureLock } from "./access/PremiumFeatureLock";
 import { PremiumUpgradeModal } from "./access/PremiumUpgradeModal";
 import { setPendingPremiumNav } from "../access/pendingPremiumNav";
 import { Button } from "./ui/button";
@@ -137,6 +150,7 @@ function ContestStatusTag({ status }: { status: ContestStatus | string }) {
       }
       className={cn("ct-tag", `ct-tag-${tone}`)}
     >
+      {tone === "live" ? <span className="ct-live-dot" aria-hidden /> : null}
       {label}
     </Badge>
   );
@@ -182,12 +196,23 @@ export const ContestsPanel: FC<Props> = ({
   const [board, setBoard] = useState<ContestLeaderboardPayload | null>(null);
   const [history, setHistory] = useState<ContestHistoryPayload | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [searchQuery, setSearchQuery] = useState("");
   const [virtualSession, setVirtualSession] =
     useState<VirtualContestSession | null>(null);
   const [virtualBusy, setVirtualBusy] = useState(false);
   const [virtualAnalytics, setVirtualAnalytics] =
     useState<VirtualContestAnalytics | null>(null);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
+
+  const onVirtualSessionChangeRef = useRef(onVirtualSessionChange);
+  useEffect(() => {
+    onVirtualSessionChangeRef.current = onVirtualSessionChange;
+  }, [onVirtualSessionChange]);
+
+  const contestsRef = useRef(contests);
+  useEffect(() => {
+    contestsRef.current = contests;
+  }, [contests]);
 
   const historyBySlug = useMemo(() => {
     const map = new Map<string, ContestHistoryPayload["items"][number]>();
@@ -208,12 +233,25 @@ export const ContestsPanel: FC<Props> = ({
   const filteredContests = useMemo(() => {
     return contests.filter((c) => {
       const tone = statusDisplay(c.status).tone;
-      if (statusFilter === "all") return true;
-      if (statusFilter === "upcoming") return tone === "upcoming";
-      if (statusFilter === "live") return tone === "live";
-      return tone === "ended";
+      const matchesStatus =
+        statusFilter === "all"
+          ? true
+          : statusFilter === "upcoming"
+            ? tone === "upcoming"
+            : statusFilter === "live"
+              ? tone === "live"
+              : tone === "ended";
+
+      if (!matchesStatus) return false;
+
+      if (!searchQuery.trim()) return true;
+      const q = searchQuery.toLowerCase().trim();
+      return (
+        c.title.toLowerCase().includes(q) ||
+        (c.description && c.description.toLowerCase().includes(q))
+      );
     });
-  }, [contests, statusFilter]);
+  }, [contests, statusFilter, searchQuery]);
 
   const loadVirtualAnalytics = useCallback(async (sessionId: string) => {
     try {
@@ -230,7 +268,7 @@ export const ContestsPanel: FC<Props> = ({
       try {
         const r = await virtualContestApi.complete(sessionId);
         setVirtualSession(r.data);
-        onVirtualSessionChange?.(null);
+        onVirtualSessionChangeRef.current?.(null);
         await loadVirtualAnalytics(sessionId);
       } catch (err: any) {
         setError(
@@ -240,7 +278,7 @@ export const ContestsPanel: FC<Props> = ({
         setVirtualBusy(false);
       }
     },
-    [loadVirtualAnalytics, onVirtualSessionChange]
+    [loadVirtualAnalytics]
   );
 
   const loadDetail = useCallback(async (slug: string) => {
@@ -257,12 +295,18 @@ export const ContestsPanel: FC<Props> = ({
 
   const load = useCallback(
     async (opts?: { soft?: boolean }) => {
-      if (opts?.soft) setRefreshing(true);
-      else setLoading(true);
+      const isInitial = contestsRef.current.length === 0;
+      if (opts?.soft || !isInitial) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
       setError("");
       try {
         const res = await contestApi.listContests();
-        setContests(res.data || []);
+        const newContests = res.data || [];
+        setContests(newContests);
+        contestsRef.current = newContests;
         if (authenticated) {
           try {
             const hist = await contestApi.getMySummary();
@@ -274,7 +318,7 @@ export const ContestsPanel: FC<Props> = ({
             try {
               const active = await virtualContestApi.getActive();
               setVirtualSession(active.data || null);
-              onVirtualSessionChange?.(active.data?.id || null);
+              onVirtualSessionChangeRef.current?.(active.data?.id || null);
             } catch {
               setVirtualSession(null);
             }
@@ -282,13 +326,13 @@ export const ContestsPanel: FC<Props> = ({
         }
       } catch {
         setError("Unable to load contests right now.");
-        if (!opts?.soft) setContests([]);
+        if (contestsRef.current.length === 0) setContests([]);
       } finally {
         setLoading(false);
         setRefreshing(false);
       }
     },
-    [authenticated, virtualOk, onVirtualSessionChange]
+    [authenticated, virtualOk]
   );
 
   useEffect(() => {
@@ -479,13 +523,15 @@ export const ContestsPanel: FC<Props> = ({
 
     return (
       <div className="co-page ct-page">
+        {/* BREADCRUMB */}
         <nav className="ct-breadcrumb" aria-label="Breadcrumb">
           <button
             type="button"
             className="ct-crumb-link"
             onClick={() => setSelectedSlug(null)}
           >
-            Contests
+            <ArrowLeft size={13} aria-hidden />
+            <span>Contests</span>
           </button>
           <span className="ct-crumb-sep" aria-hidden>
             /
@@ -526,38 +572,54 @@ export const ContestsPanel: FC<Props> = ({
           </div>
         ) : c ? (
           <div className="ct-detail">
-            <header className="ct-hero">
-              <div className="ct-hero-top">
-                <ContestStatusTag status={c.status} />
-                {c.isRegistered ? (
-                  <Badge variant="success" className="ct-tag">
-                    Registered
-                  </Badge>
+            {/* HERO CARD */}
+            <header className="co-dir-card ct-hero-card">
+              <div className="ct-hero-content">
+                <div className="ct-hero-top-badges">
+                  <ContestStatusTag status={c.status} />
+                  {c.isRegistered ? (
+                    <Badge variant="success" className="ct-tag">
+                      Registered
+                    </Badge>
+                  ) : null}
+                </div>
+                <h1 className="co-title text-xl sm:text-2xl lg:text-3xl">{c.title}</h1>
+                {c.description ? (
+                  <p className="co-lede max-w-3xl">{c.description}</p>
                 ) : null}
+
+                <div className="ct-hero-meta-row">
+                  <span className="ct-hero-meta-item">
+                    <Calendar size={14} className="ct-icon-accent" aria-hidden />
+                    {formatRange(c.startTime, c.endTime)}
+                  </span>
+                  {duration ? (
+                    <span className="ct-hero-meta-item">
+                      <Clock size={14} className="ct-icon-accent" aria-hidden />
+                      {duration}
+                    </span>
+                  ) : null}
+                  {problemCount > 0 ? (
+                    <span className="ct-hero-meta-item">
+                      <FileCode size={14} className="ct-icon-accent" aria-hidden />
+                      {problemCount} {problemCount === 1 ? "problem" : "problems"}
+                    </span>
+                  ) : null}
+                  {c.participantCount != null ? (
+                    <span className="ct-hero-meta-item">
+                      <Users size={14} className="ct-icon-accent" aria-hidden />
+                      {participants}
+                    </span>
+                  ) : null}
+                </div>
               </div>
-              <h1 className="ct-hero-title">{c.title}</h1>
-              {c.description ? (
-                <p className="ct-hero-desc">{c.description}</p>
-              ) : null}
 
-              <ul className="ct-hero-facts" aria-label="Contest summary">
-                {formatDisplayDate(c.startTime) ? (
-                  <li>{formatDisplayDate(c.startTime)}</li>
-                ) : null}
-                {duration ? <li>{duration} duration</li> : null}
-                {participants ? <li>{participants}</li> : null}
-                {problemCount > 0 ? (
-                  <li>
-                    {problemCount}{" "}
-                    {problemCount === 1 ? "problem" : "problems"}
-                  </li>
-                ) : null}
-              </ul>
-
-              <div className="ct-hero-actions">
+              <div className="ct-hero-actions-panel">
                 {canRegister ? (
                   <Button
                     type="button"
+                    size="lg"
+                    className="w-full sm:w-auto"
                     disabled={registering === c.slug}
                     onClick={() => void handleRegister(c.slug)}
                   >
@@ -565,131 +627,316 @@ export const ContestsPanel: FC<Props> = ({
                       ? "Registering…"
                       : c.status === "LIVE"
                         ? "Enter Contest"
-                        : "Register"}
+                        : "Register for Contest"}
                   </Button>
                 ) : null}
+
                 {canEnterLive ? (
-                  <Badge variant="success" className="ct-tag">
-                    You are registered
-                  </Badge>
+                  <Button
+                    type="button"
+                    size="lg"
+                    className="w-full sm:w-auto bg-success hover:bg-success/90 text-white gap-2"
+                    onClick={() => {
+                      document
+                        .getElementById("ct-problems-h")
+                        ?.scrollIntoView({ behavior: "smooth" });
+                    }}
+                  >
+                    <Play size={16} aria-hidden />
+                    Enter Live Contest
+                  </Button>
                 ) : null}
+
                 {canVirtual && virtualOk ? (
                   <Button
                     type="button"
+                    size="lg"
+                    className="w-full sm:w-auto gap-2"
                     disabled={virtualBusy}
                     onClick={() => void handleStartVirtual(c.slug, "virtual")}
                   >
                     {virtualBusy ? (
-                      <Loader2
-                        size={14}
-                        className="animate-spin ct-icon"
-                        aria-hidden
-                      />
-                    ) : null}
+                      <Loader2 size={16} className="animate-spin" aria-hidden />
+                    ) : (
+                      <Play size={16} aria-hidden />
+                    )}
                     Start Virtual Practice
                   </Button>
                 ) : null}
+
                 {canVirtual && !virtualOk ? (
-                  <span className="ct-hero-premium-hint">
-                    <Badge variant="warning" className="ct-tag">
-                      Premium
-                    </Badge>
-                    Virtual practice available with Premium
-                  </span>
-                ) : null}
-                {board?.myEntry && !canVirtual && !canRegister ? (
                   <Button
                     type="button"
                     variant="secondary"
+                    size="lg"
+                    className="w-full sm:w-auto gap-2 text-warning border-warning/30 hover:border-warning/60"
+                    onClick={() => {
+                      setPendingPremiumNav("contests", "premium.virtual_contest");
+                      setUpgradeOpen(true);
+                    }}
+                  >
+                    <Crown size={16} className="text-warning" aria-hidden />
+                    Unlock Virtual Replay
+                  </Button>
+                ) : null}
+
+                {c.status === "ENDED" && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="lg"
+                    className="w-full sm:w-auto gap-2"
                     onClick={() =>
                       document
                         .getElementById("ct-leaderboard")
                         ?.scrollIntoView({ behavior: "smooth" })
                     }
                   >
-                    View Results
+                    <Trophy size={16} aria-hidden />
+                    View Final Results
                   </Button>
-                ) : null}
+                )}
               </div>
             </header>
 
+            {/* CONTEST STATE BANNER */}
+            {c.status === "ENDED" || c.status === "ARCHIVED" ? (
+              <div className="ct-state-banner ct-state-ended">
+                <div className="ct-state-banner-left">
+                  <Badge variant="default" className="ct-tag ct-tag-ended">
+                    ENDED
+                  </Badge>
+                  <div>
+                    <h4 className="ct-state-title">Contest Completed</h4>
+                    <p className="co-muted text-xs sm:text-sm">
+                      Final leaderboard rankings and performance results are available.
+                    </p>
+                  </div>
+                </div>
+                <div className="ct-state-actions">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() =>
+                      document
+                        .getElementById("ct-leaderboard")
+                        ?.scrollIntoView({ behavior: "smooth" })
+                    }
+                  >
+                    View Leaderboard
+                  </Button>
+                  {virtualOk ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => void handleStartVirtual(c.slug, "virtual")}
+                    >
+                      Practice Contest
+                    </Button>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      className="text-warning border-warning/30"
+                      onClick={() => {
+                        setPendingPremiumNav("contests", "premium.virtual_contest");
+                        setUpgradeOpen(true);
+                      }}
+                    >
+                      <Crown size={14} className="text-warning mr-1" />
+                      Practice Contest (Premium)
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ) : c.status === "LIVE" ? (
+              <div className="ct-state-banner ct-state-live">
+                <div className="ct-state-banner-left">
+                  <Badge variant="success" className="ct-tag ct-tag-live">
+                    <span className="ct-live-dot" aria-hidden />
+                    LIVE NOW
+                  </Badge>
+                  <div>
+                    <h4 className="ct-state-title">Contest is Live</h4>
+                    <p className="co-muted text-xs sm:text-sm">
+                      Solve problems now to earn points and climb the live leaderboard.
+                    </p>
+                  </div>
+                </div>
+                {canEnterLive ? (
+                  <Button
+                    type="button"
+                    className="bg-success hover:bg-success/90 text-white"
+                    size="sm"
+                    onClick={() =>
+                      document
+                        .getElementById("ct-problems-h")
+                        ?.scrollIntoView({ behavior: "smooth" })
+                    }
+                  >
+                    <Play size={14} aria-hidden />
+                    Enter Contest
+                  </Button>
+                ) : canRegister ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={registering === c.slug}
+                    onClick={() => void handleRegister(c.slug)}
+                  >
+                    {registering === c.slug ? "Registering…" : "Register & Enter"}
+                  </Button>
+                ) : null}
+              </div>
+            ) : (
+              <div className="ct-state-banner ct-state-upcoming">
+                <div className="ct-state-banner-left">
+                  <Badge variant="primary" className="ct-tag ct-tag-upcoming">
+                    UPCOMING
+                  </Badge>
+                  <div>
+                    <h4 className="ct-state-title">Scheduled Contest</h4>
+                    <p className="co-muted text-xs sm:text-sm">
+                      Starts {formatDayTime(c.startTime)}. Register early to prepare.
+                    </p>
+                  </div>
+                </div>
+                {canRegister ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={registering === c.slug}
+                    onClick={() => void handleRegister(c.slug)}
+                  >
+                    {registering === c.slug ? "Registering…" : "Register"}
+                  </Button>
+                ) : c.isRegistered ? (
+                  <Badge variant="success" className="ct-tag py-1 px-3">
+                    ✓ Registered
+                  </Badge>
+                ) : null}
+              </div>
+            )}
+
+            {/* YOUR RESULT BLOCK IF PARTICIPATED */}
             {board?.myEntry ? (
               <section className="ct-block" aria-label="Your result">
-                <div className="ct-block-head">
-                  <h2 className="ct-block-title">Your Result</h2>
-                  <p className="ct-block-lede">How you performed in this contest.</p>
+                <div className="co-section-head">
+                  <p className="co-kicker">PERSONAL SUMMARY</p>
+                  <h2 className="co-title text-lg">Your Result</h2>
+                  <p className="co-lede">How you performed in this contest.</p>
                 </div>
-                <div className="ct-result-grid">
-                  <div className="ct-stat-tile">
-                    <span className="ct-stat-label">Rank</span>
-                    <strong>#{board.myEntry.rank}</strong>
+                <div className="ct-overview-grid">
+                  <div className="ct-overview-card">
+                    <div className="ct-overview-card-header">
+                      <Trophy size={15} className="ct-icon-accent text-warning" aria-hidden />
+                      <span className="co-kicker text-[10px] mb-0">RANK</span>
+                    </div>
+                    <strong className="ct-overview-value font-mono">#{board.myEntry.rank}</strong>
                   </div>
-                  <div className="ct-stat-tile">
-                    <span className="ct-stat-label">Score</span>
-                    <strong>{board.myEntry.score}</strong>
+                  <div className="ct-overview-card">
+                    <div className="ct-overview-card-header">
+                      <Award size={15} className="ct-icon-accent" aria-hidden />
+                      <span className="co-kicker text-[10px] mb-0">SCORE</span>
+                    </div>
+                    <strong className="ct-overview-value font-mono">{board.myEntry.score}</strong>
                   </div>
-                  <div className="ct-stat-tile">
-                    <span className="ct-stat-label">Solved</span>
-                    <strong>{board.myEntry.solvedCount}</strong>
+                  <div className="ct-overview-card">
+                    <div className="ct-overview-card-header">
+                      <FileCode size={15} className="ct-icon-accent" aria-hidden />
+                      <span className="co-kicker text-[10px] mb-0">SOLVED</span>
+                    </div>
+                    <strong className="ct-overview-value font-mono">{board.myEntry.solvedCount}</strong>
                   </div>
-                  <div className="ct-stat-tile">
-                    <span className="ct-stat-label">Penalty</span>
-                    <strong>{board.myEntry.penalty}</strong>
+                  <div className="ct-overview-card">
+                    <div className="ct-overview-card-header">
+                      <Timer size={15} className="ct-icon-accent" aria-hidden />
+                      <span className="co-kicker text-[10px] mb-0">PENALTY</span>
+                    </div>
+                    <strong className="ct-overview-value font-mono">{board.myEntry.penalty}</strong>
                   </div>
                 </div>
               </section>
             ) : null}
 
+            {/* OVERVIEW SECTION */}
             <section className="ct-block" aria-labelledby="ct-overview-h">
-              <div className="ct-block-head">
-                <p className="ct-section-kicker">Contest</p>
-                <h2 className="ct-block-title" id="ct-overview-h">
+              <div className="co-section-head">
+                <p className="co-kicker">CONTEST INFORMATION</p>
+                <h2 className="co-title text-lg" id="ct-overview-h">
                   Overview
                 </h2>
-                <p className="ct-block-lede">
-                  Contest schedule and participation details.
+                <p className="co-lede">
+                  Key schedule, participation and scoring parameters.
                 </p>
               </div>
-              <div className="ct-overview-tiles">
-                <div className="ct-stat-tile">
-                  <span className="ct-stat-label">Start</span>
-                  <strong>{formatDayTime(c.startTime)}</strong>
+
+              <div className="ct-overview-grid">
+                <div className="ct-overview-card">
+                  <div className="ct-overview-card-header">
+                    <Calendar size={15} className="ct-icon-accent" aria-hidden />
+                    <span className="co-kicker text-[10px] mb-0">START</span>
+                  </div>
+                  <strong className="ct-overview-value">{formatDayTime(c.startTime)}</strong>
                 </div>
-                <div className="ct-stat-tile">
-                  <span className="ct-stat-label">End</span>
-                  <strong>{formatDayTime(c.endTime)}</strong>
+
+                <div className="ct-overview-card">
+                  <div className="ct-overview-card-header">
+                    <Clock size={15} className="ct-icon-accent" aria-hidden />
+                    <span className="co-kicker text-[10px] mb-0">END</span>
+                  </div>
+                  <strong className="ct-overview-value">{formatDayTime(c.endTime)}</strong>
                 </div>
+
                 {duration ? (
-                  <div className="ct-stat-tile">
-                    <span className="ct-stat-label">Duration</span>
-                    <strong>{duration}</strong>
+                  <div className="ct-overview-card">
+                    <div className="ct-overview-card-header">
+                      <Timer size={15} className="ct-icon-accent" aria-hidden />
+                      <span className="co-kicker text-[10px] mb-0">DURATION</span>
+                    </div>
+                    <strong className="ct-overview-value">{duration}</strong>
                   </div>
                 ) : null}
+
                 {c.participantCount != null ? (
-                  <div className="ct-stat-tile">
-                    <span className="ct-stat-label">Participants</span>
-                    <strong>{c.participantCount}</strong>
-                    <span className="ct-stat-hint">
-                      {participantLabel(c.participantCount)}
-                    </span>
+                  <div className="ct-overview-card">
+                    <div className="ct-overview-card-header">
+                      <Users size={15} className="ct-icon-accent" aria-hidden />
+                      <span className="co-kicker text-[10px] mb-0">PARTICIPANTS</span>
+                    </div>
+                    <strong className="ct-overview-value">{c.participantCount}</strong>
                   </div>
                 ) : null}
+
                 {problemCount > 0 ? (
-                  <div className="ct-stat-tile">
-                    <span className="ct-stat-label">Problems</span>
-                    <strong>{problemCount}</strong>
+                  <div className="ct-overview-card">
+                    <div className="ct-overview-card-header">
+                      <FileCode size={15} className="ct-icon-accent" aria-hidden />
+                      <span className="co-kicker text-[10px] mb-0">PROBLEMS</span>
+                    </div>
+                    <strong className="ct-overview-value">{problemCount}</strong>
                   </div>
                 ) : null}
+
                 {maxScore != null && maxScore > 0 ? (
-                  <div className="ct-stat-tile">
-                    <span className="ct-stat-label">Max Score</span>
-                    <strong>{maxScore}</strong>
+                  <div className="ct-overview-card">
+                    <div className="ct-overview-card-header">
+                      <Award size={15} className="ct-icon-accent" aria-hidden />
+                      <span className="co-kicker text-[10px] mb-0">MAX SCORE</span>
+                    </div>
+                    <strong className="ct-overview-value">{maxScore} pts</strong>
                   </div>
                 ) : null}
+
                 {typeof c.isRegistered === "boolean" ? (
-                  <div className="ct-stat-tile">
-                    <span className="ct-stat-label">Registration</span>
-                    <strong>
+                  <div className="ct-overview-card">
+                    <div className="ct-overview-card-header">
+                      <UserCheck size={15} className="ct-icon-accent" aria-hidden />
+                      <span className="co-kicker text-[10px] mb-0">REGISTRATION</span>
+                    </div>
+                    <strong className={cn("ct-overview-value", c.isRegistered ? "text-success" : "")}>
                       {c.isRegistered ? "Registered" : "Not registered"}
                     </strong>
                   </div>
@@ -697,86 +944,94 @@ export const ContestsPanel: FC<Props> = ({
               </div>
             </section>
 
+            {/* PREMIUM VIRTUAL PRACTICE SECTION — COMPACT CTA CARD */}
             {canVirtual ? (
-              <section
-                className="ct-block ct-practice-block"
-                aria-labelledby="ct-practice-h"
-              >
-                <div className="ct-block-head">
-                  <p className="ct-section-kicker">Practice</p>
-                  <h2 className="ct-block-title" id="ct-practice-h">
-                    Past Contest Practice
+              <section className="ct-block" aria-labelledby="ct-practice-h">
+                <div className="co-section-head">
+                  <div className="flex items-center gap-2 mb-1">
+                    <p className="co-kicker mb-0">PREMIUM FEATURE</p>
+                    <Badge variant="warning" className="ct-tag">
+                      <Crown size={11} className="mr-1 inline" /> Premium
+                    </Badge>
+                  </div>
+                  <h2 className="co-title text-lg" id="ct-practice-h">
+                    Virtual Practice
                   </h2>
-                  <p className="ct-block-lede">
-                    Missed the contest or want another attempt? Replay under
-                    timed conditions without affecting the original ranking.
+                  <p className="co-lede">
+                    Replay this contest under timed conditions without affecting original standings.
                   </p>
                 </div>
+
                 {!virtualOk ? (
-                  <div className="ct-practice-premium-wrap">
-                    <PremiumFeatureLock
-                      feature="premium.virtual_contest"
-                      title="Virtual Practice"
-                      description="Replay the contest under timed conditions and test your problem-solving speed."
-                      benefits={[
-                        "Replay contests under timed conditions",
-                        "Practice without affecting original ranking",
-                        "Test and improve problem-solving speed",
-                      ]}
-                      onUpgradeClick={() => {
+                  <div className="ct-premium-cta-banner">
+                    <div className="ct-premium-cta-info">
+                      <div className="ct-premium-cta-icon-wrap" aria-hidden>
+                        <Crown size={20} className="text-warning" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <strong className="text-sm font-bold text-foreground">
+                            Virtual Practice Replay
+                          </strong>
+                          <Badge variant="warning" className="ct-tag">
+                            Premium
+                          </Badge>
+                        </div>
+                        <p className="co-muted text-xs sm:text-sm mt-0.5 max-w-2xl">
+                          Replay this contest under timed conditions without affecting original standings.
+                        </p>
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      className="ct-premium-cta-btn text-warning border-warning/30 hover:border-warning/60 gap-1.5 shrink-0"
+                      onClick={() => {
                         setPendingPremiumNav("contests", "premium.virtual_contest");
                         setUpgradeOpen(true);
                       }}
-                    />
+                    >
+                      <span>Upgrade to Premium</span>
+                      <ArrowRight size={14} aria-hidden />
+                    </Button>
                   </div>
                 ) : (
-                  <div className="ct-practice-body">
-                    <ul className="ct-practice-facts">
-                      <li>
-                        <span className="ct-stat-label">Mode</span>
-                        <strong>Virtual Practice</strong>
-                      </li>
-                      {duration ? (
-                        <li>
-                          <span className="ct-stat-label">Duration</span>
-                          <strong>{duration}</strong>
-                        </li>
-                      ) : null}
-                      {problemCount > 0 ? (
-                        <li>
-                          <span className="ct-stat-label">Problems</span>
-                          <strong>{problemCount}</strong>
-                        </li>
-                      ) : null}
-                    </ul>
-                    <p className="ct-practice-why">
-                      Replay the contest under timed conditions and test your
-                      problem-solving speed.
-                    </p>
-                    <div className="ct-practice-actions">
+                  <div className="ct-premium-cta-banner">
+                    <div className="ct-premium-cta-info">
+                      <div className="ct-premium-cta-icon-wrap" aria-hidden>
+                        <Play size={18} className="ct-icon-accent" />
+                      </div>
+                      <div>
+                        <strong className="text-sm font-bold text-foreground">
+                          Virtual Practice Mode
+                        </strong>
+                        <p className="co-muted text-xs sm:text-sm mt-0.5 max-w-2xl">
+                          Replay this contest under timed conditions without affecting original standings.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0 flex-wrap">
                       <Button
                         type="button"
+                        size="sm"
                         disabled={virtualBusy}
-                        onClick={() =>
-                          void handleStartVirtual(c.slug, "virtual")
-                        }
+                        onClick={() => void handleStartVirtual(c.slug, "virtual")}
+                        className="gap-1.5"
                       >
                         {virtualBusy ? (
-                          <Loader2
-                            size={14}
-                            className="animate-spin ct-icon"
-                            aria-hidden
-                          />
-                        ) : null}
-                        Start Virtual Practice
+                          <Loader2 size={14} className="animate-spin" aria-hidden />
+                        ) : (
+                          <Play size={14} aria-hidden />
+                        )}
+                        <span>Start Virtual Practice</span>
                       </Button>
                       <Button
                         type="button"
                         variant="secondary"
+                        size="sm"
                         disabled={virtualBusy}
-                        onClick={() =>
-                          void handleStartVirtual(c.slug, "practice")
-                        }
+                        onClick={() => void handleStartVirtual(c.slug, "practice")}
                       >
                         Practice Mode
                       </Button>
@@ -786,16 +1041,18 @@ export const ContestsPanel: FC<Props> = ({
               </section>
             ) : null}
 
+            {/* PROBLEMS SECTION */}
             <section className="ct-block" aria-labelledby="ct-problems-h">
-              <div className="ct-block-head">
-                <p className="ct-section-kicker">Problems</p>
-                <h2 className="ct-block-title" id="ct-problems-h">
+              <div className="co-section-head">
+                <p className="co-kicker">CHALLENGE SET</p>
+                <h2 className="co-title text-lg" id="ct-problems-h">
                   Problems
                 </h2>
-                <p className="ct-block-lede">
-                  Problems included in this contest.
+                <p className="co-lede">
+                  Problems included in this competition.
                 </p>
               </div>
+
               {!c.problems?.length ? (
                 <div className="ct-inline-empty">
                   <p className="ct-inline-empty-title">
@@ -806,7 +1063,7 @@ export const ContestsPanel: FC<Props> = ({
                   </p>
                 </div>
               ) : (
-                <ul className="ct-problem-list">
+                <div className="ct-problems-list">
                   {c.problems.map((entry, idx) => {
                     const payload = problemOpenPayload(entry);
                     const canOpen = Boolean(
@@ -815,131 +1072,171 @@ export const ContestsPanel: FC<Props> = ({
                     const diff = difficultyLabel(
                       problemRef(entry)?.difficulty
                     );
-                    const order = String(
+                    const order = `#${String(
                       problemOrderNumber(entry, idx)
-                    ).padStart(2, "0");
+                    ).padStart(2, "0")}`;
+
+                    const diffVariant =
+                      diff?.toLowerCase() === "easy"
+                        ? "success"
+                        : diff?.toLowerCase() === "medium"
+                          ? "warning"
+                          : diff?.toLowerCase() === "hard"
+                            ? "danger"
+                            : "default";
+
                     return (
-                      <li key={entry._id || idx}>
-                        <button
-                          type="button"
-                          className="ct-problem-row"
-                          disabled={!canOpen}
-                          aria-label={`Open ${problemTitle(entry)}`}
-                          onClick={() =>
+                      <div
+                        key={entry._id || idx}
+                        className={cn(
+                          "ct-problem-row",
+                          canOpen && "ct-problem-row-interactive"
+                        )}
+                        onClick={() => {
+                          if (canOpen) {
                             handleOpenProblem(
                               entry,
                               c,
                               virtualSession?.status === "in_progress"
                                 ? virtualSession.id
                                 : undefined
-                            )
+                            );
                           }
-                        >
-                          <span className="ct-problem-order">{order}</span>
-                          <span className="ct-problem-main">
-                            <strong>{problemTitle(entry)}</strong>
+                        }}
+                      >
+                        <span className="ct-problem-num">{order}</span>
+                        <div className="ct-problem-title-cell">
+                          <strong className="ct-problem-title">
+                            {problemTitle(entry)}
+                          </strong>
+                        </div>
+                        {diff ? (
+                          <Badge variant={diffVariant} className="ct-tag">
+                            {diff}
+                          </Badge>
+                        ) : null}
+                        {entry.points != null ? (
+                          <span className="ct-problem-pts font-mono">
+                            {entry.points} pts
                           </span>
-                          {diff ? (
-                            <Badge variant="default" className="ct-tag">
-                              {diff}
-                            </Badge>
-                          ) : null}
-                          {entry.points != null ? (
-                            <span className="ct-problem-pts">
-                              {entry.points} pts
-                            </span>
-                          ) : null}
-                          {canOpen ? (
-                            <ArrowRight
-                              size={16}
-                              strokeWidth={2}
-                              aria-hidden
-                              className="ct-icon ct-problem-arrow"
-                            />
-                          ) : null}
-                        </button>
-                      </li>
+                        ) : null}
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          disabled={!canOpen}
+                          className="ct-problem-btn gap-1.5"
+                        >
+                          <span>Open Problem</span>
+                          <ArrowRight size={14} aria-hidden />
+                        </Button>
+                      </div>
                     );
                   })}
-                </ul>
+                </div>
               )}
             </section>
 
+            {/* LEADERBOARD SECTION */}
             <section
               className="ct-block"
               id="ct-leaderboard"
               aria-labelledby="ct-lb-h"
             >
-              <div className="ct-block-head">
-                <p className="ct-section-kicker">Rankings</p>
-                <h2 className="ct-block-title" id="ct-lb-h">
+              <div className="co-section-head">
+                <p className="co-kicker">STANDINGS</p>
+                <h2 className="co-title text-lg" id="ct-lb-h">
                   Leaderboard
                 </h2>
-                <p className="ct-block-lede">
-                  See how participants performed.
+                <p className="co-lede">
+                  Competitive programming rankings based on score and penalty time.
                 </p>
               </div>
+
               {!board?.entries?.length ? (
                 <div className="ct-inline-empty">
                   <p className="ct-inline-empty-title">No results yet</p>
                   <p className="co-muted">
-                    Leaderboard results will appear as participants complete the
-                    contest.
+                    Leaderboard results will appear as participants submit solutions.
                   </p>
                 </div>
               ) : (
-                <div className="ct-lb-wrap">
-                  <table className="ct-lb-table">
-                    <thead>
-                      <tr>
-                        <th scope="col">Rank</th>
-                        <th scope="col">Participant</th>
-                        <th scope="col">Score</th>
-                        <th scope="col">Solved</th>
-                        <th scope="col">Penalty</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {board.entries.map((e) => {
-                        const isYou = board.myEntry?.userId === e.userId;
-                        const label = isYou
-                          ? "You"
-                          : `Participant ${String(e.userId).slice(-6)}`;
-                        return (
-                          <tr
-                            key={`${e.userId}-${e.rank}`}
-                            className={cn(
-                              "ct-lb-row",
-                              e.rank <= 3 && `ct-lb-top-${e.rank}`,
-                              isYou && "ct-lb-you"
-                            )}
-                          >
-                            <td className="ct-lb-rank">#{e.rank}</td>
-                            <td>
-                              <span className="ct-lb-user">
-                                <span className="ct-lb-avatar" aria-hidden>
-                                  {isYou
-                                    ? "YO"
-                                    : participantInitials(String(e.userId))}
-                                </span>
-                                <span>{label}</span>
-                              </span>
-                            </td>
-                            <td className="ct-lb-num">{e.score}</td>
-                            <td className="ct-lb-num">{e.solvedCount}</td>
-                            <td className="ct-lb-num">{e.penalty}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                <div className="ct-lb-container">
+                  <div className="ct-lb-table-wrapper">
+                    <table className="ct-lb-table">
+                      <thead>
+                        <tr>
+                          <th scope="col" className="ct-lb-th-rank">Rank</th>
+                          <th scope="col">Participant</th>
+                          <th scope="col" className="ct-lb-th-num">Score</th>
+                          <th scope="col" className="ct-lb-th-num">Solved</th>
+                          <th scope="col" className="ct-lb-th-num">Penalty</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {board.entries.map((e) => {
+                          const isYou = board.myEntry?.userId === e.userId;
+                          const label = isYou
+                            ? "You"
+                            : `Participant ${String(e.userId).slice(-6)}`;
+                          return (
+                            <tr
+                              key={`${e.userId}-${e.rank}`}
+                              className={cn(
+                                "ct-lb-tr",
+                                e.rank === 1 && "ct-lb-top-1",
+                                e.rank === 2 && "ct-lb-top-2",
+                                e.rank === 3 && "ct-lb-top-3",
+                                isYou && "ct-lb-you"
+                              )}
+                            >
+                              <td className="ct-lb-td-rank font-mono">
+                                {e.rank === 1 ? (
+                                  <span className="ct-rank-badge ct-rank-gold">
+                                    <Trophy size={13} aria-hidden /> #1
+                                  </span>
+                                ) : e.rank === 2 ? (
+                                  <span className="ct-rank-badge ct-rank-silver">
+                                    <Medal size={13} aria-hidden /> #2
+                                  </span>
+                                ) : e.rank === 3 ? (
+                                  <span className="ct-rank-badge ct-rank-bronze">
+                                    <Medal size={13} aria-hidden /> #3
+                                  </span>
+                                ) : (
+                                  `#${e.rank}`
+                                )}
+                              </td>
+                              <td>
+                                <div className="ct-lb-user">
+                                  <span className="ct-lb-avatar" aria-hidden>
+                                    {isYou
+                                      ? "YOU"
+                                      : participantInitials(String(e.userId))}
+                                  </span>
+                                  <span className="ct-lb-username">{label}</span>
+                                  {isYou ? (
+                                    <Badge variant="primary" className="text-[10px] py-0 px-1.5 h-4 ml-1">
+                                      You
+                                    </Badge>
+                                  ) : null}
+                                </div>
+                              </td>
+                              <td className="ct-lb-num font-mono font-bold text-foreground">{e.score}</td>
+                              <td className="ct-lb-num font-mono">{e.solvedCount}</td>
+                              <td className="ct-lb-num font-mono text-muted-foreground">{e.penalty}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="ct-fineprint">
+                    <Info size={13} strokeWidth={2} aria-hidden className="ct-icon" />
+                    Rating updates are calculated server-side after the live contest ends.
+                  </p>
                 </div>
               )}
-              <p className="ct-fineprint">
-                <Info size={12} strokeWidth={2} aria-hidden className="ct-icon" />
-                Rating updates are calculated server-side after the live contest
-                ends.
-              </p>
             </section>
           </div>
         ) : (
@@ -961,37 +1258,37 @@ export const ContestsPanel: FC<Props> = ({
   /* ───────────── LIST VIEW ───────────── */
   return (
     <div className="co-page ct-page">
-      <header className="co-header ct-header">
+      {/* DASHBOARD HEADER */}
+      <header className="co-header">
         <div>
-          <p className="co-kicker">Contests</p>
+          <p className="co-kicker">COMPETITIVE PROGRAMMING</p>
           <h1 className="co-title">
-            <Trophy
-              size={22}
-              strokeWidth={2}
-              aria-hidden
-              className="ct-icon"
-            />
+            <Trophy size={22} strokeWidth={2} aria-hidden className="ct-icon text-primary" />
             Contests
           </h1>
           <p className="co-lede">
-            Compete, solve problems, and climb the leaderboard.
+            Challenge yourself, improve your rating, and compete with the AlgoPath community.
           </p>
         </div>
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          disabled={loading || refreshing}
-          aria-label="Refresh contests"
-          onClick={() => void load({ soft: true })}
-        >
-          <RefreshCw
-            size={14}
-            strokeWidth={2}
-            aria-hidden
-            className={refreshing ? "ct-icon ct-spin" : "ct-icon"}
-          />
-        </Button>
+        <div className="ct-header-actions">
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            disabled={loading || refreshing}
+            aria-label="Refresh contests"
+            onClick={() => void load({ soft: true })}
+            className="gap-2"
+          >
+            <RefreshCw
+              size={14}
+              strokeWidth={2}
+              aria-hidden
+              className={refreshing ? "ct-spin" : ""}
+            />
+            <span>Refresh</span>
+          </Button>
+        </div>
       </header>
 
       {error ? (
@@ -1007,14 +1304,20 @@ export const ContestsPanel: FC<Props> = ({
         </div>
       ) : null}
 
+      {/* ACTIVE VIRTUAL CONTEST BAR */}
       {virtualSession?.status === "in_progress" ? (
-        <section className="co-panel ct-virtual-bar" aria-live="polite">
-          <div>
-            <p className="ct-section-kicker">Active Virtual Contest</p>
-            <strong>{virtualSession.sourceContestSlug}</strong>
-            <span className="ct-virtual-timer">
-              {formatMs(virtualSession.remainingMs)} remaining
-            </span>
+        <section className="ct-virtual-bar" aria-live="polite">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-primary/15 border border-primary/20 text-primary-bright">
+              <Sparkles size={18} />
+            </div>
+            <div>
+              <p className="co-kicker mb-0">ACTIVE VIRTUAL CONTEST</p>
+              <strong className="text-foreground text-sm font-semibold">{virtualSession.sourceContestSlug}</strong>
+              <span className="ct-virtual-timer">
+                {formatMs(virtualSession.remainingMs)} remaining
+              </span>
+            </div>
           </div>
           <div className="ct-virtual-actions">
             <Button
@@ -1047,10 +1350,11 @@ export const ContestsPanel: FC<Props> = ({
         </section>
       ) : null}
 
+      {/* VIRTUAL ANALYTICS REPORT */}
       {virtualAnalytics ? (
         <section className="co-panel ct-section">
-          <p className="ct-section-kicker">Virtual Contest Analytics</p>
-          <p className="co-muted">
+          <p className="co-kicker">VIRTUAL CONTEST ANALYTICS</p>
+          <p className="co-muted text-xs sm:text-sm">
             Solved {virtualAnalytics.breakdown.solvedCount} · Attempted{" "}
             {virtualAnalytics.breakdown.attemptedCount} · Unsolved{" "}
             {virtualAnalytics.breakdown.unsolvedCount} · Mode{" "}
@@ -1073,149 +1377,235 @@ export const ContestsPanel: FC<Props> = ({
         </section>
       ) : null}
 
-      {authenticated && history ? (
-        <section className="co-panel ct-stats-card" aria-label="Your contest stats">
-          <p className="ct-section-kicker">Your Contest Stats</p>
-          <div className="ct-stats-grid">
-            <div className="ct-stat">
-              <span className="ct-stat-label">Contests</span>
-              <strong>{history.contestsEntered}</strong>
+      {/* STATS CARDS SECTION */}
+      <section className="ct-stats-section" aria-label="Your contest stats">
+        <div className="co-section-head">
+          <p className="co-kicker">OVERVIEW</p>
+          <h2 className="co-title text-lg">Your Contest Stats</h2>
+        </div>
+
+        <div className="ct-stats-grid">
+          {/* 1. Total Contests */}
+          <div className="ct-stat-card">
+            <div className="ct-stat-head">
+              <span className="co-kicker">TOTAL CONTESTS</span>
+              <div className="ct-stat-icon-wrap" aria-hidden>
+                <Trophy size={14} className="ct-icon-accent" />
+              </div>
             </div>
-            <div className="ct-stat">
-              <span className="ct-stat-label">Solved</span>
-              <strong>{history.totalSolved}</strong>
+            <div className="ct-stat-value">{contests.length}</div>
+            <span className="ct-stat-hint">Platform contests</span>
+          </div>
+
+          {/* 2. Participated */}
+          <div className="ct-stat-card">
+            <div className="ct-stat-head">
+              <span className="co-kicker">PARTICIPATED</span>
+              <div className="ct-stat-icon-wrap" aria-hidden>
+                <Users size={14} className="ct-icon-accent" />
+              </div>
             </div>
-            <div className="ct-stat">
-              <span className="ct-stat-label">Total Score</span>
-              <strong>{history.totalScore}</strong>
+            <div className="ct-stat-value">
+              {authenticated && history ? history.contestsEntered : "—"}
             </div>
-            <div className="ct-stat">
-              <span className="ct-stat-label">Best Rank</span>
-              <strong>{bestRank != null ? `#${bestRank}` : "—"}</strong>
+            <span className="ct-stat-hint">
+              {authenticated ? "Contests entered" : "Sign in to track"}
+            </span>
+          </div>
+
+          {/* 3. Problems Solved */}
+          <div className="ct-stat-card">
+            <div className="ct-stat-head">
+              <span className="co-kicker">PROBLEMS SOLVED</span>
+              <div className="ct-stat-icon-wrap" aria-hidden>
+                <FileCode size={14} className="ct-icon-accent" />
+              </div>
+            </div>
+            <div className="ct-stat-value">
+              {authenticated && history ? history.totalSolved : "—"}
+            </div>
+            <span className="ct-stat-hint">
+              {authenticated ? "In contests" : "Sign in to track"}
+            </span>
+          </div>
+
+          {/* 4. Best Rank */}
+          <div className="ct-stat-card">
+            <div className="ct-stat-head">
+              <span className="co-kicker">BEST RANK</span>
+              <div className="ct-stat-icon-wrap" aria-hidden>
+                <Award size={14} className="ct-icon-accent" />
+              </div>
+            </div>
+            <div className="ct-stat-value">
+              {authenticated && bestRank != null ? `#${bestRank}` : "—"}
+            </div>
+            <span className="ct-stat-hint">
+              {authenticated && bestRank != null ? "All-time best" : "No rank yet"}
+            </span>
+          </div>
+
+          {/* 5. Rating */}
+          <div className="ct-stat-card">
+            <div className="ct-stat-head">
+              <span className="co-kicker">RATING</span>
+              <div className="ct-stat-icon-wrap" aria-hidden>
+                <TrendingUp size={14} className="ct-icon-accent" />
+              </div>
+            </div>
+            <div className="ct-stat-value text-base font-semibold">
+              {authenticated && ((history as any)?.rating || (user as any)?.rating)
+                ? ((history as any)?.rating || (user as any)?.rating)
+                : "Unrated"}
+            </div>
+            <span className="ct-stat-hint">
+              {authenticated ? "Contest rating" : "Sign in to view"}
+            </span>
+          </div>
+        </div>
+      </section>
+
+      {/* CONTESTS DIRECTORY SECTION */}
+      <section className="ct-list-section">
+        <div className="co-section-head">
+          <p className="co-kicker">COMPETITIONS</p>
+          <h2 className="co-title text-lg">Available Contests</h2>
+        </div>
+
+        <div className="co-toolbar-panel">
+          <div className="ct-toolbar">
+            <div className="ct-filter-group" role="tablist" aria-label="Contest status">
+              {(
+                [
+                  { id: "all", label: "All" },
+                  { id: "upcoming", label: "Upcoming" },
+                  { id: "live", label: "Live" },
+                  { id: "ended", label: "Ended" },
+                ] as const
+              ).map((f) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={statusFilter === f.id}
+                  className={cn(
+                    "co-chip",
+                    statusFilter === f.id && "co-chip-active"
+                  )}
+                  onClick={() => setStatusFilter(f.id)}
+                >
+                  {f.id === "live" && <span className="ct-live-dot mr-1" aria-hidden />}
+                  {f.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="ct-search-wrap">
+              <Search size={14} className="text-muted-foreground shrink-0" aria-hidden />
+              <input
+                type="text"
+                placeholder="Search contests…"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                aria-label="Search contests"
+              />
             </div>
           </div>
-          {(history.items || []).length === 0 ? (
-            <div className="ct-history-empty">
-              <p className="ct-history-empty-title">No contest history yet</p>
-              <p className="co-muted">
-                {contests.some((c) => statusDisplay(c.status).tone !== "ended")
-                  ? "Join an upcoming contest to start building your competitive profile."
-                  : "Your contest activity will appear here after you participate."}
-              </p>
-            </div>
-          ) : (
-            <ul className="ct-history-list" aria-label="Recent contests">
-              {history.items.slice(0, 6).map((item) => (
-                <li key={item.contestId}>
-                  <button
-                    type="button"
-                    className="ct-history-row"
-                    disabled={!item.slug}
-                    onClick={() => item.slug && setSelectedSlug(item.slug)}
-                  >
-                    <span className="ct-history-title">
-                      {item.title || item.slug || "Contest"}
-                    </span>
-                    <span className="ct-history-meta">
-                      {[
-                        item.rank != null ? `Rank #${item.rank}` : null,
-                        `Score ${item.score}`,
-                        `Solved ${item.solvedCount}`,
-                      ]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      ) : null}
-
-      <div className="ct-filters" role="tablist" aria-label="Contest status">
-        {(
-          [
-            { id: "all", label: "All" },
-            { id: "upcoming", label: "Upcoming" },
-            { id: "live", label: "Live" },
-            { id: "ended", label: "Ended" },
-          ] as const
-        ).map((f) => (
-          <button
-            key={f.id}
-            type="button"
-            role="tab"
-            aria-selected={statusFilter === f.id}
-            className={
-              statusFilter === f.id ? "ct-chip ct-chip-active" : "ct-chip"
-            }
-            onClick={() => setStatusFilter(f.id)}
-          >
-            {f.label}
-          </button>
-        ))}
-      </div>
-
-      {loading && !refreshing ? (
-        <div className="ct-list" aria-busy="true">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-[120px] w-full" />
-          ))}
         </div>
-      ) : filteredContests.length === 0 ? (
-        <EmptyState
-          title={
-            contests.length === 0
-              ? "No contests available"
-              : "No contests in this filter"
-          }
-          description={
-            contests.length === 0
-              ? "Check back soon for upcoming competitions."
-              : "Try another status filter to see more contests."
-          }
-          icon={<Trophy size={22} strokeWidth={1.75} aria-hidden />}
-        />
-      ) : (
-        <ul
-          className={
-            refreshing ? "ct-list ct-list-refreshing" : "ct-list"
-          }
-        >
-          {filteredContests.map((c) => {
-            const duration = formatDuration(c.durationMinutes);
-            const hist = historyBySlug.get(c.slug);
-            const meta = [
-              formatRange(c.startTime, c.endTime),
-              duration,
-              participantLabel(c.participantCount),
-            ].filter(Boolean);
 
-            return (
-              <li key={c.slug}>
-                <button
-                  type="button"
-                  className="co-panel ct-card"
+        {/* CONTEST CARDS GRID */}
+        {loading && contests.length === 0 ? (
+          <div className="ct-cards-grid" aria-busy="true">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Skeleton key={i} className="h-[180px] w-full rounded-2xl" />
+            ))}
+          </div>
+        ) : filteredContests.length === 0 ? (
+          <EmptyState
+            title={
+              contests.length === 0
+                ? "No contests available"
+                : searchQuery.trim()
+                  ? "No matching contests found"
+                  : "No contests in this filter"
+            }
+            description={
+              contests.length === 0
+                ? "Check back soon for upcoming competitions."
+                : searchQuery.trim()
+                  ? `No contests matching "${searchQuery}". Try another query.`
+                  : "Try another status filter to see more contests."
+            }
+            icon={<Trophy size={22} strokeWidth={1.75} aria-hidden />}
+          />
+        ) : (
+          <div
+            className={cn(
+              "ct-cards-grid",
+              refreshing && "ct-grid-refreshing"
+            )}
+          >
+            {filteredContests.map((c) => {
+              const duration = formatDuration(c.durationMinutes);
+              const hist = historyBySlug.get(c.slug);
+              const { tone } = statusDisplay(c.status);
+
+              return (
+                <div
+                  key={c.slug}
+                  className={cn(
+                    "co-dir-card ct-card",
+                    tone === "live" && "ct-card-live"
+                  )}
                   onClick={() => setSelectedSlug(c.slug)}
                 >
-                  <div className="ct-card-top">
-                    <ContestStatusTag status={c.status} />
-                    {c.isRegistered || hist ? (
-                      <Badge variant="success" className="ct-tag">
-                        {hist ? "Participated" : "Registered"}
-                      </Badge>
+                  <div className="ct-card-top-row">
+                    <div className="ct-card-badges">
+                      <ContestStatusTag status={c.status} />
+                      {c.isRegistered || hist ? (
+                        <Badge variant="success" className="ct-tag">
+                          {hist ? "Participated" : "Registered"}
+                        </Badge>
+                      ) : null}
+                    </div>
+                    <span className="ct-card-date-badge font-mono">
+                      <Calendar size={12} aria-hidden />
+                      {formatDayTime(c.startTime)}
+                    </span>
+                  </div>
+
+                  <h3 className="co-title text-base sm:text-lg">{c.title}</h3>
+                  {c.description ? (
+                    <p className="co-lede text-xs sm:text-sm line-clamp-2">{c.description}</p>
+                  ) : null}
+
+                  <div className="ct-card-meta-row">
+                    {duration ? (
+                      <span className="ct-meta-item">
+                        <Clock size={12} aria-hidden />
+                        {duration}
+                      </span>
+                    ) : null}
+                    {c.problems?.length ? (
+                      <span className="ct-meta-item">
+                        <FileCode size={12} aria-hidden />
+                        {c.problems.length}{" "}
+                        {c.problems.length === 1 ? "problem" : "problems"}
+                      </span>
+                    ) : null}
+                    {c.participantCount != null ? (
+                      <span className="ct-meta-item">
+                        <Users size={12} aria-hidden />
+                        {c.participantCount}{" "}
+                        {c.participantCount === 1 ? "participant" : "participants"}
+                      </span>
                     ) : null}
                   </div>
-                  <strong className="ct-card-title">{c.title}</strong>
-                  {c.description ? (
-                    <p className="ct-card-desc">{c.description}</p>
-                  ) : null}
-                  <p className="ct-card-meta">{meta.join(" · ")}</p>
+
                   {hist ? (
-                    <div className="ct-card-result">
-                      <span className="ct-stat-label">Your Result</span>
-                      <span>
+                    <div className="ct-card-result-pill">
+                      <Trophy size={13} className="text-warning shrink-0" aria-hidden />
+                      <span className="font-mono text-xs">
                         {[
                           hist.rank != null ? `Rank #${hist.rank}` : null,
                           `Score ${hist.score}`,
@@ -1226,16 +1616,36 @@ export const ContestsPanel: FC<Props> = ({
                       </span>
                     </div>
                   ) : null}
-                  <span className="ct-card-cta" aria-hidden>
-                    View contest
-                    <ArrowRight size={14} strokeWidth={2} className="ct-icon" />
-                  </span>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
+
+                  <div className="ct-card-footer">
+                    <Button
+                      type="button"
+                      variant={tone === "live" ? "primary" : "secondary"}
+                      size="sm"
+                      className="ct-card-cta-btn gap-1.5"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedSlug(c.slug);
+                      }}
+                    >
+                      <span>
+                        {tone === "upcoming"
+                          ? c.isRegistered
+                            ? "View Contest"
+                            : "Register"
+                          : tone === "live"
+                            ? "Enter Contest"
+                            : "View Results"}
+                      </span>
+                      <ArrowRight size={14} aria-hidden />
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
 
       <PremiumUpgradeModal
         open={upgradeOpen}

@@ -71,7 +71,7 @@ const ChartLegendContent: FC<{
       >
         <span
           className="inline-block h-2 w-2 shrink-0 rounded-full"
-          style={{ background: entry.color || "var(--muted-foreground)" }}
+          style={{ background: entry.color || "var(--text-muted)" }}
           aria-hidden
         />
         <span>{humanizeStatus(String(entry.value || ""))}</span>
@@ -89,31 +89,31 @@ const RANGES: Array<{ id: DashboardRange; label: string }> = [
 ];
 
 const STATUS_COLORS: Record<string, string> = {
-  ACCEPTED: "var(--chart-4)",
-  WRONG_ANSWER: "var(--chart-2)",
-  RUNTIME_ERROR: "var(--chart-5)",
-  COMPILATION_ERROR: "var(--chart-5)",
-  TIME_LIMIT_EXCEEDED: "var(--chart-3)",
-  MEMORY_LIMIT_EXCEEDED: "var(--chart-3)",
-  PENDING: "var(--muted-foreground)",
-  RUNNING: "var(--chart-1)",
-  SYSTEM_ERROR: "var(--destructive)",
+  ACCEPTED: "var(--success)",
+  WRONG_ANSWER: "var(--warning)",
+  RUNTIME_ERROR: "var(--error)",
+  COMPILATION_ERROR: "var(--error)",
+  TIME_LIMIT_EXCEEDED: "var(--warning)",
+  MEMORY_LIMIT_EXCEEDED: "var(--warning)",
+  PENDING: "var(--text-muted)",
+  RUNNING: "var(--primary)",
+  SYSTEM_ERROR: "var(--error)",
 };
 
 const CHART_TOOLTIP = {
-  background: "var(--popover)",
-  border: "1px solid var(--border)",
+  background: "var(--bg-elevated)",
+  border: "1px solid var(--border-subtle)",
   borderRadius: 8,
   fontSize: 12,
-  color: "var(--popover-foreground)",
+  color: "var(--text-main)",
 };
 
 const CHART = {
-  1: "var(--chart-1)",
-  2: "var(--chart-2)",
-  4: "var(--chart-4)",
-  grid: "var(--border)",
-  tick: "var(--muted-foreground)",
+  1: "var(--primary)",
+  2: "var(--warning)",
+  4: "var(--success)",
+  grid: "var(--border-subtle)",
+  tick: "var(--text-muted)",
 };
 
 function formatNumber(n: unknown): string {
@@ -668,7 +668,7 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
           )}
         </section>
 
-        <section className="admin-dash-panel" aria-label="Product usage">
+        <section className="admin-dash-usage" aria-label="Product usage">
           <div className="admin-dash-panel-head">
             <h2 className="admin-dash-panel-title">Product / Premium usage</h2>
             <p className="admin-dash-muted">
@@ -768,7 +768,7 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
           )}
         </section>
 
-        <section className="admin-dash-row" aria-label="System status">
+        <section className="admin-dash-row admin-dash-row-health" aria-label="System status">
           <Card className="admin-dash-panel">
             <CardHeader className="admin-dash-panel-head">
               <div className="admin-dash-panel-title-row">
@@ -997,7 +997,7 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
               ) : (
                 <>
                   <div className="admin-dash-chart admin-dash-chart-sm">
-                    <ResponsiveContainer width="100%" height={220}>
+                    <ResponsiveContainer width="100%" height={200}>
                       <PieChart>
                         <Pie
                           data={statusData}
@@ -1059,7 +1059,7 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
                 />
               ) : (
                 <div className="admin-dash-chart">
-                  <ResponsiveContainer width="100%" height={220}>
+                  <ResponsiveContainer width="100%" height={260}>
                     <BarChart data={userGrowth}>
                       <CartesianGrid
                         stroke={CHART.grid}
@@ -1094,7 +1094,7 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
           </Card>
         </section>
 
-        <section className="admin-dash-row" aria-label="Recent activity">
+        <section className="admin-dash-row admin-dash-row-recent" aria-label="Recent activity">
           <Card className="admin-dash-panel">
             <CardHeader className="admin-dash-panel-head">
               <CardTitle>Recent Submissions</CardTitle>
@@ -1247,7 +1247,7 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
 
         <section aria-label="Quick access">
           <Card className="admin-dash-panel">
-            <CardHeader>
+            <CardHeader className="admin-dash-panel-head">
               <CardTitle>Quick Access</CardTitle>
             </CardHeader>
             <CardContent className="admin-dash-qa">

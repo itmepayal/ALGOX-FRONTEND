@@ -4,56 +4,53 @@
    ============================================================ */
 
 .admin-root {
-  --admin-sidebar-w: 264px;
-  --admin-sidebar: 264px;
+  --admin-sidebar-w: 252px;
+  --admin-sidebar: 252px;
   --admin-sidebar-collapsed: 72px;
   --admin-space: 8px;
-  /* Map exclusively to globals.css design tokens */
-  --admin-bg: var(--background);
-  --admin-surface: var(--card);
-  --admin-surface-2: var(--muted);
-  --admin-border: var(--border);
-  --admin-border-strong: var(--border);
-  --admin-text: var(--foreground);
-  --admin-text-2: var(--muted-foreground);
-  --admin-muted: var(--muted-foreground);
+  /* Same palette as the client platform (index.css), not a separate admin theme. */
+  --admin-bg: var(--bg-main);
+  --admin-surface: var(--bg-card);
+  --admin-surface-2: var(--bg-elevated);
+  --admin-border: var(--border-subtle);
+  --admin-border-strong: var(--border-strong);
+  --admin-text: var(--text-main);
+  --admin-text-2: var(--text-secondary);
+  --admin-muted: var(--text-muted);
   --admin-accent: var(--primary);
-  --admin-accent-soft: color-mix(in srgb, var(--primary) 14%, transparent);
-  --admin-accent-fg: var(--primary);
-  --admin-success: var(--chart-4);
-  --admin-warning: var(--chart-2);
-  --admin-error: var(--destructive);
-  --admin-info: var(--chart-3);
-  --admin-radius: var(--radius);
-  --admin-radius-sm: calc(var(--radius) - 2px);
-  --admin-shadow: var(--shadow-sm);
-  /* Admin typography: Saira (UI) + Poppins (hierarchy) */
-  --admin-font: "Saira", sans-serif;
-  --admin-display: "Poppins", sans-serif;
-  --admin-tech: "Saira", sans-serif;
+  --admin-accent-soft: var(--primary-subtle);
+  --admin-accent-fg: var(--primary-bright, var(--primary));
+  --admin-success: var(--success);
+  --admin-warning: var(--warning);
+  --admin-error: var(--error);
+  --admin-info: var(--info, var(--primary));
+  --admin-radius: var(--radius-lg, 12px);
+  --admin-radius-sm: var(--radius-md, 10px);
+  --admin-shadow: none;
+  --admin-font: var(--font-primary);
+  --admin-display: var(--font-technical, var(--font-primary));
+  --admin-tech: var(--font-technical, var(--font-primary));
   --admin-mono: var(--font-mono);
-  --font-sans: "Saira", sans-serif;
-  --font-primary: "Saira", sans-serif;
-  --font-technical: "Saira", sans-serif;
   --admin-transition: 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
-  --admin-control-h: 36px;
-  --admin-page-pad-x: 32px;
+  --admin-control-h: 34px;
+  --admin-page-pad-x: 28px;
   --admin-page-pad-y: 24px;
-  --admin-content-max: 1600px;
+  --admin-content-max: 1520px;
 
   min-height: 100vh;
   width: 100%;
   max-width: 100%;
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--admin-font);
+  background: var(--bg-main);
+  color: var(--text-main);
+  font-family: var(--font-primary);
   position: relative;
   overflow-x: hidden;
-  color-scheme: light;
+  color-scheme: dark;
 }
 
-.dark .admin-root {
-  color-scheme: dark;
+[data-theme="light"] .admin-root,
+.theme-light .admin-root {
+  color-scheme: light;
 }
 
 /* Poppins — page/section titles, brand, KPI emphasis */
@@ -127,9 +124,9 @@
   bottom: 0;
   width: var(--admin-sidebar-w);
   z-index: 60;
-  border-right: 1px solid var(--sidebar-border);
-  background: var(--sidebar);
-  color: var(--sidebar-foreground);
+  border-right: 1px solid var(--border-strong);
+  background: var(--bg-secondary);
+  color: var(--text-main);
   display: flex;
   flex-direction: column;
   padding: 12px 8px;
@@ -264,12 +261,12 @@
 }
 
 .admin-nav-section {
-  margin: 16px 8px 6px;
+  margin: 20px 10px 8px;
   font-size: 0.625rem;
   font-weight: 650;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--muted-foreground);
+  color: var(--text-muted);
   line-height: 1.2;
 }
 
@@ -306,7 +303,7 @@
   border: none;
   border-radius: var(--admin-radius-sm);
   background: transparent;
-  color: var(--sidebar-foreground);
+  color: var(--text-secondary);
   font: inherit;
   font-size: 0.8125rem;
   font-weight: 500;
@@ -320,29 +317,36 @@
 .admin-nav button:hover,
 .admin-nav-leaf:hover,
 .admin-nav-group-btn:hover {
-  background: var(--sidebar-accent);
-  color: var(--sidebar-accent-foreground);
+  background: var(--bg-card-hover, var(--bg-elevated));
+  color: var(--text-main);
+}
+
+.admin-nav button:focus-visible,
+.admin-nav-leaf:focus-visible,
+.admin-nav-group-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--primary-subtle);
 }
 
 .admin-nav button:active,
 .admin-nav-leaf:active,
 .admin-nav-group-btn:active {
-  background: var(--sidebar-accent);
+  background: var(--bg-elevated);
 }
 
 .admin-nav button.active,
 .admin-nav-leaf.active,
 .admin-nav-children button.active {
-  background: var(--sidebar-accent);
-  color: var(--sidebar-primary);
-  box-shadow: inset 2px 0 0 var(--sidebar-primary);
+  background: var(--primary-subtle);
+  color: var(--text-main);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 32%, transparent);
 }
 
 .admin-nav button.active .admin-nav-icon,
 .admin-nav-leaf.active .admin-nav-icon,
 .admin-nav-group-btn.active-group .admin-nav-icon {
   opacity: 1;
-  color: var(--sidebar-primary);
+  color: var(--primary-bright, var(--primary));
 }
 
 /* Collapsed sidebar tooltips */
@@ -391,8 +395,8 @@
 }
 
 .admin-nav-group-btn.active-group {
-  color: var(--sidebar-primary);
-  background: var(--sidebar-accent);
+  color: var(--text-main);
+  background: var(--primary-subtle);
 }
 
 .admin-nav-chevron {
@@ -429,12 +433,12 @@
 
 .admin-sidebar-foot {
   flex-shrink: 0;
-  border-top: 1px solid var(--sidebar-border);
+  border-top: 1px solid var(--border-subtle);
   padding: 12px 4px 4px;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  background: var(--sidebar);
+  background: transparent;
 }
 
 .admin-profile-card {
@@ -519,20 +523,20 @@
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  background: var(--admin-bg);
+  background: var(--bg-main);
   transition: margin-left var(--admin-transition), width var(--admin-transition);
 }
 
 .admin-topbar {
   display: grid;
-  grid-template-columns: minmax(120px, 1.1fr) minmax(200px, 380px) minmax(120px, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 380px) minmax(0, 1fr);
   align-items: center;
   gap: 12px;
+  height: 56px;
   min-height: 56px;
-  padding: 8px 24px;
-  border-bottom: 1px solid var(--admin-border);
-  background: color-mix(in srgb, var(--admin-surface) 92%, transparent);
-  backdrop-filter: blur(12px);
+  padding: 0 24px;
+  border-bottom: 1px solid var(--border-strong);
+  background: var(--bg-secondary);
   position: sticky;
   top: 0;
   z-index: 30;
@@ -561,7 +565,11 @@
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 8px 12px;
+  max-width: 380px;
+  height: 36px;
+  justify-self: center;
+  box-sizing: border-box;
+  padding: 0 12px;
   border-radius: var(--admin-radius-sm);
   border: 1px solid var(--admin-border);
   background: var(--admin-surface-2);
@@ -932,10 +940,10 @@
 .admin-field input,
 .admin-field select,
 .admin-field textarea {
-  background: var(--background);
-  border: 1px solid var(--input);
-  color: var(--foreground);
-  border-radius: var(--admin-radius-sm);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-main);
+  border-radius: 8px;
   padding: 0 12px;
   min-height: var(--admin-control-h);
   font: inherit;
@@ -954,12 +962,14 @@
 .admin-field select:focus,
 .admin-field textarea:focus {
   outline: none;
-  border-color: var(--ring);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 25%, transparent);
+  border-color: color-mix(in srgb, var(--primary) 45%, var(--border-subtle));
+  box-shadow: 0 0 0 2px var(--primary-subtle);
 }
 
 .admin-toolbar input {
   min-width: 200px;
+  max-width: 360px;
+  flex: 1 1 240px;
 }
 
 .admin-btn {
@@ -994,15 +1004,16 @@
 }
 
 .admin-btn.primary {
-  background: var(--primary);
-  border-color: var(--primary);
-  color: var(--primary-foreground);
+  background: var(--primary-gradient, var(--primary));
+  border-color: transparent;
+  color: #ffffff;
 }
 
 .admin-btn.primary:hover:not(:disabled) {
-  filter: brightness(1.05);
-  background: var(--primary);
-  border-color: var(--primary);
+  filter: brightness(1.06);
+  background: var(--primary-gradient, var(--primary));
+  border-color: transparent;
+  color: #ffffff;
 }
 
 .admin-btn.danger {

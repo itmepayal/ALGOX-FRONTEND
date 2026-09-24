@@ -251,9 +251,9 @@ export const AuthModal: FC<{
 
   const subtitle =
     activeTab === "login"
-      ? "Sign in to continue your AlgoPath journey."
+      ? "Continue your DSA practice and pick up where you left off."
       : activeTab === "signup"
-        ? "Start building stronger problem-solving skills."
+        ? "Start structured DSA practice and track your progress across devices."
         : activeTab === "2fa"
           ? "Enter the 6-digit code to finish signing in."
           : activeTab === "forgot_request"
@@ -442,10 +442,10 @@ export const AuthModal: FC<{
               Algo<span>Path</span>
             </span>
           </div>
-          <h2>Master DSA with structured practice.</h2>
+          <h2>Structured DSA practice for technical interviews.</h2>
           <p>
-            Solve curated sheets, track progress, and prepare for technical
-            interviews in one focused workspace.
+            Solve curated sheets, track progress, and prepare in one focused
+            workspace.
           </p>
           <ul className="auth-brand-points">
             <li>Structured DSA sheets</li>
@@ -678,7 +678,18 @@ export const AuthModal: FC<{
           {activeTab === "login" && !registrationOpen ? (
             <p className="auth-muted">New registrations are currently closed.</p>
           ) : null}
-          {activeTab !== "login" ? (
+          {activeTab === "signup" ? (
+            <p>
+              Already have an account?{" "}
+              <button
+                type="button"
+                className="auth-text-link"
+                onClick={() => switchTab("login")}
+              >
+                Sign In
+              </button>
+            </p>
+          ) : activeTab !== "login" ? (
             <button
               type="button"
               className="auth-text-link"
