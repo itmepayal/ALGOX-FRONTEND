@@ -1281,8 +1281,18 @@
     padding-inline: 16px;
   }
 
+  .guest-navbar-bar {
+    justify-content: space-between;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
   .guest-navbar-nav {
     display: none;
+  }
+
+  .guest-navbar-actions {
+    margin-left: auto;
   }
 
   .guest-navbar-actions .guest-nav-login,
@@ -1292,6 +1302,17 @@
 
   .guest-navbar-menu {
     display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    flex-shrink: 0;
+  }
+
+  .guest-navbar-menu:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
   }
 
   .guest-navbar-drawer {
@@ -1301,10 +1322,26 @@
     left: 0;
     right: 0;
     top: 56px;
-    padding-block: 8px;
+    box-sizing: border-box;
+    max-height: calc(100vh - 56px);
+    overflow-y: auto;
+    padding-block: 6px 10px;
     background: var(--bg-secondary);
     border-bottom: 1px solid var(--border-strong);
-    gap: 4px;
+    gap: 2px;
+  }
+
+  .guest-drawer-label {
+    margin: 10px 4px 2px;
+    font-size: 0.72rem;
+    font-weight: 650;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  .guest-drawer-label:first-child {
+    margin-top: 4px;
   }
 
   .guest-drawer-link {
@@ -1314,7 +1351,8 @@
     color: var(--text-main);
     font: inherit;
     font-weight: 500;
-    padding: 12px 14px;
+    min-height: 40px;
+    padding: 8px 12px;
     border-radius: 8px;
     cursor: pointer;
   }
@@ -1350,8 +1388,28 @@
     min-width: 0;
   }
 
+  .guest-footer-inner {
+    padding-block: 28px 16px;
+  }
+
+  .guest-footer-cols {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+    gap: 20px 16px;
+  }
+
+  .guest-footer-cols h3 {
+    margin-bottom: 6px;
+  }
+
+  .guest-footer-cols ul {
+    gap: 2px;
+  }
+
   .guest-footer-cols button {
-    min-height: 44px;
+    min-height: 36px;
+    padding: 2px 0;
+    white-space: nowrap;
   }
 
   .guest-navbar-drawer.guest-container {
@@ -1373,8 +1431,7 @@
   .guest-value,
   .guest-feature-grid,
   .guest-ai-grid,
-  .guest-premium-list,
-  .guest-footer-cols {
+  .guest-premium-list {
     grid-template-columns: 1fr;
   }
 
@@ -1385,6 +1442,34 @@
 
   .guest-hero-ctas > button {
     flex: 1 1 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  .guest-topic-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow: visible;
+    padding-bottom: 0;
+  }
+
+  .guest-topic-chip {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    min-height: 72px;
+    padding: 12px 10px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    white-space: normal;
+    line-height: 1.3;
   }
 }
 

@@ -13,6 +13,8 @@ import { usePermission } from "../../../rbac/usePermission";
 import { useToast } from "../../../context/ToastContext";
 import { normalizeApiError } from "../../../lib/apiError";
 import { WidgetError } from "../shared/WidgetError";
+import { DifficultyBadge } from "../shared/DifficultyBadge";
+import "./problem-list.css";
 
 interface Props {
   onEdit: (id: string | null) => void;
@@ -105,23 +107,30 @@ export const ProblemListPage: FC<Props> = ({ onEdit }) => {
       permission="problems:view"
       fallback={<div className="admin-denied">No problems permission.</div>}
     >
+      <div className="admin-problems-page">
       <p className="admin-page-lead">
         Search, filter, and manage the AlgoPath problem catalog.
       </p>
-      <div className="admin-toolbar">
+      <div className="admin-toolbar admin-toolbar-problems">
         <input
+          className="admin-toolbar-search"
           placeholder="Search title, slug, tags…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && (setPage(1), load())}
         />
-        <select value={status} onChange={(e) => { setPage(1); setStatus(e.target.value); }}>
+        <select
+          className="admin-toolbar-filter admin-toolbar-filter--status"
+          value={status}
+          onChange={(e) => { setPage(1); setStatus(e.target.value); }}
+        >
           <option value="all">All statuses</option>
           <option value="draft">Draft</option>
           <option value="published">Published</option>
           <option value="archived">Archived</option>
         </select>
         <select
+          className="admin-toolbar-filter admin-toolbar-filter--difficulty"
           value={difficulty}
           onChange={(e) => {
             setPage(1);
@@ -134,6 +143,7 @@ export const ProblemListPage: FC<Props> = ({ onEdit }) => {
           <option value="hard">Hard</option>
         </select>
         <select
+          className="admin-toolbar-filter admin-toolbar-filter--access"
           value={access}
           onChange={(e) => {
             setPage(1);
@@ -145,20 +155,28 @@ export const ProblemListPage: FC<Props> = ({ onEdit }) => {
           <option value="free">Free</option>
           <option value="premium">Premium</option>
         </select>
-        <button type="button" className="admin-btn" onClick={() => { setPage(1); load(); }}>
+        <button
+          type="button"
+          className="admin-btn admin-toolbar-submit"
+          onClick={() => { setPage(1); load(); }}
+        >
           Search
         </button>
         {can("problems:create") && (
-          <button type="button" className="admin-btn primary" onClick={() => onEdit(null)}>
+          <button
+            type="button"
+            className="admin-btn primary admin-toolbar-create"
+            onClick={() => onEdit(null)}
+          >
             <Plus size={14} /> New problem
           </button>
         )}
         {can("problems:publish") && selected.size > 0 && (
           <>
-            <button type="button" className="admin-btn" onClick={() => bulkStatus("published")}>
+            <button type="button" className="admin-btn bulk" onClick={() => bulkStatus("published")}>
               Publish selected
             </button>
-            <button type="button" className="admin-btn" onClick={() => bulkStatus("archived")}>
+            <button type="button" className="admin-btn bulk" onClick={() => bulkStatus("archived")}>
               <Archive size={14} /> Archive
             </button>
           </>
@@ -167,7 +185,7 @@ export const ProblemListPage: FC<Props> = ({ onEdit }) => {
           <>
             <button
               type="button"
-              className="admin-btn"
+              className="admin-btn bulk"
               onClick={async () => {
                 try {
                   await adminProblemApi.bulk({
@@ -187,7 +205,7 @@ export const ProblemListPage: FC<Props> = ({ onEdit }) => {
             </button>
             <button
               type="button"
-              className="admin-btn"
+              className="admin-btn bulk"
               onClick={async () => {
                 try {
                   await adminProblemApi.bulk({
@@ -217,6 +235,7 @@ export const ProblemListPage: FC<Props> = ({ onEdit }) => {
         />
       ) : null}
       <DataTable
+        className="admin-problems-table"
         rows={rows}
         rowKey={idOf}
         loading={loading}
@@ -245,7 +264,11 @@ export const ProblemListPage: FC<Props> = ({ onEdit }) => {
             key: "title",
             header: "Title",
             render: (p) => (
-              <button type="button" className="admin-btn" onClick={() => onEdit(idOf(p))}>
+              <button
+                type="button"
+                className="admin-problem-title-link"
+                onClick={() => onEdit(idOf(p))}
+              >
                 {p.title}
               </button>
             ),
@@ -253,13 +276,21 @@ export const ProblemListPage: FC<Props> = ({ onEdit }) => {
           {
             key: "difficulty",
             header: "Difficulty",
-            render: (p) => <StatusBadge status={String(p.difficulty).toLowerCase()} />,
+            render: (p) => <DifficultyBadge difficulty={p.difficulty} />,
           },
           {
             key: "access",
             header: "Access",
             render: (p) => (
-              <StatusBadge status={p.isPremium ? "premium" : "free"} />
+              <span
+                className={
+                  p.isPremium
+                    ? "admin-access-badge admin-access-badge--premium"
+                    : "admin-access-badge admin-access-badge--free"
+                }
+              >
+                {p.isPremium ? "Premium" : "Free"}
+              </span>
             ),
           },
           {
@@ -278,16 +309,22 @@ export const ProblemListPage: FC<Props> = ({ onEdit }) => {
             render: (p) => {
               const id = idOf(p);
               return (
-                <div style={{ display: "flex", gap: 6 }}>
+                <div className="admin-problems-actions">
                   {can("problems:publish") && p.status !== "published" && (
-                    <button type="button" className="admin-btn" onClick={() => setProblemStatus(id, "published")}>
+                    <button
+                      type="button"
+                      className="admin-icon-action admin-icon-action--publish"
+                      onClick={() => setProblemStatus(id, "published")}
+                    >
                       Publish
                     </button>
                   )}
                   {can("problems:create") && (
                     <button
                       type="button"
-                      className="admin-btn"
+                      className="admin-icon-action"
+                      aria-label="Duplicate problem"
+                      title="Duplicate"
                       onClick={async () => {
                         const res = await adminProblemApi.duplicate(id);
                         const nid = res.data?.id || (res.data as any)?._id;
@@ -301,7 +338,9 @@ export const ProblemListPage: FC<Props> = ({ onEdit }) => {
                   {can("problems:delete") && (
                     <button
                       type="button"
-                      className="admin-btn danger"
+                      className="admin-icon-action admin-icon-action--danger"
+                      aria-label="Delete problem"
+                      title="Delete"
                       onClick={() => setConfirmDelete(id)}
                     >
                       <Trash2 size={14} />
@@ -313,6 +352,7 @@ export const ProblemListPage: FC<Props> = ({ onEdit }) => {
           },
         ]}
       />
+      </div>
       <ConfirmDialog
         open={Boolean(confirmDelete)}
         title="Delete problem?"

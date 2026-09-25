@@ -149,39 +149,40 @@ export const UserDetailPage: FC<Props> = ({ id, onBack }) => {
       permission="users:view"
       fallback={<div className="admin-denied">No users permission.</div>}
     >
-      <div className="admin-toolbar">
-        <button type="button" className="admin-btn" onClick={onBack}>
+      <div className="admin-page-shell admin-user-detail">
+      <nav className="admin-tab-bar" aria-label="User detail sections">
+        <button type="button" className="admin-tab admin-tab-back" onClick={onBack}>
           ← Back
         </button>
         <button
           type="button"
-          className={`admin-btn ${tab === "profile" ? "primary" : ""}`}
+          className={`admin-tab ${tab === "profile" ? "is-active" : ""}`}
           onClick={() => setTab("profile")}
         >
           Profile
         </button>
         <button
           type="button"
-          className={`admin-btn ${tab === "activity" ? "primary" : ""}`}
+          className={`admin-tab ${tab === "activity" ? "is-active" : ""}`}
           onClick={() => setTab("activity")}
         >
           Activity
         </button>
         <button
           type="button"
-          className={`admin-btn ${tab === "progress" ? "primary" : ""}`}
+          className={`admin-tab ${tab === "progress" ? "is-active" : ""}`}
           onClick={() => setTab("progress")}
         >
           Progress
         </button>
         <button
           type="button"
-          className={`admin-btn ${tab === "sessions" ? "primary" : ""}`}
+          className={`admin-tab ${tab === "sessions" ? "is-active" : ""}`}
           onClick={() => setTab("sessions")}
         >
           Sessions
         </button>
-      </div>
+      </nav>
       {error ? <p className="admin-error">{error}</p> : null}
       {msg ? <p className="admin-muted">{msg}</p> : null}
       {tempPassword ? (
@@ -193,10 +194,11 @@ export const UserDetailPage: FC<Props> = ({ id, onBack }) => {
       {!row ? (
         <p className="admin-muted">Loading…</p>
       ) : tab === "profile" ? (
-        <div style={{ maxWidth: 520 }}>
-          <h2 style={{ marginTop: 0 }}>{row.name}</h2>
+        <div className="admin-user-profile">
+          <div className="admin-card admin-user-profile-card">
+          <h2 className="admin-card-title" style={{ fontSize: "1.25rem" }}>{row.name}</h2>
           <p className="admin-muted">{row.email}</p>
-          <p>
+          <p style={{ margin: "12px 0 0" }}>
             Status: <StatusBadge status={row.status} />
             {row.mustChangePassword ? (
               <span className="admin-muted"> · must change password</span>
@@ -278,7 +280,7 @@ export const UserDetailPage: FC<Props> = ({ id, onBack }) => {
               {canDelete ? (
                 <button
                   type="button"
-                  className="admin-btn danger"
+                  className="admin-btn danger-secondary"
                   onClick={() => setConfirmDelete(true)}
                 >
                   Soft delete
@@ -287,42 +289,36 @@ export const UserDetailPage: FC<Props> = ({ id, onBack }) => {
             </div>
           )}
 
-          <section
-            className="admin-card"
-            style={{ marginTop: 24, padding: 16 }}
-            aria-labelledby="user-sub-heading"
-          >
-            <h3 id="user-sub-heading" style={{ marginTop: 0, fontSize: 15 }}>
+          </div>
+
+          <section className="admin-card" aria-labelledby="user-sub-heading">
+            <h3 id="user-sub-heading" className="admin-card-title">
               Subscription
             </h3>
-            <p className="admin-muted" style={{ marginTop: 0 }}>
+            <p className="admin-muted" style={{ marginTop: 0, marginBottom: 16 }}>
               Ledger override via existing admin API — does not change platform
               role.
             </p>
-            <div
-              style={{
-                display: "grid",
-                gap: 8,
-                fontSize: "0.875rem",
-                marginBottom: 12,
-              }}
-            >
-              <div>
-                Access tier:{" "}
+            <dl className="admin-kv-grid" style={{ marginBottom: 16 }}>
+              <dt>Access tier</dt>
+              <dd>
                 <StatusBadge status={isPremiumNow ? "premium" : "free"} />
-              </div>
-              <div>
-                Plan: <strong>{sub?.plan || "FREE"}</strong>
-                {" · "}
-                Status: <StatusBadge status={sub?.status || "none"} />
-              </div>
-              <div className="admin-muted">
-                Source: {sub?.source || "—"}
-                {sub?.currentPeriodEnd
-                  ? ` · Period end: ${new Date(sub.currentPeriodEnd).toLocaleString()}`
-                  : null}
-              </div>
-            </div>
+              </dd>
+              <dt>Plan</dt>
+              <dd>{sub?.plan || "FREE"}</dd>
+              <dt>Status</dt>
+              <dd>
+                <StatusBadge status={sub?.status || "none"} />
+              </dd>
+              <dt>Source</dt>
+              <dd>{sub?.source || "—"}</dd>
+              {sub?.currentPeriodEnd ? (
+                <>
+                  <dt>Premium period end</dt>
+                  <dd>{new Date(sub.currentPeriodEnd).toLocaleString()}</dd>
+                </>
+              ) : null}
+            </dl>
 
             {canUpdate ? (
               <>
@@ -397,14 +393,30 @@ export const UserDetailPage: FC<Props> = ({ id, onBack }) => {
           <p className="admin-muted">Loading progress…</p>
         ) : (
           <div>
-            <div className="admin-toolbar" style={{ flexWrap: "wrap", gap: 16 }}>
-              <span>Attempted: {progress.problemsAttempted}</span>
-              <span>Solved: {progress.problemsSolved}</span>
-              <span>Submissions: {progress.submissionCount}</span>
-              <span>Accepted: {progress.acceptedCount}</span>
-              <span>Acceptance: {progress.acceptanceRate}%</span>
+            <div className="admin-stat-grid">
+              <div className="admin-stat-tile">
+                <strong>{progress.problemsAttempted}</strong>
+                <span>Attempted</span>
+              </div>
+              <div className="admin-stat-tile">
+                <strong>{progress.problemsSolved}</strong>
+                <span>Solved</span>
+              </div>
+              <div className="admin-stat-tile">
+                <strong>{progress.submissionCount}</strong>
+                <span>Submissions</span>
+              </div>
+              <div className="admin-stat-tile">
+                <strong>{progress.acceptedCount}</strong>
+                <span>Accepted</span>
+              </div>
+              <div className="admin-stat-tile">
+                <strong>{progress.acceptanceRate}%</strong>
+                <span>Acceptance</span>
+              </div>
             </div>
-            <h4>Languages</h4>
+            <section className="admin-card" style={{ marginBottom: 20 }}>
+              <h3 className="admin-card-title">Languages</h3>
             {Object.keys(progress.byLanguage || {}).length === 0 ? (
               <EmptyState
                 compact
@@ -413,7 +425,7 @@ export const UserDetailPage: FC<Props> = ({ id, onBack }) => {
                 description="Languages appear after this user submits code."
               />
             ) : (
-              <ul>
+              <ul style={{ margin: 0, paddingLeft: 18 }}>
                 {Object.entries(progress.byLanguage || {}).map(([lang, n]) => (
                   <li key={lang}>
                     {lang}: {n}
@@ -421,7 +433,10 @@ export const UserDetailPage: FC<Props> = ({ id, onBack }) => {
                 ))}
               </ul>
             )}
-            <h4>Recent submissions</h4>
+            </section>
+            <h3 className="admin-card-title" style={{ marginBottom: 12 }}>
+              Recent submissions
+            </h3>
             <DataTable
               rowKey={(s) => String(s.id)}
               columns={[

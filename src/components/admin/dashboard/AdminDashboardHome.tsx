@@ -522,8 +522,9 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
   return (
     <PermissionGuard permission="analytics:view">
       <div className="admin-dash">
-        <header className="admin-dash-header">
-          <div>
+        <div className="admin-dash-grid">
+        <header className="admin-dash-header admin-dash-span-12">
+          <div className="admin-dash-header-copy">
             <h2 className="font-primary">Dashboard</h2>
             <p className="admin-dash-sub">
               Platform overview and operational metrics
@@ -567,20 +568,22 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
         </header>
 
         {fallbackMode ? (
-          <div className="admin-dash-banner" role="status">
+          <div className="admin-dash-banner admin-dash-span-12" role="status">
             Analytics service unavailable — showing direct service stats.
           </div>
         ) : null}
 
         {coreError && !overview ? (
-          <WidgetError
-            title={coreError.title}
-            message={coreError.message}
-            onRetry={() => void loadCore()}
-          />
+          <div className="admin-dash-span-12">
+            <WidgetError
+              title={coreError.title}
+              message={coreError.message}
+              onRetry={() => void loadCore()}
+            />
+          </div>
         ) : null}
 
-        <section className="admin-dash-kpis" aria-label="Key metrics">
+        <section className="admin-dash-kpis admin-dash-span-12" aria-label="Key metrics">
           {kpiSkeleton ? (
             Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="admin-dash-kpi-skel admin-skel" />
@@ -588,6 +591,7 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
           ) : (
             <>
               <StatsCard
+                className="admin-dash-kpi"
                 label="Users"
                 value={formatNumber(kpis.totalUsers ?? usersBlock.totalUsers)}
                 hint={
@@ -599,6 +603,7 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
                 icon={<Users size={20} strokeWidth={1.75} />}
               />
               <StatsCard
+                className="admin-dash-kpi"
                 label="Free Users"
                 value={
                   kpis.freeUsers != null
@@ -617,6 +622,7 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
                 icon={<Users size={20} strokeWidth={1.75} />}
               />
               <StatsCard
+                className="admin-dash-kpi"
                 label="Premium Users"
                 value={
                   kpis.premiumUsers != null
@@ -635,6 +641,7 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
                 icon={<Users size={20} strokeWidth={1.75} />}
               />
               <StatsCard
+                className="admin-dash-kpi"
                 label="Problems"
                 value={formatNumber(
                   kpis.totalProblems ?? problemsBlock.totalProblems,
@@ -647,6 +654,7 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
                 icon={<FileCode2 size={20} strokeWidth={1.75} />}
               />
               <StatsCard
+                className="admin-dash-kpi"
                 label="Submissions"
                 value={formatNumber(
                   kpis.totalSubmissions ?? submissionsBlock.totalSubmissions,
@@ -659,6 +667,7 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
                 icon={<Activity size={20} strokeWidth={1.75} />}
               />
               <StatsCard
+                className="admin-dash-kpi"
                 label="Acceptance Rate"
                 value={successRateAvailable ? formatRate(successRateRaw) : "—"}
                 hint={successRateAvailable ? undefined : "Metric unavailable"}
@@ -668,10 +677,10 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
           )}
         </section>
 
-        <section className="admin-dash-usage" aria-label="Product usage">
-          <div className="admin-dash-panel-head">
+        <section className="admin-dash-usage admin-dash-span-12" aria-label="Product usage">
+          <div className="admin-dash-usage-head">
             <h2 className="admin-dash-panel-title">Product / Premium usage</h2>
-            <p className="admin-dash-muted">
+            <p className="admin-dash-muted admin-dash-usage-context">
               Unique users from real Mongo collections (UTC windows). Missing
               features show Data unavailable — no invented metrics.
             </p>
@@ -768,8 +777,7 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
           )}
         </section>
 
-        <section className="admin-dash-row admin-dash-row-health" aria-label="System status">
-          <Card className="admin-dash-panel">
+          <Card className="admin-dash-panel admin-dash-span-8" aria-label="Service health">
             <CardHeader className="admin-dash-panel-head">
               <div className="admin-dash-panel-title-row">
                 <CardTitle>Service Health</CardTitle>
@@ -851,7 +859,7 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
             </CardContent>
           </Card>
 
-          <Card className="admin-dash-panel">
+          <Card className="admin-dash-panel admin-dash-span-4" aria-label="Realtime">
             <CardHeader className="admin-dash-panel-head">
               <div className="admin-dash-panel-title-row">
                 <CardTitle>Realtime</CardTitle>
@@ -916,10 +924,8 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
               )}
             </CardContent>
           </Card>
-        </section>
 
-        <section className="admin-dash-row" aria-label="Activity analytics">
-          <Card className="admin-dash-panel admin-dash-panel-wide">
+          <Card className="admin-dash-panel admin-dash-span-8" aria-label="Submission activity">
             <CardHeader className="admin-dash-panel-head">
               <CardTitle>Submission Activity</CardTitle>
             </CardHeader>
@@ -981,7 +987,7 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
             </CardContent>
           </Card>
 
-          <Card className="admin-dash-panel">
+          <Card className="admin-dash-panel admin-dash-span-4" aria-label="Verdict distribution">
             <CardHeader className="admin-dash-panel-head">
               <CardTitle>Verdict Distribution</CardTitle>
             </CardHeader>
@@ -1041,10 +1047,8 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
               )}
             </CardContent>
           </Card>
-        </section>
 
-        <section aria-label="User activity">
-          <Card className="admin-dash-panel">
+          <Card className="admin-dash-panel admin-dash-span-12" aria-label="User activity">
             <CardHeader className="admin-dash-panel-head">
               <CardTitle>User Activity</CardTitle>
             </CardHeader>
@@ -1058,8 +1062,8 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
                   compact
                 />
               ) : (
-                <div className="admin-dash-chart">
-                  <ResponsiveContainer width="100%" height={260}>
+                <div className="admin-dash-chart admin-dash-chart-user">
+                  <ResponsiveContainer width="100%" height={280}>
                     <BarChart data={userGrowth}>
                       <CartesianGrid
                         stroke={CHART.grid}
@@ -1092,10 +1096,8 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
               )}
             </CardContent>
           </Card>
-        </section>
 
-        <section className="admin-dash-row admin-dash-row-recent" aria-label="Recent activity">
-          <Card className="admin-dash-panel">
+          <Card className="admin-dash-panel admin-dash-span-8 admin-dash-panel-match" aria-label="Recent submissions">
             <CardHeader className="admin-dash-panel-head">
               <CardTitle>Recent Submissions</CardTitle>
               <Button
@@ -1181,7 +1183,7 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
             </CardContent>
           </Card>
 
-          <Card className="admin-dash-panel">
+          <Card className="admin-dash-panel admin-dash-span-4 admin-dash-panel-match" aria-label="Recent users">
             <CardHeader className="admin-dash-panel-head">
               <CardTitle>Recent Users</CardTitle>
               {can("users:view") ? (
@@ -1243,10 +1245,8 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
               )}
             </CardContent>
           </Card>
-        </section>
 
-        <section aria-label="Quick access">
-          <Card className="admin-dash-panel">
+          <Card className="admin-dash-panel admin-dash-span-12" aria-label="Quick access">
             <CardHeader className="admin-dash-panel-head">
               <CardTitle>Quick Access</CardTitle>
             </CardHeader>
@@ -1285,7 +1285,7 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
               ))}
             </CardContent>
           </Card>
-        </section>
+        </div>
       </div>
     </PermissionGuard>
   );

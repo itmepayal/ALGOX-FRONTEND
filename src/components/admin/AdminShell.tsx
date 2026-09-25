@@ -167,7 +167,7 @@ export const AdminShell: FC<AdminShellProps> = ({
 
   return (
     <div
-      className={`admin-root ${collapsed ? "sidebar-collapsed" : ""} ${
+      className={`admin-root theme-light ${collapsed ? "sidebar-collapsed" : ""} ${
         mobileOpen ? "sidebar-mobile-open" : ""
       }`}
     >

@@ -120,7 +120,8 @@ export const GuestNavbar: FC<GuestNavbarProps> = ({ onGoHome }) => {
           aria-modal="true"
           aria-label="Menu"
         >
-          {NAV.map((item) => (
+          <p className="guest-drawer-label">Product</p>
+          {NAV.filter((item) => item.label !== "Discuss").map((item) => (
             <button
               key={item.label}
               type="button"
@@ -130,6 +131,18 @@ export const GuestNavbar: FC<GuestNavbarProps> = ({ onGoHome }) => {
               {item.label}
             </button>
           ))}
+          <p className="guest-drawer-label">Platform</p>
+          {NAV.filter((item) => item.label === "Discuss").map((item) => (
+            <button
+              key={item.label}
+              type="button"
+              className="guest-drawer-link"
+              onClick={() => openProduct(item.message)}
+            >
+              {item.label}
+            </button>
+          ))}
+          <p className="guest-drawer-label">Account</p>
           <button
             type="button"
             className="guest-drawer-link"

@@ -91,14 +91,14 @@ export const ConfirmDialog: FC<ConfirmDialogProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-[200] grid place-items-center bg-black/70 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-[200] grid place-items-center bg-[rgba(15,23,42,0.45)] p-4"
       role="presentation"
       onClick={onOverlayClick}
     >
       <div
         ref={panelRef}
         className={cn(
-          "w-full max-w-md rounded-xl border border-danger/20 bg-card p-6 shadow-lg",
+          "w-full max-w-md max-h-[calc(100vh-2rem)] overflow-y-auto rounded-2xl border border-border bg-card p-6 shadow-[0_20px_50px_rgba(15,23,42,0.15)]",
           "font-primary text-foreground",
         )}
         role="dialog"
@@ -108,10 +108,13 @@ export const ConfirmDialog: FC<ConfirmDialogProps> = ({
         onClick={(e) => e.stopPropagation()}
         onKeyDown={onPanelKeyDown}
       >
-        <h3 id={titleId} className="text-lg font-semibold tracking-tight">
+        <h3 id={titleId} className="text-lg font-semibold tracking-tight text-foreground">
           {title}
         </h3>
-        <div id={descId} className="mt-2 space-y-2 text-sm text-muted-foreground">
+        <div
+          id={descId}
+          className="mt-2 space-y-2 text-sm text-muted-foreground"
+        >
           {typeof description === "string" ? <p>{description}</p> : description}
           {warning ? (
             <p className="font-medium text-danger" role="note">

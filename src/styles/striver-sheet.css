@@ -442,7 +442,8 @@
   display: flex;
   align-items: center;
   flex: 1;
-  min-width: 240px;
+  min-width: min(240px, 100%);
+  max-width: 100%;
 }
 
 .ax-search-icon {
@@ -1230,6 +1231,7 @@
 
   .ax-progress-info-left {
     max-width: none;
+    min-width: 0;
   }
 
   .ax-progress-stats-right {

@@ -31,6 +31,9 @@
   color: var(--ws-text);
   font-family: var(--ws-font);
   letter-spacing: -0.01em;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .lc-workspace * {

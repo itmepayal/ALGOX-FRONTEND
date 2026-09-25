@@ -143,7 +143,7 @@ export const PremiumUpgradeModal: FC<PremiumUpgradeModalProps> = ({
       <div
         ref={panelRef}
         className={cn(
-          "w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-lg",
+          "w-full max-w-md max-h-[calc(100vh-2rem)] overflow-y-auto rounded-xl border border-border bg-card p-6 shadow-lg",
           "font-primary text-foreground"
         )}
         role="dialog"

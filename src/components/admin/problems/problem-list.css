@@ -1,0 +1,246 @@
+/* Admin → Problems list (client-aligned surfaces) */
+
+.admin-problems-page {
+  width: 100%;
+  max-width: 1320px;
+  margin-inline: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  min-width: 0;
+}
+
+.admin-problems-page .admin-page-lead {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  max-width: 52ch;
+}
+
+.admin-toolbar-problems {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 0;
+}
+
+.admin-toolbar-problems .admin-toolbar-search {
+  flex: 1 1 280px;
+  min-width: 0;
+  max-width: none;
+  min-height: 42px;
+  height: 42px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 0 14px;
+  font-size: 0.8125rem;
+  color: var(--text-main);
+}
+
+.admin-toolbar-problems .admin-toolbar-search::placeholder {
+  color: var(--text-muted);
+}
+
+.admin-toolbar-problems .admin-toolbar-search:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--primary) 45%, var(--border-subtle));
+  box-shadow: 0 0 0 2px var(--primary-subtle);
+}
+
+.admin-toolbar-problems .admin-toolbar-filter {
+  flex: 0 0 auto;
+  min-height: 42px;
+  height: 42px;
+  padding: 0 12px;
+  border-radius: 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-main);
+  font-size: 0.8125rem;
+}
+
+.admin-toolbar-problems .admin-toolbar-filter--status {
+  width: 130px;
+}
+
+.admin-toolbar-problems .admin-toolbar-filter--difficulty {
+  width: 140px;
+}
+
+.admin-toolbar-problems .admin-toolbar-filter--access {
+  width: 120px;
+}
+
+.admin-toolbar-problems .admin-toolbar-submit {
+  min-width: 90px;
+  height: 42px;
+}
+
+.admin-toolbar-problems .admin-toolbar-create {
+  min-width: 140px;
+  height: 42px;
+}
+
+.admin-toolbar-problems .admin-btn.bulk {
+  height: 42px;
+}
+
+.admin-problem-title-link {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 6px 10px;
+  margin: -6px -10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-main);
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.admin-problem-title-link:hover {
+  background: var(--bg-elevated);
+  border-color: var(--border-subtle);
+}
+
+.admin-problem-title-link:focus-visible {
+  outline: none;
+  border-color: color-mix(in srgb, var(--primary) 40%, var(--border-subtle));
+  box-shadow: 0 0 0 2px var(--primary-subtle);
+}
+
+.admin-problems-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.admin-icon-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 9px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.admin-icon-action:hover:not(:disabled) {
+  background: var(--bg-card-hover, var(--bg-elevated));
+  border-color: var(--border-strong);
+  color: var(--text-main);
+}
+
+.admin-icon-action:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--primary-subtle);
+  border-color: color-mix(in srgb, var(--primary) 40%, var(--border-subtle));
+}
+
+.admin-icon-action--publish {
+  width: auto;
+  min-width: 36px;
+  height: 36px;
+  padding: 0 12px;
+  gap: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 10%, transparent);
+  border-color: color-mix(in srgb, var(--success) 28%, var(--border-subtle));
+}
+
+.admin-icon-action--publish:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--success) 16%, transparent);
+  color: var(--success);
+}
+
+.admin-icon-action--danger {
+  color: var(--error);
+  background: color-mix(in srgb, var(--error) 8%, transparent);
+  border-color: color-mix(in srgb, var(--error) 25%, var(--border-subtle));
+}
+
+.admin-icon-action--danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--error) 14%, transparent);
+  color: var(--error);
+}
+
+.admin-access-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  border: 1px solid transparent;
+  line-height: 1.35;
+}
+
+.admin-access-badge--free {
+  color: #b8acf8;
+  background: rgba(155, 135, 245, 0.1);
+  border-color: rgba(155, 135, 245, 0.25);
+}
+
+.admin-access-badge--premium {
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 10%, transparent);
+  border-color: color-mix(in srgb, var(--warning) 28%, transparent);
+}
+
+.admin-problems-table.admin-datatable .admin-table tbody td {
+  padding-top: 14px;
+  padding-bottom: 14px;
+  min-height: 58px;
+}
+
+.admin-problems-table .admin-table td:nth-child(5) {
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+}
+
+@media (max-width: 900px) {
+  .admin-toolbar-problems .admin-toolbar-filter--status,
+  .admin-toolbar-problems .admin-toolbar-filter--difficulty,
+  .admin-toolbar-problems .admin-toolbar-filter--access {
+    flex: 1 1 calc(50% - 10px);
+    width: auto;
+    min-width: 0;
+  }
+
+  .admin-toolbar-problems .admin-toolbar-submit,
+  .admin-toolbar-problems .admin-toolbar-create {
+    flex: 1 1 auto;
+  }
+}
+
+@media (max-width: 640px) {
+  .admin-toolbar-problems .admin-toolbar-filter {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+}

@@ -61,7 +61,7 @@ import {
 import { normalizeProblemId, updateIdSet } from "../utils/engagementIds";
 import type { RunCaseResult, RunResult } from "../types/judge";
 import { hasAccessToken } from "../api/accessToken";
-import { Flame, Search, ShieldCheck, Swords } from "lucide-react";
+import { Flame, Menu, Search, ShieldCheck, Swords, X } from "lucide-react";
 import { FreeHomeDashboard } from "./home/FreeHomeDashboard";
 import { CompaniesPage } from "./companies/CompaniesPage";
 import {
@@ -106,6 +106,7 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
   const logoUrl = settings?.logoUrl;
   const supportedLanguages = settings?.supportedLanguages;
   const [activeTab, setActiveTab] = useState<PlatformTab>("home");
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [learningRefreshKey, setLearningRefreshKey] = useState(0);
   const [studySessions, setStudySessions] = useState<StudySession[]>([]);
   const [favouritesRefreshKey, setFavouritesRefreshKey] = useState(0);
@@ -1320,9 +1321,19 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
         setPendingPremiumNav(id, premiumFeature);
       }
       setActiveTab(id);
+      setMobileNavOpen(false);
     },
     []
   );
+
+  useEffect(() => {
+    if (!mobileNavOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMobileNavOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mobileNavOpen]);
 
   // After checkout / entitlement refresh, return to the Premium feature the user tried to open.
   useEffect(() => {
@@ -1340,7 +1351,10 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
         <button
           type="button"
           className="platform-brand"
-          onClick={() => setActiveTab("home")}
+          onClick={() => {
+            setMobileNavOpen(false);
+            setActiveTab("home");
+          }}
           aria-label={`${platformName} home`}
         >
           {logoUrl ? (
@@ -1358,33 +1372,16 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
           <span className="platform-brand-name">{platformName}</span>
         </button>
 
-        <nav className="platform-navbar-nav" aria-label="Primary">
-          {navItems.map(
-            ({ id, label, icon: Icon, isPremiumNav, premiumLocked, premiumFeature, tooltip }) => (
-              <button
-                key={id}
-                type="button"
-                className={`platform-navbar-link ${activeTab === id ? "active" : ""}`}
-                aria-label={tooltip}
-                title={tooltip}
-                onClick={() =>
-                  handlePlatformNav(id, premiumFeature, premiumLocked)
-                }
-              >
-                <span className="platform-navbar-link-icon" aria-hidden>
-                  <Icon size={16} strokeWidth={1.75} />
-                </span>
-                <span className="platform-navbar-link-label">{label}</span>
-                {isPremiumNav ? (
-                  <PremiumNavIndicator
-                    locked={premiumLocked}
-                    variant="navbar"
-                  />
-                ) : null}
-              </button>
-            )
-          )}
-        </nav>
+        <button
+          type="button"
+          className="platform-icon-btn platform-nav-toggle"
+          aria-label={mobileNavOpen ? "Close menu" : "Open menu"}
+          aria-expanded={mobileNavOpen}
+          aria-controls="platform-mobile-nav"
+          onClick={() => setMobileNavOpen((open) => !open)}
+        >
+          {mobileNavOpen ? <X size={18} /> : <Menu size={18} />}
+        </button>
 
         <div className="platform-navbar-right">
           <label className="platform-navbar-search">
@@ -1446,7 +1443,40 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
         </div>
       </header>
 
-      <div className="platform-shell">
+      <nav
+        id="platform-mobile-nav"
+        className={`platform-mobile-nav${mobileNavOpen ? " is-open" : ""}`}
+        aria-label="Primary"
+        hidden={!mobileNavOpen}
+      >
+        {navItems.map(
+          ({ id, label, icon: Icon, isPremiumNav, premiumLocked, premiumFeature, tooltip }) => (
+            <button
+              key={id}
+              type="button"
+              className={`platform-navbar-link ${activeTab === id ? "active" : ""}`}
+              aria-label={tooltip}
+              aria-current={activeTab === id ? "page" : undefined}
+              onClick={() =>
+                handlePlatformNav(id, premiumFeature, premiumLocked)
+              }
+            >
+              <span className="platform-navbar-link-icon" aria-hidden>
+                <Icon size={16} strokeWidth={1.75} />
+              </span>
+              <span className="platform-navbar-link-label">{label}</span>
+              {isPremiumNav ? (
+                <PremiumNavIndicator
+                  locked={premiumLocked}
+                  variant="navbar"
+                />
+              ) : null}
+            </button>
+          )
+        )}
+      </nav>
+
+      <div className="platform-shell" inert={mobileNavOpen ? true : undefined}>
         <aside className="platform-sidebar" aria-label="Primary navigation">
           <nav className="platform-sidebar-nav">
             {navItems.map(

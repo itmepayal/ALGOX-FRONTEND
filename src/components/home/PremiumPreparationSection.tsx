@@ -271,7 +271,7 @@ export const PremiumPreparationSection: FC<PremiumPreparationSectionProps> = ({
   if (!premium) {
     return (
       <section
-        className="free-home-card free-home-prep-card"
+        className="free-home-card free-home-prep-card free-home-insight-prep"
         aria-labelledby="premium-prep-locked"
       >
         <div className="free-home-card-head">
@@ -282,7 +282,7 @@ export const PremiumPreparationSection: FC<PremiumPreparationSectionProps> = ({
         </div>
         <div className="free-home-prep-content">
           <h3 className="free-home-prep-headline">Unlock personalized interview preparation</h3>
-          <p className="free-home-muted" style={{ marginBottom: 14 }}>
+          <p className="free-home-muted">
             Get company-specific practice, revision coaching, mock interviews, personalized recommendations and AI assistance.
           </p>
           <ul className="free-home-prep-features">
@@ -292,10 +292,10 @@ export const PremiumPreparationSection: FC<PremiumPreparationSectionProps> = ({
             <li>✓ Personalized recommendations</li>
             <li>✓ AI assist</li>
           </ul>
-          <div style={{ marginTop: 16 }}>
-            <Button
+          <Button
               type="button"
               size="sm"
+              className="free-home-prep-cta"
               disabled={upgradeBusy}
               onClick={() => void startUpgrade()}
               aria-label="Upgrade to Premium"
@@ -311,15 +311,17 @@ export const PremiumPreparationSection: FC<PremiumPreparationSectionProps> = ({
                   <ArrowRight size={14} aria-hidden />
                 </>
               )}
-            </Button>
-          </div>
+          </Button>
         </div>
       </section>
     );
   }
 
   return (
-    <section className="free-home-prep" aria-labelledby="premium-prep-heading">
+    <section
+      className="free-home-prep free-home-insight-prep"
+      aria-labelledby="premium-prep-heading"
+    >
       <header className="free-home-prep-head free-home-card-head">
         <div>
           <h2 id="premium-prep-heading" className="free-home-section-title">

@@ -56,76 +56,116 @@ export const UserListPage: FC<Props> = ({ onOpen, onCreate }) => {
       permission="users:view"
       fallback={<div className="admin-denied">No users permission.</div>}
     >
-      <p className="admin-page-lead">
-        Review accounts, roles, and account status. Actions respect RBAC.
-      </p>
-      <div className="admin-toolbar">
-        <input
-          placeholder="Search name or email"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && (setPage(1), load())}
-        />
-        <select value={role} onChange={(e) => { setPage(1); setRole(e.target.value); }}>
-          <option value="all">All roles</option>
-          <option value="user">user</option>
-          <option value="moderator">moderator</option>
-          <option value="content_manager">content_manager</option>
-          <option value="admin">admin</option>
-          <option value="super_admin">super_admin</option>
-        </select>
-        <select value={status} onChange={(e) => { setPage(1); setStatus(e.target.value); }}>
-          <option value="all">All statuses</option>
-          <option value="active">active</option>
-          <option value="suspended">suspended</option>
-          <option value="banned">banned</option>
-        </select>
-        <button type="button" className="admin-btn" onClick={() => { setPage(1); load(); }}>
-          Search
-        </button>
-        {canCreate && onCreate ? (
-          <button type="button" className="admin-btn primary" onClick={onCreate}>
-            Create user
+      <div className="admin-page-shell">
+        <p className="admin-page-lead">
+          Review accounts, roles, and account status. Actions respect RBAC.
+        </p>
+        <div className="admin-toolbar admin-toolbar-filters">
+          <input
+            className="admin-toolbar-search"
+            placeholder="Search name or email"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && (setPage(1), load())}
+          />
+          <select
+            className="admin-toolbar-filter"
+            style={{ width: 140 }}
+            value={role}
+            onChange={(e) => {
+              setPage(1);
+              setRole(e.target.value);
+            }}
+          >
+            <option value="all">All roles</option>
+            <option value="user">user</option>
+            <option value="moderator">moderator</option>
+            <option value="content_manager">content_manager</option>
+            <option value="admin">admin</option>
+            <option value="super_admin">super_admin</option>
+          </select>
+          <select
+            className="admin-toolbar-filter"
+            style={{ width: 130 }}
+            value={status}
+            onChange={(e) => {
+              setPage(1);
+              setStatus(e.target.value);
+            }}
+          >
+            <option value="all">All statuses</option>
+            <option value="active">active</option>
+            <option value="suspended">suspended</option>
+            <option value="banned">banned</option>
+          </select>
+          <button
+            type="button"
+            className="admin-btn admin-toolbar-submit"
+            onClick={() => {
+              setPage(1);
+              load();
+            }}
+          >
+            Search
           </button>
-        ) : null}
+          {canCreate && onCreate ? (
+            <button
+              type="button"
+              className="admin-btn primary admin-toolbar-create"
+              onClick={onCreate}
+            >
+              Create user
+            </button>
+          ) : null}
+        </div>
+        {error ? <p className="admin-error">{error}</p> : null}
+        <DataTable
+          rows={rows}
+          rowKey={(u) => u.id}
+          loading={loading}
+          page={page}
+          totalPages={meta.totalPages}
+          total={meta.total}
+          onPageChange={setPage}
+          emptyTitle="No users found"
+          emptyDescription="Try adjusting search or filters, or create a new user."
+          emptyIcon={<Users size={18} strokeWidth={1.75} />}
+          columns={[
+            {
+              key: "name",
+              header: "Name",
+              render: (u) => (
+                <button
+                  type="button"
+                  className="admin-text-link"
+                  onClick={() => onOpen(u.id)}
+                >
+                  {u.name}
+                </button>
+              ),
+            },
+            {
+              key: "email",
+              header: "Email",
+              render: (u) => u.email,
+            },
+            { key: "role", header: "Role", render: (u) => u.role },
+            {
+              key: "status",
+              header: "Status",
+              render: (u) => <StatusBadge status={u.status} />,
+            },
+            {
+              key: "createdAt",
+              header: "Joined",
+              render: (u) =>
+                u.createdAt
+                  ? new Date(u.createdAt).toLocaleDateString()
+                  : "—",
+            },
+          ]}
+        />
       </div>
-      {error ? <p className="admin-error">{error}</p> : null}
-      <DataTable
-        rows={rows}
-        rowKey={(u) => u.id}
-        loading={loading}
-        page={page}
-        totalPages={meta.totalPages}
-        total={meta.total}
-        onPageChange={setPage}
-        emptyTitle="No users found"
-        emptyDescription="Try adjusting search or filters, or create a new user."
-        emptyIcon={<Users size={18} strokeWidth={1.75} />}
-        columns={[
-          {
-            key: "name",
-            header: "Name",
-            render: (u) => (
-              <button type="button" className="admin-btn" onClick={() => onOpen(u.id)}>
-                {u.name}
-              </button>
-            ),
-          },
-          { key: "email", header: "Email", render: (u) => u.email },
-          { key: "role", header: "Role", render: (u) => u.role },
-          {
-            key: "status",
-            header: "Status",
-            render: (u) => <StatusBadge status={u.status} />,
-          },
-          {
-            key: "created",
-            header: "Joined",
-            render: (u) =>
-              u.createdAt ? new Date(u.createdAt).toLocaleDateString() : "—",
-          },
-        ]}
-      />
     </PermissionGuard>
   );
 };
