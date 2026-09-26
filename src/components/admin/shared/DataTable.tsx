@@ -181,26 +181,32 @@ export function DataTable<T>({
       </div>
       {onPageChange && (
         <div className="admin-pagination">
-          {typeof total === "number" ? <span>{total} total</span> : null}
-          <button
-            type="button"
-            className="admin-btn"
-            disabled={page <= 1 || loading}
-            onClick={() => onPageChange(page - 1)}
-          >
-            Prev
-          </button>
-          <span>
-            Page {page} / {Math.max(totalPages, 1)}
-          </span>
-          <button
-            type="button"
-            className="admin-btn"
-            disabled={page >= totalPages || loading}
-            onClick={() => onPageChange(page + 1)}
-          >
-            Next
-          </button>
+          {typeof total === "number" ? (
+            <span className="admin-pagination-total">{total} total</span>
+          ) : (
+            <span />
+          )}
+          <div className="admin-pagination-actions">
+            <button
+              type="button"
+              className="admin-btn"
+              disabled={page <= 1 || loading}
+              onClick={() => onPageChange(page - 1)}
+            >
+              Prev
+            </button>
+            <span className="admin-pagination-page">
+              Page {page} / {Math.max(totalPages, 1)}
+            </span>
+            <button
+              type="button"
+              className="admin-btn"
+              disabled={page >= totalPages || loading}
+              onClick={() => onPageChange(page + 1)}
+            >
+              Next
+            </button>
+          </div>
         </div>
       )}
     </div>

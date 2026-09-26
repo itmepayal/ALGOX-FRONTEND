@@ -1,0 +1,264 @@
+/* Admin → Real-Time Centers WebSocket Dashboard (Client & Problems master design aligned) */
+
+.admin-realtime-dashboard-page {
+  width: 100%;
+  max-width: none;
+  margin-inline: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.admin-realtime-dashboard-page .admin-page-lead {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  max-width: 58ch;
+}
+
+/* Header Action Toolbar */
+.admin-realtime-header-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  margin-bottom: 4px;
+}
+
+.admin-realtime-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Real-Time Status Strip */
+.admin-realtime-status-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  width: 100%;
+}
+
+.admin-realtime-strip-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8125rem;
+}
+
+.admin-realtime-strip-label {
+  color: var(--text-muted);
+  font-weight: 500;
+  text-transform: uppercase;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+}
+
+.admin-realtime-strip-val {
+  color: var(--text-main);
+  font-weight: 600;
+}
+
+.admin-realtime-strip-val.mono {
+  font-family: var(--font-mono, monospace);
+}
+
+/* 3 KPI Grid */
+.admin-realtime-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  width: 100%;
+}
+
+@media (max-width: 768px) {
+  .admin-realtime-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.admin-realtime-kpi-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 8px;
+  transition: border-color 0.15s ease;
+}
+
+.admin-realtime-kpi-card:hover {
+  border-color: color-mix(in srgb, var(--primary) 35%, var(--border-subtle));
+}
+
+.admin-realtime-kpi-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.admin-realtime-kpi-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.admin-realtime-kpi-icon {
+  color: var(--primary-bright);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.85;
+}
+
+.admin-realtime-kpi-val {
+  font-size: 1.875rem;
+  font-weight: 700;
+  color: var(--text-main);
+  font-family: var(--font-mono, monospace);
+  line-height: 1.1;
+  margin-top: 4px;
+}
+
+.admin-realtime-kpi-hint {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  line-height: 1.35;
+}
+
+/* 2-Column Grid Layout */
+.admin-realtime-grid {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 16px;
+  width: 100%;
+  align-items: start;
+}
+
+@media (max-width: 960px) {
+  .admin-realtime-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.admin-realtime-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  height: 100%;
+}
+
+.admin-realtime-card-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.admin-realtime-card-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-main);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.admin-realtime-card-sub {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+/* KV Table Rows */
+.admin-realtime-kv-table {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.admin-realtime-kv-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.admin-realtime-kv-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.admin-realtime-kv-row:first-child {
+  padding-top: 0;
+}
+
+.admin-realtime-kv-label {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.admin-realtime-kv-val {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-main);
+  text-align: right;
+}
+
+.admin-realtime-kv-val.mono {
+  font-family: var(--font-mono, monospace);
+}
+
+.admin-realtime-untracked {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  text-align: right;
+  gap: 1px;
+}
+
+.admin-realtime-untracked-text {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.admin-realtime-untracked-sub {
+  font-size: 0.7rem;
+  color: color-mix(in srgb, var(--text-muted) 75%, transparent);
+}
+
+/* Chart Container Card */
+.admin-realtime-chart-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}

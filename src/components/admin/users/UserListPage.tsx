@@ -1,10 +1,12 @@
 import { useEffect, useState, type FC } from "react";
-import { Users } from "lucide-react";
+import { Users, UserPlus } from "lucide-react";
 import { adminAuthApi, type AdminUser } from "../../../api/adminAuthApi";
 import { DataTable } from "../shared/DataTable";
 import { StatusBadge } from "../shared/StatusBadge";
 import { PermissionGuard } from "../shared/PermissionGuard";
 import { usePermission } from "../../../rbac/usePermission";
+import { WidgetError } from "../shared/WidgetError";
+import "./user-list.css";
 
 interface Props {
   onOpen: (id: string) => void;
@@ -21,18 +23,18 @@ export const UserListPage: FC<Props> = ({ onOpen, onCreate }) => {
   const [role, setRole] = useState("all");
   const [status, setStatus] = useState("all");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<{ title: string; message: string } | null>(null);
 
   const load = async () => {
     try {
       setLoading(true);
-      setError("");
+      setError(null);
       const res = await adminAuthApi.listUsers({
         page,
         limit: 20,
         search: search || undefined,
-        role,
-        status,
+        role: role === "all" ? undefined : role,
+        status: status === "all" ? undefined : status,
       });
       setRows(res.data || []);
       setMeta({
@@ -40,7 +42,10 @@ export const UserListPage: FC<Props> = ({ onOpen, onCreate }) => {
         totalPages: res.meta?.totalPages || 1,
       });
     } catch (err: any) {
-      setError(err?.response?.data?.message || err.message);
+      setError({
+        title: "Unable to load users",
+        message: err?.response?.data?.message || err.message || "Please try again.",
+      });
     } finally {
       setLoading(false);
     }
@@ -56,14 +61,14 @@ export const UserListPage: FC<Props> = ({ onOpen, onCreate }) => {
       permission="users:view"
       fallback={<div className="admin-denied">No users permission.</div>}
     >
-      <div className="admin-page-shell">
+      <div className="admin-user-list-page">
         <p className="admin-page-lead">
-          Review accounts, roles, and account status. Actions respect RBAC.
+          Review accounts, roles, and account status across the platform.
         </p>
-        <div className="admin-toolbar admin-toolbar-filters">
+        <div className="admin-toolbar admin-toolbar-users">
           <input
             className="admin-toolbar-search"
-            placeholder="Search name or email"
+            placeholder="Search name or email…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && (setPage(1), load())}
@@ -114,11 +119,19 @@ export const UserListPage: FC<Props> = ({ onOpen, onCreate }) => {
               className="admin-btn primary admin-toolbar-create"
               onClick={onCreate}
             >
-              Create user
+              <UserPlus size={14} /> Create user
             </button>
           ) : null}
         </div>
-        {error ? <p className="admin-error">{error}</p> : null}
+
+        {error ? (
+          <WidgetError
+            title={error.title}
+            message={error.message}
+            onRetry={load}
+          />
+        ) : null}
+
         <DataTable
           rows={rows}
           rowKey={(u) => u.id}
@@ -129,7 +142,7 @@ export const UserListPage: FC<Props> = ({ onOpen, onCreate }) => {
           onPageChange={setPage}
           emptyTitle="No users found"
           emptyDescription="Try adjusting search or filters, or create a new user."
-          emptyIcon={<Users size={18} strokeWidth={1.75} />}
+          emptyIcon={<Users size={20} strokeWidth={1.75} />}
           columns={[
             {
               key: "name",
@@ -137,7 +150,7 @@ export const UserListPage: FC<Props> = ({ onOpen, onCreate }) => {
               render: (u) => (
                 <button
                   type="button"
-                  className="admin-text-link"
+                  className="admin-user-name-btn"
                   onClick={() => onOpen(u.id)}
                 >
                   {u.name}
@@ -147,9 +160,19 @@ export const UserListPage: FC<Props> = ({ onOpen, onCreate }) => {
             {
               key: "email",
               header: "Email",
-              render: (u) => u.email,
+              render: (u) => (
+                <span style={{ color: "var(--text-secondary)", fontSize: "0.8125rem" }}>
+                  {u.email}
+                </span>
+              ),
             },
-            { key: "role", header: "Role", render: (u) => u.role },
+            {
+              key: "role",
+              header: "Role",
+              render: (u) => (
+                <span className="admin-user-role-badge">{u.role}</span>
+              ),
+            },
             {
               key: "status",
               header: "Status",

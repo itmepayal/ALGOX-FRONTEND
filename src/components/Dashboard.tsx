@@ -14,7 +14,7 @@ import { evaluationApi } from "../api/evaluationApi";
 import { engagementApi } from "../api/engagementApi";
 import { ProblemsSheet } from "./ProblemsSheet";
 import { ProblemWorkspace } from "./ProblemWorkspace";
-import { ProfilePanel } from "./ProfilePanel";
+import { ProfilePanel, type SettingsSection } from "./ProfilePanel";
 import { LearningCalendarRoadmap } from "./LearningCalendarRoadmap";
 import { StudySessionsPanel } from "./StudySessionsPanel";
 import { DailyPlannerPanel } from "./DailyPlannerPanel";
@@ -157,9 +157,7 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
   const submitLockRef = useRef(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  const [dashTab, setDashTab] = useState<
-    "profile" | "account" | "security" | "progress" | "sessions" | "submissions" | "audit"
-  >("profile");
+  const [dashTab, setDashTab] = useState<SettingsSection>("profile");
   const [sessions, setSessions] = useState<any[]>([]);
   const [securityLogs, setSecurityLogs] = useState<any[]>([]);
   const [loadingSessions, setLoadingSessions] = useState(false);
@@ -1177,11 +1175,26 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
     setUpdatingProfile(true);
     setProfileMsg("");
     try {
-      const res = await authApi.updateProfile({ name: editName, avatar: avatarBase64 || undefined });
-      setProfileMsg("Profile updated successfully!");
-      if (res.data && user) setUser({ ...user, name: res.data.name, avatar: res.data.avatar });
+      const res = await authApi.updateProfile({
+        name: editName,
+        avatar: avatarBase64 || undefined,
+      });
+      setProfileMsg("Profile photo updated successfully.");
+      if (res.data && user) {
+        const updatedUser = {
+          ...user,
+          name: res.data.name || user.name,
+          avatar: res.data.avatar !== undefined ? res.data.avatar : user.avatar,
+        };
+        setUser(updatedUser);
+        localStorage.setItem("user", JSON.stringify(updatedUser));
+        setAvatarPreview(updatedUser.avatar || "");
+        setAvatarBase64("");
+      }
     } catch (err: any) {
-      setProfileMsg(err.response?.data?.message || "Failed to update profile");
+      const msg =
+        err.response?.data?.message || err.message || "Failed to update profile";
+      setProfileMsg(msg);
     } finally {
       setUpdatingProfile(false);
     }
@@ -1969,11 +1982,39 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
                 securityLogs={securityLogs}
                 loadingSessions={loadingSessions}
                 loadingSecurityLogs={loadingSecurityLogs}
-                currentStreak={streakInfo.current}
+                avatarBase64={avatarBase64}
+                onCancelAvatar={() => {
+                  setAvatarPreview("");
+                  setAvatarBase64("");
+                  setProfileMsg("");
+                }}
                 onNameChange={setEditName}
                 onAvatarChange={(e) => {
                   const file = e.target.files?.[0];
                   if (!file) return;
+
+                  const allowedTypes = [
+                    "image/jpeg",
+                    "image/png",
+                    "image/webp",
+                    "image/gif",
+                  ];
+                  if (!allowedTypes.includes(file.type)) {
+                    setProfileMsg(
+                      "Invalid image format. Supported formats: JPG, PNG, WEBP, GIF."
+                    );
+                    return;
+                  }
+
+                  const MAX_SIZE = 5 * 1024 * 1024; // 5MB
+                  if (file.size > MAX_SIZE) {
+                    setProfileMsg(
+                      "File size exceeds 5MB limit. Please select a smaller image."
+                    );
+                    return;
+                  }
+
+                  setProfileMsg("");
                   const reader = new FileReader();
                   reader.onloadend = () => {
                     const result = reader.result as string;

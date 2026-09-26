@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FC, type FormEvent } from "react";
-import { CalendarDays, Loader2, Save } from "lucide-react";
+import { Loader2, Save } from "lucide-react";
 import { PermissionGuard } from "../shared/PermissionGuard";
 import { StatusBadge } from "../shared/StatusBadge";
 import { Button } from "../../ui/button";
@@ -12,6 +12,7 @@ import {
 import { adminProblemApi, type AdminProblem } from "../../../api/adminProblemApi";
 import { usePermission } from "../../../rbac/usePermission";
 import { useToast } from "../../../context/ToastContext";
+import "./daily-challenges.css";
 
 function todayKeyUtc(): string {
   const d = new Date();
@@ -120,131 +121,152 @@ export const ChallengesAdminPage: FC = () => {
       permission={["problems:view", "problems:update", "problems:create"]}
       fallback={<div className="admin-denied">No problems permission.</div>}
     >
-      <div className="admin-toolbar" style={{ marginBottom: 16 }}>
-        <div>
-          <h2 style={{ margin: 0, display: "flex", alignItems: "center", gap: 8 }}>
-            <CalendarDays size={18} /> Daily Challenges
-          </h2>
-          <p className="admin-muted" style={{ margin: "4px 0 0" }}>
-            Assign the canonical problem for a dateKey (UTC). Uses existing
-            challenge admin API.
-          </p>
-        </div>
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          onClick={() => void loadChallenge()}
-          disabled={loading}
-        >
-          {loading ? <Loader2 size={14} className="spin" /> : "Reload"}
-        </Button>
-      </div>
-
-      {error ? <p className="admin-error">{error}</p> : null}
-
-      <form
-        onSubmit={(e) => void onSave(e)}
-        className="admin-card"
-        style={{ maxWidth: 560, padding: 16, display: "grid", gap: 12 }}
-      >
-        <div className="admin-field">
-          <label htmlFor="ch-date">Date (UTC)</label>
-          <Input
-            id="ch-date"
-            type="date"
-            value={dateKey}
-            onChange={(e) => setDateKey(e.target.value)}
-            disabled={!canEdit || saving}
-          />
-        </div>
-
-        {current ? (
-          <div className="admin-muted" style={{ fontSize: "0.875rem" }}>
-            Current: <strong>{current.title || "Untitled"}</strong>
-            {current.problemSlug ? ` · ${current.problemSlug}` : null}
-            {" · "}
-            <StatusBadge status={current.isPublished ? "published" : "draft"} />
-            {" · "}
-            tier {current.tier}
+      <div className="admin-daily-challenges-page">
+        <div className="admin-daily-challenges-header">
+          <div>
+            <p className="admin-page-lead">
+              Assign and manage the canonical daily coding challenge for each UTC date.
+            </p>
           </div>
-        ) : (
-          <p className="admin-muted">No challenge set for this date yet.</p>
-        )}
-
-        <div className="admin-field">
-          <label htmlFor="ch-search">Find published problem</label>
-          <Input
-            id="ch-search"
-            value={problemSearch}
-            placeholder="Search title…"
-            onChange={(e) => setProblemSearch(e.target.value)}
-            disabled={!canEdit}
-          />
-        </div>
-
-        <div className="admin-field">
-          <label htmlFor="ch-problem">Problem</label>
-          <select
-            id="ch-problem"
-            className="admin-input"
-            value={problemId}
-            onChange={(e) => setProblemId(e.target.value)}
-            disabled={!canEdit || saving}
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={() => void loadChallenge()}
+            disabled={loading}
           >
-            <option value="">Select problem…</option>
-            {problems.map((p) => {
-              const id = p.id || (p as any)._id;
-              return (
-                <option key={id} value={id}>
-                  {p.title} ({p.difficulty}) — {p.slug}
-                </option>
-              );
-            })}
-          </select>
-        </div>
-
-        <div className="admin-field">
-          <label htmlFor="ch-tier">Tier</label>
-          <select
-            id="ch-tier"
-            className="admin-input"
-            value={tier}
-            onChange={(e) => setTier(e.target.value as ChallengeTier)}
-            disabled={!canEdit || saving}
-          >
-            <option value="standard">standard</option>
-            <option value="advanced">advanced</option>
-          </select>
-        </div>
-
-        <label
-          style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}
-        >
-          <input
-            type="checkbox"
-            checked={isPublished}
-            onChange={(e) => setIsPublished(e.target.checked)}
-            disabled={!canEdit || saving}
-          />
-          Published
-        </label>
-
-        {canEdit ? (
-          <Button type="submit" disabled={saving || !problemId}>
-            {saving ? (
-              <Loader2 size={14} className="spin" />
-            ) : (
-              <Save size={14} />
-            )}
-            <span style={{ marginLeft: 6 }}>Save challenge</span>
+            {loading ? <Loader2 size={14} className="spin" /> : "Reload"}
           </Button>
-        ) : (
-          <p className="admin-muted">
-            Requires <code>problems:update</code> or <code>problems:create</code>
-          </p>
-        )}
-      </form>
+        </div>
+
+        <form onSubmit={(e) => void onSave(e)} className="admin-daily-challenge-card">
+          <div className="admin-daily-challenge-card-head">
+            <h3 className="admin-daily-challenge-card-title">Daily challenge configuration</h3>
+            <p className="admin-daily-challenge-card-sub">
+              Assign the canonical problem for the selected UTC date.
+            </p>
+          </div>
+
+          <div className="admin-daily-challenge-top-grid">
+            <div className="admin-daily-challenge-field">
+              <label htmlFor="ch-date">Date (UTC)</label>
+              <Input
+                id="ch-date"
+                type="date"
+                value={dateKey}
+                onChange={(e) => setDateKey(e.target.value)}
+                disabled={!canEdit || saving}
+                style={{ maxWidth: 320 }}
+              />
+              <span className="field-hint">Challenge assignment is evaluated using UTC.</span>
+            </div>
+
+            <div className="admin-daily-current-box">
+              <div className="admin-daily-current-label">Current Challenge</div>
+              {current ? (
+                <>
+                  <div className="admin-daily-current-title">{current.title || "Untitled"}</div>
+                  {current.problemSlug && (
+                    <div className="admin-daily-current-slug">{current.problemSlug}</div>
+                  )}
+                  <div className="admin-daily-current-meta">
+                    <StatusBadge status={current.isPublished ? "published" : "draft"} />
+                    <span className="admin-daily-tier-tag">Tier: {current.tier || "standard"}</span>
+                  </div>
+                </>
+              ) : (
+                <div className="admin-muted" style={{ fontSize: "0.875rem", fontStyle: "italic", paddingTop: 4 }}>
+                  No challenge assigned for this date.
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="admin-daily-challenge-field">
+            <label htmlFor="ch-search">Find published problem</label>
+            <Input
+              id="ch-search"
+              value={problemSearch}
+              placeholder="Search title..."
+              onChange={(e) => setProblemSearch(e.target.value)}
+              disabled={!canEdit}
+              style={{ maxWidth: "60%" }}
+            />
+            <span className="field-hint">Search from published problems only.</span>
+          </div>
+
+          <div className="admin-daily-challenge-field">
+            <label htmlFor="ch-problem">Problem</label>
+            <select
+              id="ch-problem"
+              className="admin-input"
+              value={problemId}
+              onChange={(e) => setProblemId(e.target.value)}
+              disabled={!canEdit || saving}
+            >
+              <option value="">Select problem…</option>
+              {problems.map((p) => {
+                const id = p.id || (p as any)._id;
+                return (
+                  <option key={id} value={id}>
+                    {p.title} ({p.difficulty}) — {p.slug}
+                  </option>
+                );
+              })}
+            </select>
+          </div>
+
+          <div className="admin-daily-challenge-bottom-grid">
+            <div className="admin-daily-challenge-field">
+              <label htmlFor="ch-tier">Tier</label>
+              <select
+                id="ch-tier"
+                className="admin-input"
+                value={tier}
+                onChange={(e) => setTier(e.target.value as ChallengeTier)}
+                disabled={!canEdit || saving}
+              >
+                <option value="standard">standard</option>
+                <option value="advanced">advanced</option>
+              </select>
+            </div>
+
+            <div className="admin-daily-challenge-field">
+              <label htmlFor="ch-published">Published</label>
+              <label className="admin-daily-checkbox-label">
+                <input
+                  id="ch-published"
+                  type="checkbox"
+                  checked={isPublished}
+                  onChange={(e) => setIsPublished(e.target.checked)}
+                  disabled={!canEdit || saving}
+                />
+                Published
+              </label>
+            </div>
+          </div>
+
+          <div className="admin-daily-challenge-footer">
+            <div className="admin-daily-footer-status">
+              {error ? <p className="admin-error" style={{ margin: 0 }}>{error}</p> : null}
+            </div>
+            {canEdit ? (
+              <Button type="submit" disabled={saving || !problemId}>
+                {saving ? (
+                  <Loader2 size={14} className="spin" />
+                ) : (
+                  <Save size={14} />
+                )}
+                <span style={{ marginLeft: 6 }}>Save challenge</span>
+              </Button>
+            ) : (
+              <p className="admin-muted" style={{ margin: 0 }}>
+                Requires <code>problems:update</code> or <code>problems:create</code>
+              </p>
+            )}
+          </div>
+        </form>
+      </div>
     </PermissionGuard>
   );
 };

@@ -1,0 +1,96 @@
+/* Admin → User Operations Pages (Activity, Progress, Sessions) - Problems Master Aligned */
+
+.admin-user-ops-page {
+  width: 100%;
+  max-width: none;
+  margin-inline: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.admin-user-ops-page .admin-page-lead {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  max-width: 58ch;
+}
+
+.admin-toolbar-ops {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 0;
+  width: 100%;
+}
+
+.admin-toolbar-ops-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 auto;
+}
+
+.admin-toolbar-ops .admin-toolbar-search {
+  flex: 1 1 240px;
+  min-width: 0;
+  max-width: 320px;
+  min-height: 38px;
+  height: 38px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 0 12px;
+  font-size: 0.8125rem;
+  color: var(--text-main);
+}
+
+.admin-toolbar-ops .admin-toolbar-search::placeholder {
+  color: var(--text-muted);
+}
+
+.admin-toolbar-ops .admin-toolbar-search:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--primary) 45%, var(--border-subtle));
+  box-shadow: 0 0 0 2px var(--primary-subtle);
+}
+
+.admin-ops-user-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: var(--text-main);
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  transition: color 0.15s ease;
+}
+
+.admin-ops-user-link:hover {
+  color: var(--primary-bright);
+}
+
+.admin-ops-mono-text {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+
+.admin-ops-ua-text {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  max-width: 320px;
+  display: inline-block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

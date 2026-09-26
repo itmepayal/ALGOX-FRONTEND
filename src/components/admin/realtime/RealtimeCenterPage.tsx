@@ -30,7 +30,6 @@ import { Input } from "../../ui/input";
 import { ConfirmDialog } from "../../ConfirmDialog";
 import { PermissionGuard } from "../shared/PermissionGuard";
 import { DataTable } from "../shared/DataTable";
-import { StatsCard } from "../shared/StatsCard";
 import { StatusBadge } from "../shared/StatusBadge";
 import { EventBadge } from "../shared/EventBadge";
 import { SourceBadge } from "../shared/SourceBadge";
@@ -43,20 +42,22 @@ import {
   connectRealtimeSocket,
 } from "../../../realtime/socket";
 import { useToast } from "../../../context/ToastContext";
+import { WidgetError } from "../shared/WidgetError";
 import "../problems/problem-editor.css";
+import "./realtime-dashboard.css";
 import { cn } from "../../../lib/cn";
 
 interface RealtimePageProps {
   mode:
-    | "dashboard"
-    | "users"
-    | "submissions"
-    | "executions"
-    | "leaderboard"
-    | "connections"
-    | "rooms"
-    | "events"
-    | "broadcast";
+  | "dashboard"
+  | "users"
+  | "submissions"
+  | "executions"
+  | "leaderboard"
+  | "connections"
+  | "rooms"
+  | "events"
+  | "broadcast";
   onOpenSubmission?: (id: string) => void;
 }
 
@@ -160,8 +161,8 @@ const RealtimeOverview: FC = () => {
     } catch (err: any) {
       setError(
         err?.response?.data?.message ||
-          err.message ||
-          "RealtimeService offline (port 3010)"
+        err.message ||
+        "RealtimeService offline (port 3010)"
       );
       setData(null);
       setAnalytics(null);
@@ -221,18 +222,13 @@ const RealtimeOverview: FC = () => {
 
   return (
     <PermissionGuard permission="realtime:view">
-      <div className="pe-page mx-auto w-full gap-6">
-        <header className="pe-topbar">
-          <div className="pe-topbar-left">
-            <div>
-              <h2 className="pe-title">WebSocket Dashboard</h2>
-              <p className="pe-sub">
-                Gateway metrics from RealtimeService (HTTP snapshot · refreshes
-                every 5s).
-              </p>
-            </div>
-          </div>
-          <div className="pe-topbar-actions">
+      <div className="admin-realtime-dashboard-page">
+        {/* Top Subtitle & Actions */}
+        <div className="admin-realtime-header-toolbar">
+          <p className="admin-page-lead">
+            Gateway metrics from RealtimeService (HTTP snapshot · refreshes every 5s).
+          </p>
+          <div className="admin-realtime-header-actions">
             <StatusBadge status={gatewayOk ? "OPERATIONAL" : "UNAVAILABLE"} />
             <button
               type="button"
@@ -248,96 +244,145 @@ const RealtimeOverview: FC = () => {
               {refreshing ? "Refreshing…" : "Refresh"}
             </button>
           </div>
-        </header>
+        </div>
 
-        {error ? (
-          <div className="admin-form-banner" role="alert">
-            <AlertTriangle size={16} aria-hidden />
-            <div>
-              <strong>Gateway unreachable</strong>
-              <div>{error}</div>
-            </div>
+        {/* Real-Time Status Strip */}
+        <div className="admin-realtime-status-strip">
+          <div className="admin-realtime-strip-item">
+            <span className="admin-realtime-strip-label">Service:</span>
+            <span className="admin-realtime-strip-val">RealtimeService</span>
           </div>
+          <div className="admin-realtime-strip-item">
+            <span className="admin-realtime-strip-label">Adapter:</span>
+            <span className="admin-realtime-strip-val mono">
+              {data?.adapter != null ? String(data.adapter) : "memory"}
+            </span>
+          </div>
+          <div className="admin-realtime-strip-item">
+            <span className="admin-realtime-strip-label">Broadcast Logs:</span>
+            <span className="admin-realtime-strip-val">
+              {data?.broadcastPersistence?.mode === "mongo" ||
+                data?.mongoBroadcastLogs === true
+                ? "MONGO"
+                : "Memory"}
+            </span>
+          </div>
+          <div className="admin-realtime-strip-item">
+            <span className="admin-realtime-strip-label">Gateway Status:</span>
+            <StatusBadge status={gatewayOk ? "OPERATIONAL" : "UNAVAILABLE"} />
+          </div>
+          <div className="admin-realtime-strip-item">
+            <span className="admin-realtime-strip-label">Last Refresh:</span>
+            <span className="admin-realtime-strip-val mono">
+              {refreshedAt
+                ? refreshedAt.toLocaleTimeString()
+                : loading
+                  ? "…"
+                  : "—"}
+            </span>
+          </div>
+        </div>
+
+        {/* Error Banner */}
+        {error ? (
+          <WidgetError
+            title="Gateway Unreachable"
+            message={error}
+            onRetry={() => void load(true)}
+          />
         ) : null}
 
         {loading && !data ? (
           <p className="admin-muted">Loading gateway metrics…</p>
         ) : null}
 
-        <div className="admin-stats-grid !mb-0">
-          <StatsCard
-            label="Active Connections"
-            value={conn.value}
-            hint={
-              conn.tracked
+        {/* 3 Top KPI Cards */}
+        <div className="admin-realtime-kpi-grid">
+          <div className="admin-realtime-kpi-card">
+            <div className="admin-realtime-kpi-head">
+              <span className="admin-realtime-kpi-label">Active Connections</span>
+              <div className="admin-realtime-kpi-icon">
+                <Cable size={18} strokeWidth={1.75} />
+              </div>
+            </div>
+            <div className="admin-realtime-kpi-val">{conn.value}</div>
+            <div className="admin-realtime-kpi-hint">
+              {conn.tracked
                 ? "In-process socket count · overview API"
-                : conn.hint
-            }
-            icon={<Cable size={16} strokeWidth={1.75} />}
-          />
-          <StatsCard
-            label="Peak Connections"
-            value={peak.value}
-            hint={
-              peak.tracked
+                : conn.hint}
+            </div>
+          </div>
+
+          <div className="admin-realtime-kpi-card">
+            <div className="admin-realtime-kpi-head">
+              <span className="admin-realtime-kpi-label">Peak Connections</span>
+              <div className="admin-realtime-kpi-icon">
+                <Activity size={18} strokeWidth={1.75} />
+              </div>
+            </div>
+            <div className="admin-realtime-kpi-val">{peak.value}</div>
+            <div className="admin-realtime-kpi-hint">
+              {peak.tracked
                 ? "Highest since gateway process start"
-                : peak.hint
-            }
-            icon={<Activity size={16} strokeWidth={1.75} />}
-          />
-          <StatsCard
-            label="Online Users"
-            value={online.value}
-            hint={
-              online.tracked
+                : peak.hint}
+            </div>
+          </div>
+
+          <div className="admin-realtime-kpi-card">
+            <div className="admin-realtime-kpi-head">
+              <span className="admin-realtime-kpi-label">Online Users</span>
+              <div className="admin-realtime-kpi-icon">
+                <Users size={18} strokeWidth={1.75} />
+              </div>
+            </div>
+            <div className="admin-realtime-kpi-val">{online.value}</div>
+            <div className="admin-realtime-kpi-hint">
+              {online.tracked
                 ? "Authenticated presence (Redis or memory)"
-                : online.hint
-            }
-            icon={<Users size={16} strokeWidth={1.75} />}
-          />
+                : online.hint}
+            </div>
+          </div>
         </div>
 
-        <div className="pe-layout">
-          <section className="pe-card !p-6">
-            <div className="pe-card-head !mb-5">
-              <h3>Gateway Status</h3>
-              <p>HTTP overview snapshot · not a live socket subscription</p>
+        {/* 2-Column Monitoring Grid */}
+        <div className="admin-realtime-grid">
+          {/* Gateway Status Card */}
+          <section className="admin-realtime-card">
+            <div className="admin-realtime-card-head">
+              <h3 className="admin-realtime-card-title">Gateway Status</h3>
+              <p className="admin-realtime-card-sub">
+                HTTP overview snapshot · not a live socket subscription
+              </p>
             </div>
-            <dl className="m-0">
+            <dl className="admin-realtime-kv-table m-0">
               <KvRow label="Operational status">
                 <StatusBadge
                   status={gatewayOk ? "OPERATIONAL" : "UNAVAILABLE"}
                 />
               </KvRow>
               <KvRow label="Active connections">
-                <span className="font-technical text-base font-semibold tabular-nums text-foreground">
-                  {conn.value}
-                </span>
+                <span className="admin-realtime-kv-val mono">{conn.value}</span>
               </KvRow>
               <KvRow label="Peak connections">
-                <span className="font-technical text-base font-semibold tabular-nums text-foreground">
-                  {peak.value}
-                </span>
+                <span className="admin-realtime-kv-val mono">{peak.value}</span>
               </KvRow>
               <KvRow label="Online users">
-                <span className="font-technical text-base font-semibold tabular-nums text-foreground">
-                  {online.value}
-                </span>
+                <span className="admin-realtime-kv-val mono">{online.value}</span>
               </KvRow>
               {data?.adapter != null ? (
                 <KvRow label="Adapter">
-                  <span className="font-primary text-sm text-foreground">
+                  <span className="admin-realtime-kv-val">
                     {String(data.adapter)}
                   </span>
                 </KvRow>
               ) : null}
               <KvRow label="Broadcast logs">
                 {data?.broadcastPersistence?.mode === "mongo" ||
-                data?.mongoBroadcastLogs === true ? (
+                  data?.mongoBroadcastLogs === true ? (
                   <StatusBadge status="MONGO" />
                 ) : data?.broadcastPersistence ||
                   data?.mongoBroadcastLogs === false ? (
-                  <span className="font-primary text-sm text-muted-foreground">
+                  <span className="admin-realtime-kv-val" style={{ color: "var(--text-muted)", fontSize: "0.8125rem" }}>
                     Memory only
                     {data?.broadcastPersistence?.reason
                       ? ` · ${String(data.broadcastPersistence.reason).slice(0, 80)}`
@@ -349,13 +394,13 @@ const RealtimeOverview: FC = () => {
               </KvRow>
               {data?.uptimeMs != null ? (
                 <KvRow label="Uptime">
-                  <span className="font-technical text-sm font-semibold tabular-nums text-foreground">
+                  <span className="admin-realtime-kv-val mono">
                     {formatUptime(Number(data.uptimeMs))}
                   </span>
                 </KvRow>
               ) : null}
               <KvRow label="Last refreshed">
-                <span className="font-primary text-sm text-muted-foreground">
+                <span className="admin-realtime-kv-val" style={{ color: "var(--text-muted)", fontSize: "0.8125rem" }}>
                   {refreshedAt
                     ? refreshedAt.toLocaleTimeString()
                     : loading
@@ -366,35 +411,32 @@ const RealtimeOverview: FC = () => {
             </dl>
           </section>
 
-          <section className="pe-card !p-6">
-            <div className="pe-card-head !mb-5">
-              <h3>Activity signals</h3>
-              <p>Measured gateway counters · latency is not instrumented</p>
+          {/* Activity Signals Card */}
+          <section className="admin-realtime-card">
+            <div className="admin-realtime-card-head">
+              <h3 className="admin-realtime-card-title">Activity Signals</h3>
+              <p className="admin-realtime-card-sub">
+                Measured gateway counters · latency is not instrumented
+              </p>
             </div>
-            <dl className="m-0">
+            <dl className="admin-realtime-kv-table m-0">
               <KvRow label="Events/sec">
                 {eps.tracked ? (
-                  <span className="font-technical text-base font-semibold tabular-nums text-foreground">
-                    {eps.value}
-                  </span>
+                  <span className="admin-realtime-kv-val mono">{eps.value}</span>
                 ) : (
                   <NotTracked />
                 )}
               </KvRow>
               <KvRow label="Avg latency">
                 {latency.tracked ? (
-                  <span className="font-technical text-base font-semibold tabular-nums text-foreground">
-                    {latency.value} ms
-                  </span>
+                  <span className="admin-realtime-kv-val mono">{latency.value} ms</span>
                 ) : (
                   <NotTracked />
                 )}
               </KvRow>
               <KvRow label="Active rooms">
                 {rooms.tracked ? (
-                  <span className="font-technical text-base font-semibold tabular-nums text-foreground">
-                    {rooms.value}
-                  </span>
+                  <span className="admin-realtime-kv-val mono">{rooms.value}</span>
                 ) : (
                   <NotTracked />
                 )}
@@ -403,12 +445,12 @@ const RealtimeOverview: FC = () => {
           </section>
         </div>
 
-        <section className="pe-card !p-6">
-          <div className="pe-card-head !mb-5">
-            <h3>Events/sec samples</h3>
-            <p>
-              In-process rolling history (~60s) from RealtimeService metrics —
-              refreshed with overview, not a live chart stream
+        {/* Events/sec Samples Chart Card */}
+        <section className="admin-realtime-chart-card">
+          <div className="admin-realtime-card-head">
+            <h3 className="admin-realtime-card-title">Events/sec Samples</h3>
+            <p className="admin-realtime-card-sub">
+              In-process rolling history (~60s) from RealtimeService metrics — refreshed with overview, not a live chart stream
             </p>
           </div>
           {historySeries.length > 0 ? (
@@ -416,19 +458,19 @@ const RealtimeOverview: FC = () => {
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={historySeries}>
                   <CartesianGrid
-                    stroke="var(--border)"
+                    stroke="var(--border-subtle)"
                     strokeDasharray="3 3"
                     vertical={false}
                   />
                   <XAxis
                     dataKey="t"
-                    tick={{ fill: "var(--muted-foreground)", fontSize: 11 }}
+                    tick={{ fill: "var(--text-muted)", fontSize: 11 }}
                     axisLine={false}
                     tickLine={false}
                     tickFormatter={(v) => `${v}s`}
                   />
                   <YAxis
-                    tick={{ fill: "var(--muted-foreground)", fontSize: 11 }}
+                    tick={{ fill: "var(--text-muted)", fontSize: 11 }}
                     axisLine={false}
                     tickLine={false}
                     width={32}
@@ -436,9 +478,10 @@ const RealtimeOverview: FC = () => {
                   />
                   <Tooltip
                     contentStyle={{
-                      background: "var(--card)",
-                      border: "1px solid var(--border)",
-                      borderRadius: "var(--radius)",
+                      background: "var(--bg-card)",
+                      border: "1px solid var(--border-subtle)",
+                      borderRadius: "8px",
+                      color: "var(--text-main)",
                       fontSize: 12,
                     }}
                     labelFormatter={(v) => `Sample ${v}`}
@@ -447,7 +490,7 @@ const RealtimeOverview: FC = () => {
                   <Area
                     type="monotone"
                     dataKey="events"
-                    stroke="var(--primary)"
+                    stroke="var(--primary-bright)"
                     fill="color-mix(in srgb, var(--primary) 18%, transparent)"
                     strokeWidth={2}
                     isAnimationActive={false}
@@ -458,7 +501,7 @@ const RealtimeOverview: FC = () => {
           ) : (
             <EmptyState
               compact
-              icon={<Activity size={18} strokeWidth={1.75} />}
+              icon={<Activity size={20} strokeWidth={1.75} />}
               title="No events/sec samples yet"
               description="Samples appear after the gateway records socket events."
             />
@@ -717,7 +760,7 @@ const RoomsMonitor: FC = () => {
             render: (r) =>
               Array.isArray(r.members) && r.members.length
                 ? r.members.slice(0, 4).join(", ") +
-                  (r.members.length > 4 ? ` +${r.members.length - 4}` : "")
+                (r.members.length > 4 ? ` +${r.members.length - 4}` : "")
                 : "—",
           },
         ]}
@@ -753,7 +796,7 @@ const EventStream: FC = () => {
           next.map((r) =>
             String(
               r.id ||
-                `${r.at || r.timestamp}-${r.name || r.event}-${r.userId || ""}`
+              `${r.at || r.timestamp}-${r.name || r.event}-${r.userId || ""}`
             )
           )
         );
@@ -1297,12 +1340,12 @@ const BroadcastCenter: FC = () => {
       toast.success(
         "Broadcast sent successfully",
         `${delivered} recipient${delivered === 1 ? "" : "s"} received the message` +
-          (d.persisted === "mongo"
-            ? " · logged to Mongo"
-            : d.persisted === "memory"
-              ? " · memory log only (Mongo unavailable)"
-              : "") +
-          "."
+        (d.persisted === "mongo"
+          ? " · logged to Mongo"
+          : d.persisted === "memory"
+            ? " · memory log only (Mongo unavailable)"
+            : "") +
+        "."
       );
       setMessage("");
       setTitle("");
@@ -1323,19 +1366,19 @@ const BroadcastCenter: FC = () => {
     hint: string;
     detail: string;
   }> = [
-    {
-      id: "everyone",
-      label: "Everyone",
-      hint: "All connected sockets",
-      detail: `${connectedSockets} connected socket${connectedSockets === 1 ? "" : "s"}`,
-    },
-    {
-      id: "online",
-      label: "Online users",
-      hint: "Authenticated presence connections",
-      detail: `${typeof onlineUsers === "number" ? onlineUsers : "Unavailable / Not tracked"} online user${onlineUsers === 1 ? "" : "s"}`,
-    },
-  ];
+      {
+        id: "everyone",
+        label: "Everyone",
+        hint: "All connected sockets",
+        detail: `${connectedSockets} connected socket${connectedSockets === 1 ? "" : "s"}`,
+      },
+      {
+        id: "online",
+        label: "Online users",
+        hint: "Authenticated presence connections",
+        detail: `${typeof onlineUsers === "number" ? onlineUsers : "Unavailable / Not tracked"} online user${onlineUsers === 1 ? "" : "s"}`,
+      },
+    ];
 
   return (
     <PermissionGuard permission="realtime:broadcast">
@@ -1616,7 +1659,6 @@ const BroadcastCenter: FC = () => {
             </section>
           </aside>
         </div>
-
         {history.length > 0 ? (
           <section className="pe-card !p-6">
             <div className="pe-card-head !mb-5">
@@ -1978,7 +2020,7 @@ const LiveSubmissionsPulse: FC<{ onOpen?: (id: string) => void }> = ({
             joinedRef.current = false;
             startPolling(
               ack?.error ||
-                "Cannot join admin:realtime (requires realtime:view) — HTTP poll"
+              "Cannot join admin:realtime (requires realtime:view) — HTTP poll"
             );
           }
         }

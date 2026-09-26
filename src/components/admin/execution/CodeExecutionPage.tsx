@@ -1,21 +1,22 @@
 import { useCallback, useEffect, useState, type FC, type ReactNode } from "react";
 import {
-  AlertTriangle,
   Cpu,
-  Loader2,
+  Database,
+  Layers,
   RefreshCw,
   Server,
+  Zap,
 } from "lucide-react";
 import {
   HEALTH_ENDPOINTS,
   pingHealthDetailed,
   adminAnalyticsApi,
 } from "../../../api/adminAnalyticsApi";
-import { StatsCard } from "../shared/StatsCard";
 import { PermissionGuard } from "../shared/PermissionGuard";
 import { StatusBadge } from "../shared/StatusBadge";
 import { EmptyState } from "../shared/EmptyState";
-import { Button } from "../../ui/button";
+import { WidgetError } from "../shared/WidgetError";
+import "./code-execution.css";
 
 const AUTO_REFRESH_MS = 15_000;
 
@@ -31,7 +32,6 @@ type QueueSnapshot = {
   paused?: number;
   configuredWorkers?: number;
   error?: string;
-  /** Raw keys returned by EvaluationService (for transparency). */
   raw: Record<string, unknown>;
 };
 
@@ -43,25 +43,24 @@ type HealthSnapshot = {
   latencyMs: number | null;
 };
 
-/** APIs that would deepen the console but are not exposed by EvaluationService. */
-const MISSING_APIS: Array<{ name: string; purpose: string; needed: string }> = [
+const MISSING_TELEMETRY = [
   {
-    name: "Active / pending job list",
+    name: "Active / Pending Job Details",
     purpose: "Inspect BullMQ waiting & active jobs (id, submissionId, age)",
     needed: "GET EvaluationService admin queue jobs (read-only, RBAC)",
   },
   {
-    name: "Completed / failed job list",
+    name: "Job Outcomes History",
     purpose: "Browse recent job outcomes and failure reasons from the queue",
     needed: "GET EvaluationService admin queue jobs?state=completed|failed",
   },
   {
-    name: "Execution latency",
+    name: "Execution Latency Metrics",
     purpose: "p50 / p95 judge duration and queue wait time",
     needed: "Latency metrics on /health or a dedicated metrics endpoint",
   },
   {
-    name: "Recent execution events",
+    name: "Recent Execution Events Stream",
     purpose: "Live worker start/finish stream for this console",
     needed: "Realtime ingest of execution.* events or an events admin API",
   },
@@ -116,14 +115,10 @@ function parseQueue(raw: unknown): QueueSnapshot | null {
   };
 }
 
-const Kv: FC<{ label: string; children: ReactNode }> = ({ label, children }) => (
-  <div className="flex items-center justify-between gap-4 border-b border-border py-2.5 last:border-b-0">
-    <dt className="admin-muted" style={{ margin: 0, fontSize: "0.8125rem" }}>
-      {label}
-    </dt>
-    <dd className="m-0 text-right font-medium" style={{ fontSize: "0.875rem" }}>
-      {children}
-    </dd>
+const KvRow: FC<{ label: string; children: ReactNode }> = ({ label, children }) => (
+  <div className="admin-execution-kv-row">
+    <dt className="admin-execution-kv-label">{label}</dt>
+    <dd className="m-0 text-right font-medium">{children}</dd>
   </div>
 );
 
@@ -154,10 +149,10 @@ export const CodeExecutionPage: FC = () => {
         subEp
           ? pingHealthDetailed(subEp.url)
           : Promise.resolve({
-              status: "offline" as const,
-              ms: null,
-              error: "Submission health URL not configured",
-            }),
+            status: "offline" as const,
+            ms: null,
+            error: "Submission health URL not configured",
+          }),
       ]);
       const latencyMs = Math.round(performance.now() - started);
 
@@ -198,8 +193,8 @@ export const CodeExecutionPage: FC = () => {
       setLoadState("error");
       setError(
         err?.response?.data?.message ||
-          err?.message ||
-          "EvaluationService /health unavailable"
+        err?.message ||
+        "EvaluationService /health unavailable"
       );
       setLastChecked(new Date().toISOString());
     } finally {
@@ -214,240 +209,263 @@ export const CodeExecutionPage: FC = () => {
   }, [load]);
 
   const q = snapshot?.queue;
-  const hasCounts =
-    q &&
-    [q.waiting, q.active, q.completed, q.failed].some(
-      (n) => typeof n === "number"
-    );
 
   return (
     <PermissionGuard
       permission="health:view"
-      fallback={<div className="admin-denied">No permission.</div>}
+      fallback={<div className="admin-denied">No health permission.</div>}
     >
-      <div className="admin-toolbar" style={{ marginBottom: 12, flexWrap: "wrap" }}>
-        <div style={{ flex: "1 1 220px" }}>
-          <p className="admin-page-lead" style={{ margin: 0 }}>
-            Operational console for EvaluationService — BullMQ queue + Redis from{" "}
-            <code>/api/v1/health</code> only. No Docker shell or host commands.
-          </p>
-          <p className="admin-muted" style={{ margin: "6px 0 0" }}>
-            Last checked {formatClock(lastChecked)}
-            {snapshot?.latencyMs != null ? ` · health fetch ${snapshot.latencyMs} ms` : ""}
-            {` · auto-refresh ${AUTO_REFRESH_MS / 1000}s`}
-          </p>
-        </div>
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          onClick={() => void load(true)}
-          disabled={refreshing || loadState === "loading"}
-          aria-label="Refresh execution health"
-        >
-          {refreshing || loadState === "loading" ? (
-            <Loader2 size={14} strokeWidth={1.75} className="animate-spin" />
-          ) : (
-            <RefreshCw size={14} strokeWidth={1.75} />
-          )}
-          Refresh
-        </Button>
-      </div>
-
-      {loadState === "loading" && !snapshot ? (
-        <div className="admin-panel" style={{ padding: 24 }}>
-          <p className="admin-muted" style={{ margin: 0, display: "flex", gap: 8, alignItems: "center" }}>
-            <Loader2 size={16} className="animate-spin" />
-            Loading EvaluationService health…
-          </p>
-        </div>
-      ) : null}
-
-      {loadState === "error" && !snapshot ? (
-        <div className="admin-panel" style={{ padding: 16 }}>
-          <EmptyState
-            icon={<AlertTriangle size={18} strokeWidth={1.75} />}
-            title="EvaluationService unreachable"
-            description={error || "Could not load /api/v1/health."}
-          />
-        </div>
-      ) : null}
-
-      {loadState === "empty" ? (
-        <div className="admin-panel" style={{ padding: 16 }}>
-          <EmptyState
-            icon={<Cpu size={18} strokeWidth={1.75} />}
-            title="No health payload"
-            description="EvaluationService responded but returned no service/queue/redis fields."
-          />
-        </div>
-      ) : null}
-
-      {snapshot ? (
-        <>
-          {error ? (
-            <p className="admin-muted" style={{ marginBottom: 10, color: "var(--destructive, #b91c1c)" }}>
-              Queue note: {error}
+      <div className="admin-execution-page">
+        {/* Header Toolbar */}
+        <div className="admin-execution-header-toolbar">
+          <div className="admin-execution-header-info">
+            <p className="admin-page-lead">
+              Operational console for EvaluationService — BullMQ queue + Redis metrics from <code>/api/v1/health</code>.
             </p>
-          ) : null}
-
-          <div className="admin-stats-grid" style={{ marginBottom: 14 }}>
-            <div className="admin-stat-card">
-              <div className="label">Queue health</div>
-              <div style={{ margin: "8px 0" }}>
-                <StatusBadge
-                  status={queueStatusTone(q?.status)}
-                />
-              </div>
-              <div className="admin-muted" style={{ fontSize: "0.75rem" }}>
-                {q?.status || "unknown"}
-                {q?.error ? ` — ${q.error}` : ""}
-              </div>
-            </div>
-            <div className="admin-stat-card">
-              <div className="label">Redis</div>
-              <div style={{ margin: "8px 0" }}>
-                <StatusBadge
-                  status={
-                    snapshot.redis === "connected" ? "published" : "archived"
-                  }
-                />
-              </div>
-              <div className="admin-muted" style={{ fontSize: "0.75rem" }}>
-                {snapshot.redis || "—"}
-              </div>
-            </div>
-            <div className="admin-stat-card">
-              <div className="label">Service</div>
-              <div style={{ margin: "8px 0", fontWeight: 600 }}>
-                {snapshot.service || "EvaluationService"}
-              </div>
-              <div className="admin-muted" style={{ fontSize: "0.75rem" }}>
-                Source: EvaluationService GET /health
-              </div>
-            </div>
-            <div className="admin-stat-card">
-              <div className="label">Submission (dependency ping)</div>
-              <div style={{ margin: "8px 0" }}>
-                <StatusBadge
-                  status={
-                    submissionPing?.status === "healthy"
-                      ? "published"
-                      : submissionPing?.status === "warning"
-                        ? "draft"
-                        : "archived"
-                  }
-                />
-              </div>
-              <div className="admin-muted" style={{ fontSize: "0.75rem" }}>
-                {submissionPing?.ms != null
-                  ? `${submissionPing.ms} ms`
-                  : submissionPing?.error || "—"}
-                {" · HTTP ping only"}
-              </div>
+            <div className="admin-execution-header-meta">
+              Last checked {formatClock(lastChecked)}
+              {snapshot?.latencyMs != null ? ` · fetch latency ${snapshot.latencyMs} ms` : ""}
+              {` · auto-refresh ${AUTO_REFRESH_MS / 1000}s`}
             </div>
           </div>
 
-          <section className="admin-panel" style={{ marginBottom: 14 }} aria-label="Queue status">
-            <div className="admin-panel-head">
-              <div>
-                <h3 style={{ margin: 0, fontSize: "0.95rem" }}>Queue status</h3>
-                <p className="admin-panel-desc">
+          <div className="admin-execution-header-actions">
+            <StatusBadge status={queueStatusTone(q?.status)} />
+            <button
+              type="button"
+              className="admin-btn"
+              disabled={refreshing || loadState === "loading"}
+              onClick={() => void load(true)}
+            >
+              <RefreshCw
+                size={14}
+                strokeWidth={1.75}
+                className={refreshing || loadState === "loading" ? "animate-spin" : undefined}
+              />
+              {refreshing ? "Refreshing…" : "Refresh"}
+            </button>
+          </div>
+        </div>
+
+        {/* Error State */}
+        {loadState === "error" && !snapshot ? (
+          <WidgetError
+            title="EvaluationService Unreachable"
+            message={error || "Could not load /api/v1/health response."}
+            onRetry={() => void load(true)}
+          />
+        ) : null}
+
+        {/* Empty State */}
+        {loadState === "empty" ? (
+          <div className="admin-execution-card">
+            <EmptyState
+              icon={<Cpu size={20} strokeWidth={1.75} />}
+              title="No health payload"
+              description="EvaluationService responded but returned no service/queue/redis metrics."
+            />
+          </div>
+        ) : null}
+
+        {snapshot ? (
+          <>
+            {error ? (
+              <div className="admin-user-detail-alert error" style={{ marginBottom: 4 }}>
+                <span>Queue note: {error}</span>
+              </div>
+            ) : null}
+
+            {/* 4 Top Health KPI Cards */}
+            <div className="admin-execution-health-grid">
+              <div className="admin-execution-health-card">
+                <div className="admin-execution-health-head">
+                  <span className="admin-execution-health-label">Queue Health</span>
+                  <div className="admin-execution-health-icon">
+                    <Layers size={18} strokeWidth={1.75} />
+                  </div>
+                </div>
+                <div className="admin-execution-health-body">
+                  <StatusBadge status={queueStatusTone(q?.status)} />
+                </div>
+                <div className="admin-execution-health-sub">
+                  Status: <strong>{q?.status || "unknown"}</strong>
+                  {q?.error ? ` — ${q.error}` : ""}
+                </div>
+              </div>
+
+              <div className="admin-execution-health-card">
+                <div className="admin-execution-health-head">
+                  <span className="admin-execution-health-label">Redis Status</span>
+                  <div className="admin-execution-health-icon">
+                    <Database size={18} strokeWidth={1.75} />
+                  </div>
+                </div>
+                <div className="admin-execution-health-body">
+                  <StatusBadge
+                    status={
+                      snapshot.redis === "connected" ? "published" : "archived"
+                    }
+                  />
+                </div>
+                <div className="admin-execution-health-sub">
+                  State: <strong>{snapshot.redis || "—"}</strong>
+                </div>
+              </div>
+
+              <div className="admin-execution-health-card">
+                <div className="admin-execution-health-head">
+                  <span className="admin-execution-health-label">Evaluation Service</span>
+                  <div className="admin-execution-health-icon">
+                    <Server size={18} strokeWidth={1.75} />
+                  </div>
+                </div>
+                <div className="admin-execution-health-body">
+                  <span className="admin-execution-health-title">
+                    {snapshot.service || "EvaluationService"}
+                  </span>
+                </div>
+                <div className="admin-execution-health-sub">
+                  Source: GET /health
+                </div>
+              </div>
+
+              <div className="admin-execution-health-card">
+                <div className="admin-execution-health-head">
+                  <span className="admin-execution-health-label">Submission Dependency</span>
+                  <div className="admin-execution-health-icon">
+                    <Zap size={18} strokeWidth={1.75} />
+                  </div>
+                </div>
+                <div className="admin-execution-health-body">
+                  <StatusBadge
+                    status={
+                      submissionPing?.status === "healthy"
+                        ? "published"
+                        : submissionPing?.status === "warning"
+                          ? "draft"
+                          : "archived"
+                    }
+                  />
+                </div>
+                <div className="admin-execution-health-sub">
+                  {submissionPing?.ms != null
+                    ? `${submissionPing.ms} ms`
+                    : submissionPing?.error || "—"}
+                  {" · HTTP ping"}
+                </div>
+              </div>
+            </div>
+
+            {/* Queue Overview Panel */}
+            <section className="admin-execution-queue-panel">
+              <div className="admin-execution-panel-head">
+                <h3 className="admin-execution-panel-title">Queue Overview</h3>
+                <p className="admin-execution-panel-sub">
                   BullMQ job counts from EvaluationService (not fabricated)
                 </p>
               </div>
-            </div>
-            <div className="admin-panel-body">
-              {!hasCounts ? (
-                <EmptyState
-                  compact
-                  icon={<Server size={18} strokeWidth={1.75} />}
-                  title="Queue counts unavailable"
-                  description={
-                    q?.error ||
-                    "waiting / active / completed / failed were not present in the health payload."
-                  }
-                />
-              ) : (
-                <div className="admin-stats-grid">
-                  <StatsCard label="Waiting (queued)" value={formatNumber(q?.waiting)} />
-                  <StatsCard label="Active jobs" value={formatNumber(q?.active)} />
-                  <StatsCard label="Completed jobs" value={formatNumber(q?.completed)} />
-                  <StatsCard label="Failed jobs" value={formatNumber(q?.failed)} />
-                  <StatsCard label="Delayed" value={formatNumber(q?.delayed)} />
-                  <StatsCard label="Paused" value={formatNumber(q?.paused)} />
-                  <StatsCard
-                    label="Configured workers"
-                    value={formatNumber(q?.configuredWorkers)}
-                  />
-                </div>
-              )}
-            </div>
-            <p className="admin-panel-foot">
-              Snapshot at {formatClock(snapshot.checkedAt)}. Worker count is the
-              configured concurrency constant from EvaluationService, not a live
-              process census.
-            </p>
-          </section>
 
-          <section className="admin-panel" style={{ marginBottom: 14 }} aria-label="Health details">
-            <div className="admin-panel-head">
-              <div>
-                <h3 style={{ margin: 0, fontSize: "0.95rem" }}>Health details</h3>
-                <p className="admin-panel-desc">Fields returned by EvaluationService</p>
+              <div className="admin-execution-queue-grid">
+                <div className="admin-execution-queue-cell">
+                  <span className="admin-execution-cell-label">Waiting</span>
+                  <span className="admin-execution-cell-val">{formatNumber(q?.waiting)}</span>
+                </div>
+
+                <div className="admin-execution-queue-cell">
+                  <span className="admin-execution-cell-label">Active</span>
+                  <span className="admin-execution-cell-val">{formatNumber(q?.active)}</span>
+                </div>
+
+                <div className="admin-execution-queue-cell">
+                  <span className="admin-execution-cell-label">Completed</span>
+                  <span className="admin-execution-cell-val">{formatNumber(q?.completed)}</span>
+                </div>
+
+                <div className={`admin-execution-queue-cell ${q?.failed && q.failed > 0 ? "has-error" : ""}`}>
+                  <span className="admin-execution-cell-label">Failed</span>
+                  <span className="admin-execution-cell-val" style={{ color: q?.failed && q.failed > 0 ? "#fca5a5" : undefined }}>
+                    {formatNumber(q?.failed)}
+                  </span>
+                </div>
+
+                <div className={`admin-execution-queue-cell ${q?.delayed && q.delayed > 0 ? "has-warning" : ""}`}>
+                  <span className="admin-execution-cell-label">Delayed</span>
+                  <span className="admin-execution-cell-val" style={{ color: q?.delayed && q.delayed > 0 ? "#fef08a" : undefined }}>
+                    {formatNumber(q?.delayed)}
+                  </span>
+                </div>
+
+                <div className="admin-execution-queue-cell">
+                  <span className="admin-execution-cell-label">Paused</span>
+                  <span className="admin-execution-cell-val">{formatNumber(q?.paused)}</span>
+                </div>
+
+                <div className="admin-execution-queue-cell">
+                  <span className="admin-execution-cell-label">Workers</span>
+                  <span className="admin-execution-cell-val">{formatNumber(q?.configuredWorkers)}</span>
+                </div>
               </div>
-            </div>
-            <div className="admin-panel-body">
-              <dl style={{ margin: 0 }}>
-                <Kv label="Service">{snapshot.service || "—"}</Kv>
-                <Kv label="Redis">{snapshot.redis || "—"}</Kv>
-                <Kv label="Queue status">{q?.status || "—"}</Kv>
-                <Kv label="Waiting">{formatNumber(q?.waiting)}</Kv>
-                <Kv label="Active">{formatNumber(q?.active)}</Kv>
-                <Kv label="Completed">{formatNumber(q?.completed)}</Kv>
-                <Kv label="Failed">{formatNumber(q?.failed)}</Kv>
-                <Kv label="Delayed">{formatNumber(q?.delayed)}</Kv>
-                <Kv label="Paused">{formatNumber(q?.paused)}</Kv>
-                <Kv label="Configured workers">
-                  {formatNumber(q?.configuredWorkers)}
-                </Kv>
-              </dl>
-            </div>
-          </section>
-        </>
-      ) : null}
 
-      <section className="admin-panel" aria-label="APIs not available">
-        <div className="admin-panel-head">
-          <div>
-            <h3 style={{ margin: 0, fontSize: "0.95rem" }}>
-              Not available from EvaluationService
-            </h3>
-            <p className="admin-panel-desc">
-              Reported gaps — UI does not invent mock jobs, latency, or events
-            </p>
-          </div>
-        </div>
-        <div className="admin-panel-body">
-          <ul style={{ margin: 0, paddingLeft: 18 }}>
-            {MISSING_APIS.map((item) => (
-              <li key={item.name} style={{ marginBottom: 10 }}>
-                <strong>{item.name}</strong>
-                <div className="admin-muted" style={{ fontSize: "0.8rem" }}>
-                  {item.purpose}
+              <p className="admin-execution-queue-foot">
+                <span>ⓘ Snapshot at {formatClock(snapshot.checkedAt)}. Worker count is the configured concurrency constant from EvaluationService, not a live process census.</span>
+              </p>
+            </section>
+
+            {/* 2-Column Bottom Grid */}
+            <div className="admin-execution-bottom-grid">
+              {/* Health Details */}
+              <section className="admin-execution-card">
+                <div className="admin-execution-panel-head">
+                  <h3 className="admin-execution-panel-title">Health Details</h3>
+                  <p className="admin-execution-panel-sub">
+                    Fields returned by EvaluationService /health payload
+                  </p>
                 </div>
-                <div className="admin-muted" style={{ fontSize: "0.75rem" }}>
-                  Needed: {item.needed}
+                <dl className="admin-execution-kv-table m-0">
+                  <KvRow label="Service">{snapshot.service || "—"}</KvRow>
+                  <KvRow label="Redis">{snapshot.redis || "—"}</KvRow>
+                  <KvRow label="Queue status">{q?.status || "—"}</KvRow>
+                  <KvRow label="Waiting">{formatNumber(q?.waiting)}</KvRow>
+                  <KvRow label="Active">{formatNumber(q?.active)}</KvRow>
+                  <KvRow label="Completed">{formatNumber(q?.completed)}</KvRow>
+                  <KvRow label="Failed">{formatNumber(q?.failed)}</KvRow>
+                  <KvRow label="Delayed">{formatNumber(q?.delayed)}</KvRow>
+                  <KvRow label="Paused">{formatNumber(q?.paused)}</KvRow>
+                  <KvRow label="Configured workers">
+                    {formatNumber(q?.configuredWorkers)}
+                  </KvRow>
+                </dl>
+              </section>
+
+              {/* Telemetry Availability */}
+              <section className="admin-execution-card">
+                <div className="admin-execution-panel-head">
+                  <h3 className="admin-execution-panel-title">Telemetry Availability</h3>
+                  <p className="admin-execution-panel-sub">
+                    Operational coverage — no mock telemetry generated
+                  </p>
                 </div>
-              </li>
-            ))}
-          </ul>
-          <p className="admin-muted" style={{ marginTop: 12, marginBottom: 0, fontSize: "0.75rem" }}>
-            Failed submission outcomes (WA/RE/TLE) remain on Submissions → Failed
-            Executions (SubmissionService), not Evaluation queue job lists.
-          </p>
-        </div>
-      </section>
+
+                <div className="admin-telemetry-grid">
+                  {MISSING_TELEMETRY.map((item) => (
+                    <div className="admin-telemetry-item" key={item.name}>
+                      <div className="admin-telemetry-head">
+                        <span className="admin-telemetry-title">{item.name}</span>
+                        <span className="admin-telemetry-badge">Not Exposed</span>
+                      </div>
+                      <span className="admin-telemetry-desc">{item.purpose}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <p className="admin-execution-queue-foot" style={{ marginTop: "auto", paddingTop: 8 }}>
+                  <span>Failed submission outcomes (WA/RE/TLE) remain on Submissions → Failed Executions (SubmissionService).</span>
+                </p>
+              </section>
+            </div>
+          </>
+        ) : null}
+      </div>
     </PermissionGuard>
   );
 };

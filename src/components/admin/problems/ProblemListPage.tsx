@@ -263,11 +263,13 @@ export const ProblemListPage: FC<Props> = ({ onEdit }) => {
           {
             key: "title",
             header: "Title",
+            width: "36%",
             render: (p) => (
               <button
                 type="button"
                 className="admin-problem-title-link"
                 onClick={() => onEdit(idOf(p))}
+                title={p.title}
               >
                 {p.title}
               </button>
@@ -276,11 +278,13 @@ export const ProblemListPage: FC<Props> = ({ onEdit }) => {
           {
             key: "difficulty",
             header: "Difficulty",
+            width: "110px",
             render: (p) => <DifficultyBadge difficulty={p.difficulty} />,
           },
           {
             key: "access",
             header: "Access",
+            width: "100px",
             render: (p) => (
               <span
                 className={
@@ -296,21 +300,32 @@ export const ProblemListPage: FC<Props> = ({ onEdit }) => {
           {
             key: "status",
             header: "Status",
+            width: "130px",
             render: (p) => <StatusBadge status={p.status || "draft"} />,
           },
           {
             key: "tags",
             header: "Tags",
-            render: (p) => (p.tags || []).slice(0, 3).join(", "),
+            width: "24%",
+            render: (p) => (
+              <span
+                className="admin-problem-tags"
+                title={(p.tags || []).join(", ")}
+              >
+                {(p.tags || []).slice(0, 3).join(", ") || "—"}
+              </span>
+            ),
           },
           {
             key: "actions",
             header: "Actions",
+            width: "140px",
+            align: "right",
             render: (p) => {
               const id = idOf(p);
               return (
                 <div className="admin-problems-actions">
-                  {can("problems:publish") && p.status !== "published" && (
+                  {can("problems:publish") && p.status !== "published" ? (
                     <button
                       type="button"
                       className="admin-icon-action admin-icon-action--publish"
@@ -318,6 +333,8 @@ export const ProblemListPage: FC<Props> = ({ onEdit }) => {
                     >
                       Publish
                     </button>
+                  ) : (
+                    <div className="admin-icon-action-placeholder" />
                   )}
                   {can("problems:create") && (
                     <button

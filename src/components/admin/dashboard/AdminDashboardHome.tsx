@@ -299,7 +299,7 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
         const n = normalizeApiError(err);
         setCoreError({ title: n.title, message: n.message });
         if (!soft) {
-          toast.apiError(err, "Unable to load platform analytics");
+          toast.error("Unable to load analytics", "Please try again.");
         }
       } finally {
         setInitialLoading(false);
@@ -372,12 +372,12 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
         ),
         can("users:view")
           ? adminAuthApi.listUsers({ page: 1, limit: 8 }).then(
-              (res) => ({ ok: true as const, data: res.data || [] }),
-              (err: unknown) => ({
-                ok: false as const,
-                error: normalizeApiError(err).message,
-              }),
-            )
+            (res) => ({ ok: true as const, data: res.data || [] }),
+            (err: unknown) => ({
+              ok: false as const,
+              error: normalizeApiError(err).message,
+            }),
+          )
           : Promise.resolve({ ok: true as const, data: [] as AdminUser[] }),
       ]);
 
@@ -434,7 +434,7 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
       ]);
       setUpdatedAt(new Date());
     } catch (err: unknown) {
-      toast.apiError(err, "Unable to refresh dashboard data.");
+      toast.error("Unable to load analytics", "Please try again.");
     } finally {
       setRefreshing(false);
       refreshLock.current = false;
@@ -486,9 +486,9 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
     const rows = charts?.userGrowth || usersBlock.growth || [];
     return Array.isArray(rows)
       ? rows.map((r: any) => ({
-          date: r.date || r._id,
-          count: Number(r.count ?? r.value ?? 0),
-        }))
+        date: r.date || r._id,
+        count: Number(r.count ?? r.value ?? 0),
+      }))
       : [];
   }, [charts?.userGrowth, usersBlock.growth]);
 
@@ -523,259 +523,296 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
     <PermissionGuard permission="analytics:view">
       <div className="admin-dash">
         <div className="admin-dash-grid">
-        <header className="admin-dash-header admin-dash-span-12">
-          <div className="admin-dash-header-copy">
-            <h2 className="font-primary">Dashboard</h2>
-            <p className="admin-dash-sub">
-              Platform overview and operational metrics
-            </p>
-          </div>
-          <div className="admin-dash-actions">
-            <div className="admin-seg" role="group" aria-label="Date range">
-              {RANGES.map((r) => (
-                <button
-                  key={r.id}
-                  type="button"
-                  className={range === r.id ? "active" : ""}
-                  aria-pressed={range === r.id}
-                  onClick={() => setRange(r.id)}
-                >
-                  {r.label}
-                </button>
-              ))}
+          <header className="admin-dash-header admin-dash-span-12">
+            <div className="admin-dash-header-copy">
+              <h2 className="font-primary">Dashboard</h2>
+              <p className="admin-dash-sub">
+                Platform overview and operational metrics
+              </p>
             </div>
-            {updatedAt ? (
-              <span className="admin-dash-updated">
-                Updated {relativeTime(updatedAt.toISOString())}
-              </span>
-            ) : null}
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              aria-label="Refresh dashboard"
-              disabled={refreshing}
-              onClick={() => void refreshAll()}
-            >
-              {refreshing ? (
-                <Loader2 size={16} className="animate-spin" aria-hidden />
-              ) : (
-                <RefreshCw size={16} aria-hidden />
-              )}
-              Refresh
-            </Button>
-          </div>
-        </header>
-
-        {fallbackMode ? (
-          <div className="admin-dash-banner admin-dash-span-12" role="status">
-            Analytics service unavailable — showing direct service stats.
-          </div>
-        ) : null}
-
-        {coreError && !overview ? (
-          <div className="admin-dash-span-12">
-            <WidgetError
-              title={coreError.title}
-              message={coreError.message}
-              onRetry={() => void loadCore()}
-            />
-          </div>
-        ) : null}
-
-        <section className="admin-dash-kpis admin-dash-span-12" aria-label="Key metrics">
-          {kpiSkeleton ? (
-            Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="admin-dash-kpi-skel admin-skel" />
-            ))
-          ) : (
-            <>
-              <StatsCard
-                className="admin-dash-kpi"
-                label="Users"
-                value={formatNumber(kpis.totalUsers ?? usersBlock.totalUsers)}
-                hint={
-                  formatTrend(kpis.newUsersTrendPct) ||
-                  (usersBlock.newUsersInRange != null
-                    ? `${formatNumber(usersBlock.newUsersInRange)} new in range`
-                    : undefined)
-                }
-                icon={<Users size={20} strokeWidth={1.75} />}
-              />
-              <StatsCard
-                className="admin-dash-kpi"
-                label="Free Users"
-                value={
-                  kpis.freeUsers != null
-                    ? formatNumber(kpis.freeUsers)
-                    : usersBlock.freeUsers != null
-                      ? formatNumber(usersBlock.freeUsers)
-                      : "—"
-                }
-                hint={
-                  kpis.freeUsers == null && usersBlock.freeUsers == null
-                    ? "Data unavailable"
-                    : kpis.freeDau != null
-                      ? `${formatNumber(kpis.freeDau)} free DAU`
-                      : undefined
-                }
-                icon={<Users size={20} strokeWidth={1.75} />}
-              />
-              <StatsCard
-                className="admin-dash-kpi"
-                label="Premium Users"
-                value={
-                  kpis.premiumUsers != null
-                    ? formatNumber(kpis.premiumUsers)
-                    : usersBlock.premiumUsers != null
-                      ? formatNumber(usersBlock.premiumUsers)
-                      : "—"
-                }
-                hint={
-                  kpis.conversionRatePct != null
-                    ? `${kpis.conversionRatePct}% conversion`
-                    : kpis.premiumUsers == null
-                      ? "Data unavailable"
-                      : undefined
-                }
-                icon={<Users size={20} strokeWidth={1.75} />}
-              />
-              <StatsCard
-                className="admin-dash-kpi"
-                label="Problems"
-                value={formatNumber(
-                  kpis.totalProblems ?? problemsBlock.totalProblems,
+            <div className="admin-dash-actions">
+              <div className="admin-seg" role="group" aria-label="Date range">
+                {RANGES.map((r) => (
+                  <button
+                    key={r.id}
+                    type="button"
+                    className={range === r.id ? "active" : ""}
+                    aria-pressed={range === r.id}
+                    onClick={() => setRange(r.id)}
+                  >
+                    {r.label}
+                  </button>
+                ))}
+              </div>
+              {updatedAt ? (
+                <span className="admin-dash-updated">
+                  Updated {relativeTime(updatedAt.toISOString())}
+                </span>
+              ) : null}
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                aria-label="Refresh dashboard"
+                disabled={refreshing}
+                onClick={() => void refreshAll()}
+              >
+                {refreshing ? (
+                  <Loader2 size={16} className="animate-spin" aria-hidden />
+                ) : (
+                  <RefreshCw size={16} aria-hidden />
                 )}
-                hint={
-                  problemsBlock.publishedProblems != null
-                    ? `${formatNumber(problemsBlock.publishedProblems)} published`
-                    : undefined
-                }
-                icon={<FileCode2 size={20} strokeWidth={1.75} />}
+                Refresh
+              </Button>
+            </div>
+          </header>
+
+          {fallbackMode ? (
+            <div className="admin-dash-banner admin-dash-span-12" role="status">
+              Analytics service unavailable — showing direct service stats.
+            </div>
+          ) : null}
+
+          {coreError && !overview ? (
+            <div className="admin-dash-span-12">
+              <WidgetError
+                title={coreError.title}
+                message={coreError.message}
+                onRetry={() => void loadCore()}
               />
+            </div>
+          ) : null}
+
+          <section className="admin-dash-kpis admin-dash-span-12" aria-label="Key metrics">
+            {kpiSkeleton ? (
+              Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="admin-dash-kpi-skel admin-skel" />
+              ))
+            ) : (
+              <>
+                <StatsCard
+                  className="admin-dash-kpi"
+                  label="Users"
+                  value={formatNumber(kpis.totalUsers ?? usersBlock.totalUsers)}
+                  hint={
+                    formatTrend(kpis.newUsersTrendPct) ||
+                    (usersBlock.newUsersInRange != null
+                      ? `${formatNumber(usersBlock.newUsersInRange)} new in range`
+                      : undefined)
+                  }
+                  icon={<Users size={20} strokeWidth={1.75} />}
+                />
+                <StatsCard
+                  className="admin-dash-kpi"
+                  label="Free Users"
+                  value={
+                    kpis.freeUsers != null
+                      ? formatNumber(kpis.freeUsers)
+                      : usersBlock.freeUsers != null
+                        ? formatNumber(usersBlock.freeUsers)
+                        : "—"
+                  }
+                  hint={
+                    kpis.freeUsers == null && usersBlock.freeUsers == null
+                      ? "Data unavailable"
+                      : kpis.freeDau != null
+                        ? `${formatNumber(kpis.freeDau)} free DAU`
+                        : undefined
+                  }
+                  icon={<Users size={20} strokeWidth={1.75} />}
+                />
+                <StatsCard
+                  className="admin-dash-kpi"
+                  label="Premium Users"
+                  value={
+                    kpis.premiumUsers != null
+                      ? formatNumber(kpis.premiumUsers)
+                      : usersBlock.premiumUsers != null
+                        ? formatNumber(usersBlock.premiumUsers)
+                        : "—"
+                  }
+                  hint={
+                    kpis.conversionRatePct != null
+                      ? `${kpis.conversionRatePct}% conversion`
+                      : kpis.premiumUsers == null
+                        ? "Data unavailable"
+                        : undefined
+                  }
+                  icon={<Users size={20} strokeWidth={1.75} />}
+                />
+                <StatsCard
+                  className="admin-dash-kpi"
+                  label="Problems"
+                  value={formatNumber(
+                    kpis.totalProblems ?? problemsBlock.totalProblems,
+                  )}
+                  hint={
+                    problemsBlock.publishedProblems != null
+                      ? `${formatNumber(problemsBlock.publishedProblems)} published`
+                      : undefined
+                  }
+                  icon={<FileCode2 size={20} strokeWidth={1.75} />}
+                />
+              </>
+            )}
+          </section>
+
+          <div className="admin-dash-span-8">
+            {kpiSkeleton ? (
+              <div className="admin-dash-kpi-skel admin-skel" />
+            ) : (
               <StatsCard
-                className="admin-dash-kpi"
+                className="admin-dash-kpi admin-dash-kpi-secondary"
                 label="Submissions"
                 value={formatNumber(
                   kpis.totalSubmissions ?? submissionsBlock.totalSubmissions,
                 )}
                 hint={
                   kpis.todaySubmissions != null
-                    ? `${formatNumber(kpis.todaySubmissions)} today`
-                    : undefined
+                    ? `${formatNumber(kpis.todaySubmissions)} submitted today`
+                    : "Total platform submissions"
                 }
                 icon={<Activity size={20} strokeWidth={1.75} />}
               />
+            )}
+          </div>
+
+          <div className="admin-dash-span-4">
+            {kpiSkeleton ? (
+              <div className="admin-dash-kpi-skel admin-skel" />
+            ) : (
               <StatsCard
-                className="admin-dash-kpi"
+                className="admin-dash-kpi admin-dash-kpi-secondary"
                 label="Acceptance Rate"
                 value={successRateAvailable ? formatRate(successRateRaw) : "—"}
-                hint={successRateAvailable ? undefined : "Metric unavailable"}
+                hint={successRateAvailable ? "Platform average success rate" : "Metric unavailable"}
                 icon={<BarChart3 size={20} strokeWidth={1.75} />}
               />
-            </>
-          )}
-        </section>
-
-        <section className="admin-dash-usage admin-dash-span-12" aria-label="Product usage">
-          <div className="admin-dash-usage-head">
-            <h2 className="admin-dash-panel-title">Product / Premium usage</h2>
-            <p className="admin-dash-muted admin-dash-usage-context">
-              Unique users from real Mongo collections (UTC windows). Missing
-              features show Data unavailable — no invented metrics.
-            </p>
+            )}
           </div>
-          {productUsageError ? (
-            <WidgetError
-              title="Product usage unavailable"
-              message={productUsageError}
-              onRetry={() => void loadCore()}
-            />
-          ) : !productUsage ? (
-            <p className="admin-dash-muted">Loading product usage…</p>
-          ) : (
-            <div className="admin-dash-table-wrap">
-              <table className="admin-dash-table">
-                <thead>
-                  <tr>
-                    <th>Feature</th>
-                    <th>Users</th>
-                    <th>Today</th>
-                    <th>7 Days</th>
-                    <th>30 Days</th>
-                    <th>Notes</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(
-                    [
-                      ["Daily Planner", productUsage.features.planner],
-                      ["Sessions", productUsage.features.sessions],
-                      ["Calendar", productUsage.features.calendar],
-                      ["Companies", productUsage.features.companies],
-                      ["AI", productUsage.features.ai],
-                      ["Analytics page", productUsage.features.analyticsPage],
-                      ["Revision Queue", productUsage.features.revisionQueue],
-                      ["Mock Interview", productUsage.features.mockInterview],
-                    ] as const
-                  ).map(([label, row]) => {
-                    if (!row) {
+
+          <section className="admin-dash-usage admin-dash-span-12" aria-label="Product usage">
+            <div className="admin-dash-usage-head">
+              <h2 className="admin-dash-panel-title">Product / Premium usage</h2>
+              <p className="admin-dash-muted admin-dash-usage-context">
+                Unique users from real Mongo collections (UTC windows). Missing
+                features show Data unavailable — no invented metrics.
+              </p>
+            </div>
+            {productUsageError ? (
+              <WidgetError
+                title="Product usage unavailable"
+                message={productUsageError}
+                onRetry={() => void loadCore()}
+              />
+            ) : !productUsage ? (
+              <p className="admin-dash-muted">Loading product usage…</p>
+            ) : (
+              <div className="admin-dash-table-wrap">
+                <table className="admin-dash-table">
+                  <thead>
+                    <tr>
+                      <th>Feature</th>
+                      <th>Users</th>
+                      <th>Today</th>
+                      <th>7 Days</th>
+                      <th>30 Days</th>
+                      <th>Notes</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(
+                      [
+                        ["Daily Planner", productUsage.features.planner],
+                        ["Sessions", productUsage.features.sessions],
+                        ["Calendar", productUsage.features.calendar],
+                        ["Companies", productUsage.features.companies],
+                        ["AI", productUsage.features.ai],
+                        ["Analytics page", productUsage.features.analyticsPage],
+                        ["Revision Queue", productUsage.features.revisionQueue],
+                        ["Mock Interview", productUsage.features.mockInterview],
+                      ] as const
+                    ).map(([label, row]) => {
+                      if (!row) {
+                        return (
+                          <tr key={label}>
+                            <td>{label}</td>
+                            <td>—</td>
+                            <td>—</td>
+                            <td>—</td>
+                            <td>—</td>
+                            <td className="admin-dash-muted">Not available</td>
+                          </tr>
+                        );
+                      }
+                      const unavailable = row.available === false;
+                      const fmt = (v: number | null | undefined) =>
+                        unavailable || v == null ? "—" : formatNumber(v);
                       return (
                         <tr key={label}>
                           <td>{label}</td>
-                          <td>—</td>
-                          <td>—</td>
-                          <td>—</td>
-                          <td>—</td>
-                          <td className="admin-dash-muted">Not available</td>
+                          <td>{fmt(row.uniqueUsers as number | null)}</td>
+                          <td>{fmt(row.today as number | null)}</td>
+                          <td>{fmt(row.week as number | null)}</td>
+                          <td>{fmt(row.month as number | null)}</td>
+                          <td className="admin-dash-muted">
+                            {unavailable
+                              ? String(row.note || "Data unavailable")
+                              : String(row.note || "")}
+                          </td>
                         </tr>
                       );
-                    }
-                    const unavailable = row.available === false;
-                    const fmt = (v: number | null | undefined) =>
-                      unavailable || v == null ? "—" : formatNumber(v);
-                    return (
-                      <tr key={label}>
-                        <td>{label}</td>
-                        <td>{fmt(row.uniqueUsers as number | null)}</td>
-                        <td>{fmt(row.today as number | null)}</td>
-                        <td>{fmt(row.week as number | null)}</td>
-                        <td>{fmt(row.month as number | null)}</td>
-                        <td className="admin-dash-muted">
-                          {unavailable
-                            ? String(row.note || "Data unavailable")
-                            : String(row.note || "")}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-              {productUsage.features.revisionQueue ? (
-                <p className="admin-dash-muted" style={{ marginTop: 8 }}>
-                  SRS due today:{" "}
-                  {formatNumber(
-                    Number(productUsage.features.revisionQueue.dueToday || 0),
-                  )}{" "}
-                  · overdue:{" "}
-                  {formatNumber(
-                    Number(productUsage.features.revisionQueue.overdue || 0),
-                  )}{" "}
-                  · upcoming:{" "}
-                  {formatNumber(
-                    Number(productUsage.features.revisionQueue.upcoming || 0),
-                  )}{" "}
-                  · completed today:{" "}
-                  {formatNumber(
-                    Number(
-                      productUsage.features.revisionQueue.completedToday || 0,
-                    ),
-                  )}
-                </p>
-              ) : null}
-            </div>
-          )}
-        </section>
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {productUsage?.features?.revisionQueue ? (
+              <div className="admin-dash-srs-section">
+                <h3 className="admin-dash-srs-title">SRS Overview</h3>
+                <div className="admin-dash-srs-grid">
+                  <div className="admin-dash-srs-card">
+                    <span className="admin-dash-srs-label">Due today</span>
+                    <strong className="admin-dash-srs-val admin-dash-srs-primary">
+                      {formatNumber(
+                        Number(
+                          productUsage.features.revisionQueue.dueToday || 0,
+                        ),
+                      )}
+                    </strong>
+                  </div>
+                  <div className="admin-dash-srs-card">
+                    <span className="admin-dash-srs-label">Overdue</span>
+                    <strong className="admin-dash-srs-val admin-dash-srs-warning">
+                      {formatNumber(
+                        Number(productUsage.features.revisionQueue.overdue || 0),
+                      )}
+                    </strong>
+                  </div>
+                  <div className="admin-dash-srs-card">
+                    <span className="admin-dash-srs-label">Upcoming</span>
+                    <strong className="admin-dash-srs-val admin-dash-srs-muted">
+                      {formatNumber(
+                        Number(
+                          productUsage.features.revisionQueue.upcoming || 0,
+                        ),
+                      )}
+                    </strong>
+                  </div>
+                  <div className="admin-dash-srs-card">
+                    <span className="admin-dash-srs-label">Completed today</span>
+                    <strong className="admin-dash-srs-val admin-dash-srs-success">
+                      {formatNumber(
+                        Number(
+                          productUsage.features.revisionQueue.completedToday || 0,
+                        ),
+                      )}
+                    </strong>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+          </section>
 
           <Card className="admin-dash-panel admin-dash-span-8" aria-label="Service health">
             <CardHeader className="admin-dash-panel-head">
@@ -839,8 +876,8 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
                           String(redisStatus || "unknown")
                             .toLowerCase()
                             .includes("ok") ||
-                          String(redisStatus).toLowerCase() === "connected" ||
-                          String(redisStatus).toLowerCase() === "healthy"
+                            String(redisStatus).toLowerCase() === "connected" ||
+                            String(redisStatus).toLowerCase() === "healthy"
                             ? "Healthy"
                             : redisStatus == null
                               ? "unknown"
@@ -915,7 +952,7 @@ export const AdminDashboardHome: FC<AdminDashboardHomeProps> = ({
                     label="Avg latency"
                     value={
                       rt.data?.avgLatencyMs == null ||
-                      Number.isNaN(rt.data?.avgLatencyMs)
+                        Number.isNaN(rt.data?.avgLatencyMs)
                         ? "Metric unavailable"
                         : `${rt.data.avgLatencyMs}ms`
                     }

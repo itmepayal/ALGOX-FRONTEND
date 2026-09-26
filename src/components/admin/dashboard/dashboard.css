@@ -10,8 +10,8 @@
 .admin-dash-grid {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
-  column-gap: 20px;
-  row-gap: 20px;
+  column-gap: 16px;
+  row-gap: 16px;
   align-items: stretch;
   width: 100%;
   min-width: 0;
@@ -124,10 +124,10 @@
   z-index: 1;
 }
 
-/* KPI row: 4 × 3 cols + 2 × 6 cols */
+/* Primary KPI row: 4 columns */
 .admin-dash-kpis {
   display: grid;
-  grid-template-columns: repeat(12, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
   align-items: stretch;
 }
@@ -138,26 +138,8 @@
   height: 100%;
 }
 
-.admin-dash-kpis > .admin-dash-kpi:nth-child(1),
-.admin-dash-kpis > .admin-dash-kpi:nth-child(2),
-.admin-dash-kpis > .admin-dash-kpi:nth-child(3),
-.admin-dash-kpis > .admin-dash-kpi:nth-child(4),
-.admin-dash-kpis > .admin-dash-kpi-skel:nth-child(1),
-.admin-dash-kpis > .admin-dash-kpi-skel:nth-child(2),
-.admin-dash-kpis > .admin-dash-kpi-skel:nth-child(3),
-.admin-dash-kpis > .admin-dash-kpi-skel:nth-child(4) {
-  grid-column: span 3;
-}
-
-.admin-dash-kpis > .admin-dash-kpi:nth-child(5),
-.admin-dash-kpis > .admin-dash-kpi:nth-child(6),
-.admin-dash-kpis > .admin-dash-kpi-skel:nth-child(5),
-.admin-dash-kpis > .admin-dash-kpi-skel:nth-child(6) {
-  grid-column: span 6;
-}
-
 .admin-dash-kpi .text-2xl {
-  font-size: 1.75rem;
+  font-size: 1.625rem;
   line-height: 1.15;
   letter-spacing: -0.03em;
 }
@@ -172,9 +154,13 @@
   justify-content: space-between;
   gap: 8px;
   height: 100%;
-  min-height: 108px;
-  padding: 16px 18px;
+  min-height: 100px;
+  padding: 16px;
   box-sizing: border-box;
+}
+
+.admin-dash-kpi-secondary .p-4 {
+  min-height: 100px;
 }
 
 .admin-dash .bg-card {
@@ -186,7 +172,7 @@
 }
 
 .admin-dash-kpi-skel {
-  min-height: 108px;
+  min-height: 100px;
   border-radius: 12px;
 }
 
@@ -204,14 +190,22 @@
 
 .admin-dash .admin-dash-panel-head {
   border-bottom: none;
-  padding: 16px 18px 8px;
-  min-height: 44px;
+  padding: 16px 16px 10px;
+  min-height: 48px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .admin-dash .admin-dash-panel-body {
-  padding: 4px 18px 16px;
+  padding: 0 16px 16px;
   flex: 1;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .admin-dash .admin-dash-panel-flush {
@@ -228,7 +222,7 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 16px 18px;
+  padding: 16px;
   border-radius: 12px;
   border: 1px solid var(--border-subtle);
   background: var(--bg-card);
@@ -322,6 +316,73 @@
   background: color-mix(in srgb, var(--primary) 5%, transparent);
 }
 
+/* SRS Overview Summary Area */
+.admin-dash-srs-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.admin-dash-srs-title {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.admin-dash-srs-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  width: 100%;
+}
+
+.admin-dash-srs-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+}
+
+.admin-dash-srs-label {
+  font-size: 0.72rem;
+  font-weight: 550;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.admin-dash-srs-val {
+  font-size: 1.25rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+}
+
+.admin-dash-srs-val.admin-dash-srs-primary {
+  color: var(--text-main);
+}
+
+.admin-dash-srs-val.admin-dash-srs-warning {
+  color: var(--warning);
+}
+
+.admin-dash-srs-val.admin-dash-srs-muted {
+  color: var(--text-muted);
+}
+
+.admin-dash-srs-val.admin-dash-srs-success {
+  color: var(--success);
+}
+
 .admin-dash-chart {
   width: 100%;
   min-height: 240px;
@@ -329,22 +390,13 @@
 }
 
 .admin-dash-chart-sm {
-  min-height: 200px;
-  height: 200px;
+  min-height: 190px;
+  height: 190px;
 }
 
 .admin-dash-chart-user {
-  min-height: 280px;
-  height: 300px;
-}
-
-.admin-dash-panel-head {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  flex-wrap: wrap;
+  min-height: 260px;
+  height: 280px;
 }
 
 .admin-dash-panel-title-row {
@@ -406,7 +458,7 @@
   flex-direction: column;
   justify-content: space-between;
   gap: 6px;
-  min-height: 68px;
+  min-height: 64px;
   padding: 10px 12px;
   border-radius: 10px;
   border: 1px solid var(--admin-border);
@@ -474,7 +526,7 @@
 .admin-dash-user-row {
   width: 100%;
   display: grid;
-  grid-template-columns: 36px minmax(0, 1fr) auto;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
   padding: 8px 0;
@@ -501,8 +553,8 @@
 }
 
 .admin-dash-user-avatar {
-  width: 36px;
-  height: 36px;
+  width: 34px;
+  height: 34px;
   border-radius: 999px;
   display: inline-flex;
   align-items: center;
@@ -547,7 +599,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  padding: 4px 18px 16px;
+  padding: 0 16px 16px;
 }
 
 .admin-dash-qa-btn {
@@ -604,15 +656,14 @@
   }
 }
 
-@media (max-width: 1100px) {
+@media (max-width: 1024px) {
   .admin-dash-span-8,
   .admin-dash-span-4 {
     grid-column: 1 / -1;
   }
 
-  .admin-dash-kpis > .admin-dash-kpi:nth-child(n),
-  .admin-dash-kpis > .admin-dash-kpi-skel:nth-child(n) {
-    grid-column: span 6;
+  .admin-dash-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -622,23 +673,15 @@
     row-gap: 16px;
   }
 
-  .admin-dash-kpis {
-    grid-template-columns: 1fr;
-  }
-
-  .admin-dash-kpis > .admin-dash-kpi:nth-child(n),
-  .admin-dash-kpis > .admin-dash-kpi-skel:nth-child(n) {
-    grid-column: 1 / -1;
-  }
-
   .admin-dash-usage-context {
     text-align: left;
     max-width: none;
   }
 
   .admin-dash-rt-grid,
-  .admin-dash-verdict-grid {
-    grid-template-columns: 1fr;
+  .admin-dash-verdict-grid,
+  .admin-dash-srs-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .admin-dash-health-list li {
@@ -654,9 +697,15 @@
   }
 }
 
-@media (max-width: 640px) {
+@media (max-width: 540px) {
+  .admin-dash-kpis,
+  .admin-dash-srs-grid {
+    grid-template-columns: 1fr;
+  }
+
   .admin-dash-actions {
     width: 100%;
     justify-content: flex-start;
   }
 }
+

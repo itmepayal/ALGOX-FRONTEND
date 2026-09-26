@@ -13,6 +13,13 @@
   color: var(--text-main);
 }
 
+@media (max-width: 768px) {
+  .free-home {
+    padding: 16px 16px 36px;
+    gap: 18px;
+  }
+}
+
 .free-home-welcome {
   display: flex;
   align-items: flex-start;
