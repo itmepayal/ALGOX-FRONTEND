@@ -12,6 +12,10 @@ import { BattleLobby } from "./BattleLobby";
 import { BattleWorkspace } from "./BattleWorkspace";
 import { BattleResultModal } from "./BattleResultModal";
 import { BattleLeaderboard } from "./BattleLeaderboard";
+import { TeamBattlesPanel } from "./TeamBattlesPanel";
+import { TeamBattleLobby } from "./TeamBattleLobby";
+import { TeamBattleWorkspace } from "./TeamBattleWorkspace";
+import { TeamBattleResultModal } from "./TeamBattleResultModal";
 import { connectRealtimeSocket } from "../../realtime/socket";
 import {
   Swords,
@@ -28,6 +32,7 @@ import {
   BarChart2,
   Flame,
   Zap,
+  Users,
 } from "lucide-react";
 import { useToast } from "../../context/ToastContext";
 import "./battles.css";
@@ -36,11 +41,11 @@ interface BattlesPanelProps {
   currentUserId: string;
 }
 
-type ViewState = "dashboard" | "lobby" | "workspace" | "result";
+type ViewState = "dashboard" | "lobby" | "workspace" | "result" | "team_lobby" | "team_workspace" | "team_result";
 
 export const BattlesPanel: FC<BattlesPanelProps> = ({ currentUserId }) => {
   const toast = useToast();
-  const [activeTab, setActiveTab] = useState<"active" | "incoming" | "history" | "leaderboard">("active");
+  const [activeTab, setActiveTab] = useState<"active" | "incoming" | "history" | "leaderboard" | "teams">("active");
   const [myBattles, setMyBattles] = useState<MyBattlesData>({
     incoming: [],
     active: [],
@@ -242,6 +247,38 @@ export const BattlesPanel: FC<BattlesPanelProps> = ({ currentUserId }) => {
     );
   }
 
+  if (viewState === "team_lobby" && selectedBattleId) {
+    return (
+      <TeamBattleLobby
+        battleId={selectedBattleId}
+        currentUserId={currentUserId}
+        onBack={() => setViewState("dashboard")}
+        onStartBattle={() => setViewState("team_workspace")}
+      />
+    );
+  }
+
+  if (viewState === "team_workspace" && selectedBattleId) {
+    return (
+      <TeamBattleWorkspace
+        battleId={selectedBattleId}
+        currentUserId={currentUserId}
+        onBattleFinished={() => setViewState("team_result")}
+        onLeave={() => setViewState("dashboard")}
+      />
+    );
+  }
+
+  if (viewState === "team_result" && selectedBattleId) {
+    return (
+      <TeamBattleResultModal
+        battleId={selectedBattleId}
+        currentUserId={currentUserId}
+        onBack={() => setViewState("dashboard")}
+      />
+    );
+  }
+
   return (
     <div className="battles-container animate-fade-in">
       {/* Top Hero Card Header */}
@@ -400,9 +437,27 @@ export const BattlesPanel: FC<BattlesPanelProps> = ({ currentUserId }) => {
           <Trophy size={14} className="text-amber-400" />
           <span>Leaderboard</span>
         </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === "teams"}
+          className={`ax-tab-btn ${activeTab === "teams" ? "active" : ""}`}
+          onClick={() => setActiveTab("teams")}
+        >
+          <Users size={14} className="text-purple-400" />
+          <span>Teams & Clans</span>
+        </button>
       </nav>
 
-      {activeTab === "leaderboard" ? (
+      {activeTab === "teams" ? (
+        <TeamBattlesPanel
+          currentUserId={currentUserId}
+          onOpenTeamBattleLobby={(bId) => {
+            setSelectedBattleId(bId);
+            setViewState("team_lobby");
+          }}
+        />
+      ) : activeTab === "leaderboard" ? (
         <BattleLeaderboard currentUserId={currentUserId} />
       ) : loading ? (
         <div className="flex min-h-[250px] items-center justify-center">

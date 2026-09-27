@@ -858,21 +858,21 @@ export const FreeHomeDashboard: FC<FreeHomeDashboardProps> = ({
       className={`co-page free-home${refreshing ? " free-home-refreshing" : ""}`}
     >
       {/* 1. DASHBOARD HEADER */}
-      <header className="co-header free-home-welcome">
-        <div>
-          <p className="free-home-kicker">Your learning overview</p>
-          <h1 className="free-home-title">
+      <header className="co-header free-home-welcome ax-hero-compact">
+        <div className="ax-hero-left">
+          <p className="ax-hero-kicker">YOUR LEARNING OVERVIEW</p>
+          <h1 className="ax-hero-title">
             {getGreeting(firstName)} 👋
           </h1>
-          <p className="free-home-lede">
+          <p className="ax-hero-sub">
             Your practice snapshot from real submissions and learning activity.
           </p>
         </div>
-        <div className="free-home-header-actions">
+        <div className="ax-hero-right">
           {justUpdated && !refreshing ? (
-            <p className="free-home-updated" role="status">
+            <span className="free-home-updated" role="status">
               Updated just now
-            </p>
+            </span>
           ) : null}
           <Button
             type="button"
@@ -1270,133 +1270,143 @@ export const FreeHomeDashboard: FC<FreeHomeDashboardProps> = ({
       </section>
 
       <div className="free-home-insight">
-      {/* 5. PROGRESS OVERVIEW */}
-      <section
-        className="free-home-card free-home-overview-card free-home-insight-overview"
-        aria-labelledby="progress-overview-heading"
-      >
-        <div className="free-home-overview-head">
-          <h2 id="progress-overview-heading" className="free-home-section-title">
-            Progress Overview
-          </h2>
-          <p className="free-home-muted">
-            Track your difficulty progress, solving activity, and streak.
-          </p>
-        </div>
-        <div className="free-home-overview-grid">
-          <div className="free-home-diff-distribution">
-            <h3 className="free-home-subhead">Difficulty Progress</h3>
-            {solvedTotal === 0 && easyCount + mediumCount + hardCount === 0 ? (
-              <p className="free-home-muted free-home-overview-empty">
-                Submit an accepted solution to start tracking difficulty progress.
-              </p>
-            ) : (
-              <div className="free-home-overview-rows">
-                <div className="free-home-diff-row">
-                  <div className="free-home-goal-meta">
-                    <span className="free-home-diff-label is-easy">Easy</span>
-                    <span>{easyCount} solved</span>
-                  </div>
-                  <div
-                    className="free-home-overview-bar"
-                    role="progressbar"
-                    aria-valuenow={pct(easyCount, Math.max(1, solvedTotal))}
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                    aria-label="Easy progress"
-                  >
-                    <span
-                      className="is-easy"
-                      style={{ width: `${pct(easyCount, Math.max(1, solvedTotal))}%` }}
-                    />
-                  </div>
-                </div>
-                <div className="free-home-diff-row">
-                  <div className="free-home-goal-meta">
-                    <span className="free-home-diff-label is-medium">Medium</span>
-                    <span>{mediumCount} solved</span>
-                  </div>
-                  <div
-                    className="free-home-overview-bar"
-                    role="progressbar"
-                    aria-valuenow={pct(mediumCount, Math.max(1, solvedTotal))}
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                    aria-label="Medium progress"
-                  >
-                    <span
-                      className="is-medium"
-                      style={{ width: `${pct(mediumCount, Math.max(1, solvedTotal))}%` }}
-                    />
-                  </div>
-                </div>
-                <div className="free-home-diff-row">
-                  <div className="free-home-goal-meta">
-                    <span className="free-home-diff-label is-hard">Hard</span>
-                    <span>{hardCount} solved</span>
-                  </div>
-                  <div
-                    className="free-home-overview-bar"
-                    role="progressbar"
-                    aria-valuenow={pct(hardCount, Math.max(1, solvedTotal))}
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                    aria-label="Hard progress"
-                  >
-                    <span
-                      className="is-hard"
-                      style={{ width: `${pct(hardCount, Math.max(1, solvedTotal))}%` }}
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
+        {/* 5. PROGRESS OVERVIEW */}
+        <section
+          className="free-home-card free-home-overview-card free-home-insight-overview"
+          aria-labelledby="progress-overview-heading"
+        >
+          <div className="free-home-overview-head">
+            <h2 id="progress-overview-heading" className="free-home-section-title">
+              Progress Overview
+            </h2>
+            <p className="free-home-muted">
+              Track your difficulty progress, solving activity, and streak.
+            </p>
           </div>
+          <div className="free-home-overview-grid">
+            <div className="free-home-diff-distribution">
+              <h3 className="free-home-subhead">Difficulty Progress</h3>
+              {solvedTotal === 0 && easyCount + mediumCount + hardCount === 0 ? (
+                <p className="free-home-muted free-home-overview-empty">
+                  Submit an accepted solution to start tracking difficulty progress.
+                </p>
+              ) : (
+                <div className="free-home-overview-rows">
+                  <div className="free-home-diff-row">
+                    <div className="free-home-goal-meta">
+                      <span className="free-home-diff-label is-easy">Easy</span>
+                      <span>{easyCount} solved</span>
+                    </div>
+                    <div
+                      className="free-home-overview-bar"
+                      role="progressbar"
+                      aria-valuenow={pct(easyCount, Math.max(1, solvedTotal))}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-label="Easy progress"
+                    >
+                      <span
+                        className="is-easy"
+                        style={{ width: `${pct(easyCount, Math.max(1, solvedTotal))}%` }}
+                      />
+                    </div>
+                  </div>
+                  <div className="free-home-diff-row">
+                    <div className="free-home-goal-meta">
+                      <span className="free-home-diff-label is-medium">Medium</span>
+                      <span>{mediumCount} solved</span>
+                    </div>
+                    <div
+                      className="free-home-overview-bar"
+                      role="progressbar"
+                      aria-valuenow={pct(mediumCount, Math.max(1, solvedTotal))}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-label="Medium progress"
+                    >
+                      <span
+                        className="is-medium"
+                        style={{ width: `${pct(mediumCount, Math.max(1, solvedTotal))}%` }}
+                      />
+                    </div>
+                  </div>
+                  <div className="free-home-diff-row">
+                    <div className="free-home-goal-meta">
+                      <span className="free-home-diff-label is-hard">Hard</span>
+                      <span>{hardCount} solved</span>
+                    </div>
+                    <div
+                      className="free-home-overview-bar"
+                      role="progressbar"
+                      aria-valuenow={pct(hardCount, Math.max(1, solvedTotal))}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-label="Hard progress"
+                    >
+                      <span
+                        className="is-hard"
+                        style={{ width: `${pct(hardCount, Math.max(1, solvedTotal))}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
 
-          <div className="free-home-streak-summary">
-            <h3 className="free-home-subhead">
-              <Flame size={15} aria-hidden />
-              Streak &amp; Freeze
-            </h3>
-            <div className="free-home-streak-metrics">
-              <div className="free-home-streak-metric">
-                <span className="free-home-streak-label">
-                  <Flame size={16} aria-hidden />
-                  Current streak
-                </span>
-                <strong>{streakCurrent} days</strong>
-              </div>
-              <div className="free-home-streak-metric">
-                <span className="free-home-streak-label">
-                  <Trophy size={16} aria-hidden />
-                  Longest streak
-                </span>
-                <strong>{streakLongest} days</strong>
-              </div>
-              <div className="free-home-streak-metric">
-                <span className="free-home-streak-label">
-                  <Snowflake size={13} aria-hidden />
-                  Streak freeze
-                </span>
-                {canFreeze ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="secondary"
-                    className="free-home-freeze-btn"
-                    disabled={freezeBusy}
-                    onClick={() => void handleFreeze()}
-                  >
-                    <Snowflake size={12} aria-hidden /> Freeze ({streakView?.freezeBalance ?? 0})
-                  </Button>
-                ) : (
-                  <strong>Premium</strong>
-                )}
+            <div className="free-home-streak-summary">
+              <h3 className="free-home-subhead">
+                <Flame size={15} aria-hidden />
+                Streak &amp; Freeze
+              </h3>
+              <div className="free-home-streak-metrics">
+                <div className="free-home-streak-metric">
+                  <span className="free-home-streak-label">
+                    <Flame size={16} aria-hidden />
+                    Current streak
+                  </span>
+                  <strong>{streakCurrent} days</strong>
+                </div>
+                <div className="free-home-streak-metric">
+                  <span className="free-home-streak-label">
+                    <Trophy size={16} aria-hidden />
+                    Longest streak
+                  </span>
+                  <strong>{streakLongest} days</strong>
+                </div>
+                <div className="free-home-streak-metric">
+                  <span className="free-home-streak-label">
+                    <Snowflake size={13} aria-hidden />
+                    Streak freeze
+                  </span>
+                  {canFreeze ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      className="free-home-freeze-btn"
+                      disabled={freezeBusy}
+                      onClick={() => void handleFreeze()}
+                    >
+                      <Snowflake size={12} aria-hidden /> Freeze ({streakView?.freezeBalance ?? 0})
+                    </Button>
+                  ) : (
+                    <strong>Premium</strong>
+                  )}
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
+
+        <PremiumPreparationSection
+          userId={userId}
+          problems={problems}
+          submissions={submissions}
+          refreshKey={refreshKey + entitlementTick}
+          onSelectProblem={onSelectProblem}
+          onNavigate={onNavigate}
+        />
+      </div>
 
       {/* ADAPTIVE RECOMMENDATION SECTION V1 */}
       <section aria-label="Personalized Recommendations">
@@ -1405,16 +1415,6 @@ export const FreeHomeDashboard: FC<FreeHomeDashboardProps> = ({
           onNavigateToTopic={() => onNavigate("problems")}
         />
       </section>
-
-      <PremiumPreparationSection
-        userId={userId}
-        problems={problems}
-        submissions={submissions}
-        refreshKey={refreshKey + entitlementTick}
-        onSelectProblem={onSelectProblem}
-        onNavigate={onNavigate}
-      />
-      </div>
 
       {/* 2-COLUMN MAIN CONTENT GRID */}
       <div className="free-home-split">

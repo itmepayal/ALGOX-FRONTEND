@@ -209,6 +209,24 @@ export const teamApi = {
     return res.data;
   },
 
+  cancelBattle: async (battleId: string) => {
+    const res = await problemClient.post<ApiResponse<TeamBattleDto>>(
+      `/team-battles/${battleId}/cancel`
+    );
+    return res.data;
+  },
+
+  recordSubmission: async (
+    battleId: string,
+    input: { userId: string; problemId: string; submissionId: string; status: string; points?: number }
+  ) => {
+    const res = await problemClient.post<ApiResponse<{ message: string }>>(
+      `/team-battles/${battleId}/submissions`,
+      input
+    );
+    return res.data;
+  },
+
   getLeaderboard: async (page = 1, limit = 20) => {
     const res = await problemClient.get<
       ApiResponse<{
