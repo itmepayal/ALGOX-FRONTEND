@@ -69,6 +69,7 @@ export type AdminTab =
   | "leaderboards-contest"
   | "contests"
   | "contest-detail"
+  | "tournaments"
   | "challenges"
   | "learning-sheets"
   | "learning-topics"
@@ -200,6 +201,14 @@ export const ADMIN_NAV: AdminNavGroup[] = [
     label: "Contests",
     icon: <Trophy size={16} strokeWidth={1.75} />,
     tab: "contests",
+    permission: "contests:manage",
+    section: "Competition",
+  },
+  {
+    id: "tournaments",
+    label: "Tournaments",
+    icon: <Trophy size={16} strokeWidth={1.75} />,
+    tab: "tournaments",
     permission: "contests:manage",
     section: "Competition",
   },
@@ -447,6 +456,7 @@ export const ADMIN_TITLE: Partial<Record<AdminTab, string>> = {
   "leaderboards-monthly": "Monthly Leaderboard",
   "leaderboards-contest": "Contest Leaderboard",
   contests: "Contests",
+  tournaments: "Tournaments",
   challenges: "Daily Challenges",
   "contest-detail": "Contest Detail",
   "learning-sheets": "Sheets",

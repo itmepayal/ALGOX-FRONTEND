@@ -15,6 +15,7 @@ import {
   LazyContentAdminPage,
   LazyContestDetailPage,
   LazyContestListPage,
+  LazyAdminTournamentPanel,
   LazyDiscussionsAdminPage,
   LazyFailedExecutionsPage,
   LazyLanguageAnalyticsPage,
@@ -347,6 +348,7 @@ export const AdminApp: FC<AdminAppProps> = ({ onBackToUserView }) => {
                 }}
               />
             )}
+            {tab === "tournaments" && <LazyAdminTournamentPanel />}
             {tab === "challenges" && <LazyChallengesAdminPage />}
             {tab === "contest-detail" && contestId && (
               <LazyContestDetailPage

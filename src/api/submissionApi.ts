@@ -50,6 +50,7 @@ export interface CreateSubmissionPayload {
   contestId?: string;
   virtualContestSessionId?: string;
   mockInterviewSessionId?: string;
+  battleId?: string;
   source?: SubmissionSource;
   status?: SubmissionStatus;
   output?: string;

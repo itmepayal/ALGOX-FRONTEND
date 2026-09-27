@@ -35,6 +35,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { TimeTracker } from "./TimeTracker";
+
 import { OnlineUsersIndicator } from "./presence/OnlineUsersIndicator";
 import { ProblemShare } from "./ProblemShare";
 import { ConfirmDialog } from "./ConfirmDialog";
@@ -42,7 +43,13 @@ import { BrandMark } from "./BrandLogo";
 import { EditorShortcutBar, shortcutModLabel } from "./EditorShortcutBar";
 import { EditorSettingsPopover } from "./EditorSettingsPopover";
 import { MonacoCodeEditor } from "./MonacoCodeEditor";
+import { AiCodeReviewPanel } from "./AiCodeReviewPanel";
+
+
 import { useEditorSettings } from "../hooks/useEditorSettings";
+
+
+
 import type { Problem, Testcase } from "../api/problemApi";
 import type { Submission } from "../api/submissionApi";
 import type { RunResult } from "../types/judge";
@@ -1230,7 +1237,16 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
                       </p>
                     )}
                 </div>
+
+                {/* AI Code Review V1 */}
+                <div style={{ marginTop: 16 }}>
+                  <AiCodeReviewPanel
+                    submissionId={(selectedSubmission!._id || selectedSubmission!.id)!}
+                    problemId={problemId}
+                  />
+                </div>
               </div>
+
             ) : (
               <>
                 {leftTab === "description" && (

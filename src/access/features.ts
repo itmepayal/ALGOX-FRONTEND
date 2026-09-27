@@ -23,6 +23,7 @@ export const FEATURE_IDS = [
   "premium.daily_planner",
   "premium.study_sessions",
   "premium.learning_calendar",
+  "premium.battles",
 ] as const;
 
 export type FeatureId = (typeof FEATURE_IDS)[number];
@@ -116,10 +117,20 @@ export const FEATURE_META: Record<
     description:
       "Organize your learning journey with a structured calendar and study schedule.",
   },
+  "premium.battles": {
+    label: "1v1 DSA Battles",
+    description:
+      "Challenge friends and match with real-time online opponents.",
+  },
 };
 
 /** Benefit bullets for PremiumFeatureLock (UI only). */
 export const FEATURE_BENEFITS: Partial<Record<FeatureId, readonly string[]>> = {
+  "premium.battles": [
+    "Challenge friends to 1v1 DSA coding battles",
+    "Quick matchmaking with compatible online coders",
+    "Real-time competitive rating and performance stats",
+  ],
   "premium.ai": [
     "Progressive smart hints without full solutions",
     "Code analysis for bugs and complexity",

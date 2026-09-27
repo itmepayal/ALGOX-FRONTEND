@@ -69,6 +69,7 @@ const FEATURE_FIELDS: Record<AiFeatureId, FeatureFields> = {
   compare_approaches: { question: true, code: true },
   generate_similar_problem: { question: true },
   interview_mode: { question: true, code: true },
+  code_review: { code: true, question: true },
 };
 
 const FEATURE_CATEGORIES: Array<{
@@ -89,7 +90,7 @@ const FEATURE_CATEGORIES: Array<{
   {
     id: "improve",
     label: "Improve",
-    features: ["give_hint", "optimize_approach", "compare_approaches"],
+    features: ["give_hint", "optimize_approach", "compare_approaches", "code_review"],
   },
   {
     id: "practice",
@@ -109,6 +110,7 @@ const FEATURE_ICONS: Record<AiFeatureId, typeof Brain> = {
   compare_approaches: GitCompare,
   generate_similar_problem: Sparkles,
   interview_mode: Mic2,
+  code_review: Brain,
 };
 
 const FEATURE_BLURBS: Partial<Record<AiFeatureId, string>> = {
@@ -122,12 +124,18 @@ const FEATURE_BLURBS: Partial<Record<AiFeatureId, string>> = {
   explain_problem: "Clarify statement, constraints, and expected goal.",
   explain_error: "Interpret compiler/runtime/judge errors.",
   explain_test_case: "Understand what the case is checking.",
+  code_review: "Structured educational review of your submission.",
 };
 
 const CONTEXT_COPY: Record<
   AiFeatureId,
   { questionLabel?: string; questionPlaceholder?: string; examples?: string[] }
 > = {
+  code_review: {
+    questionLabel: "Any specific review request?",
+    questionPlaceholder: "Ask about complexity, edge cases, or code readability...",
+    examples: ["Is my time complexity optimal?", "Are there edge cases I missed?"],
+  },
   explain_problem: {
     questionLabel: "What should we clarify?",
     questionPlaceholder:
@@ -137,6 +145,7 @@ const CONTEXT_COPY: Record<
       "Can you restate the constraints simply?",
     ],
   },
+
   give_hint: {
     questionLabel: "What are you stuck on?",
     questionPlaceholder:

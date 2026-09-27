@@ -1271,3 +1271,132 @@
     flex-direction: column;
   }
 }
+
+/* ==========================================================================
+   16. TOURNAMENT WORKSPACE STYLES
+   ========================================================================== */
+.ax-tournaments-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 20px;
+  width: 100%;
+}
+
+.ax-tournament-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px;
+  background: var(--ax-bg-card);
+  border: 1px solid var(--ax-border);
+  border-radius: 12px;
+  transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.ax-tournament-card:hover {
+  border-color: var(--ax-border-hover);
+  background: var(--ax-bg-card-hover);
+}
+
+.ax-tournament-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ax-tournament-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ax-tournament-title {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--ax-text-main);
+}
+
+.ax-tournament-desc {
+  margin: 0;
+  font-size: 0.83rem;
+  color: var(--ax-text-muted);
+  line-height: 1.45;
+}
+
+.ax-divider {
+  height: 1px;
+  background: var(--ax-border);
+  width: 100%;
+  margin: 4px 0;
+}
+
+.ax-card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: auto;
+}
+
+.ax-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.ax-status-badge.REGISTRATION_OPEN {
+  background: rgba(34, 197, 94, 0.12);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  color: #4ade80;
+}
+
+.ax-status-badge.IN_PROGRESS {
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  color: #fbbf24;
+}
+
+.ax-status-badge.COMPLETED {
+  background: rgba(99, 102, 241, 0.12);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  color: #818cf8;
+}
+
+.ax-status-badge.SEEDED {
+  background: rgba(14, 165, 233, 0.12);
+  border: 1px solid rgba(14, 165, 233, 0.3);
+  color: #38bdf8;
+}
+
+.ax-status-badge.REGISTRATION_CLOSED {
+  background: rgba(148, 163, 184, 0.12);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  color: #94a3b8;
+}
+
+.ax-status-badge.PUBLISHED,
+.ax-status-badge.DRAFT {
+  background: rgba(148, 163, 184, 0.08);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  color: #94a3b8;
+}
+
+.ax-participant-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--ax-text-muted);
+  font-variant-numeric: tabular-nums;
+}

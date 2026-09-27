@@ -23,6 +23,9 @@ import { FavouritesPage } from "./FavouritesPage";
 import { BrandMark } from "./BrandLogo";
 import { DiscussionsPanel } from "./DiscussionsPanel";
 import { ContestsPanel } from "./ContestsPanel";
+import { BattlesPanel } from "./battles/BattlesPanel";
+import { TournamentPanel } from "./tournaments/TournamentPanel";
+import { SkillProfilePanel } from "./skills/SkillProfilePanel";
 import { LeaderboardPanel } from "./LeaderboardPanel";
 import { ContentLibraryPanel } from "./ContentLibraryPanel";
 import { NotificationBell } from "./NotificationBell";
@@ -105,7 +108,33 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
   const platformName = settings?.platformName || "AlgoPath";
   const logoUrl = settings?.logoUrl;
   const supportedLanguages = settings?.supportedLanguages;
-  const [activeTab, setActiveTab] = useState<PlatformTab>("home");
+  const [activeTab, setActiveTab] = useState<PlatformTab>(() => {
+    if (typeof window !== "undefined") {
+      const path = window.location.pathname.toLowerCase();
+      if (path.startsWith("/tournaments")) return "tournaments";
+      if (path.startsWith("/contests")) return "contests";
+      if (path.startsWith("/battles")) return "battles";
+      if (path.startsWith("/skills")) return "skills";
+    }
+    return "home";
+  });
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const path = window.location.pathname.toLowerCase();
+      if (path.startsWith("/tournaments")) {
+        setActiveTab("tournaments");
+      } else if (path.startsWith("/contests")) {
+        setActiveTab("contests");
+      } else if (path.startsWith("/battles")) {
+        setActiveTab("battles");
+      } else if (path.startsWith("/skills")) {
+        setActiveTab("skills");
+      }
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [learningRefreshKey, setLearningRefreshKey] = useState(0);
   const [studySessions, setStudySessions] = useState<StudySession[]>([]);
@@ -1334,6 +1363,27 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
         setPendingPremiumNav(id, premiumFeature);
       }
       setActiveTab(id);
+      if (id === "tournaments") {
+        if (!window.location.pathname.startsWith("/tournaments")) {
+          window.history.pushState({}, "", "/tournaments");
+        }
+      } else if (id === "contests") {
+        if (!window.location.pathname.startsWith("/contests")) {
+          window.history.pushState({}, "", "/contests");
+        }
+      } else if (id === "battles") {
+        if (!window.location.pathname.startsWith("/battles")) {
+          window.history.pushState({}, "", "/battles");
+        }
+      } else if (id === "skills") {
+        if (!window.location.pathname.startsWith("/skills")) {
+          window.history.pushState({}, "", "/skills");
+        }
+      } else if (id === "home") {
+        if (window.location.pathname !== "/") {
+          window.history.pushState({}, "", "/");
+        }
+      }
       setMobileNavOpen(false);
     },
     []
@@ -1579,6 +1629,8 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
             activeTab !== "favourites" &&
             activeTab !== "companies" &&
             activeTab !== "interview" &&
+            activeTab !== "battles" &&
+            activeTab !== "tournaments" &&
             activeTab !== "ai" &&
             activeTab !== "analytics" &&
             activeTab !== "reviews" &&
@@ -1590,6 +1642,7 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
             activeTab !== "planner" &&
             activeTab !== "sessions" &&
             activeTab !== "calendar" &&
+            activeTab !== "skills" &&
             activeTab !== "profile" && (
               <header className="platform-topbar">
                 <span className="platform-topbar-title">
@@ -1928,6 +1981,29 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
                   onPlanChange={bumpLearning}
                 />
               </PremiumGate>
+            )}
+
+            {activeTab === "battles" && (
+              <PremiumGate feature="premium.battles">
+                <BattlesPanel currentUserId={userId} />
+              </PremiumGate>
+            )}
+
+            {activeTab === "tournaments" && (
+              <TournamentPanel
+                currentUserId={userId}
+                onStartTournamentBattle={() => {
+                  setActiveTab("battles");
+                }}
+              />
+            )}
+
+            {activeTab === "skills" && (
+              <SkillProfilePanel
+                onNavigateToTopic={() => {
+                  setActiveTab("problems");
+                }}
+              />
             )}
 
             {activeTab === "contests" && (

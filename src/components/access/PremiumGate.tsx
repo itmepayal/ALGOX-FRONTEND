@@ -15,6 +15,7 @@ function featureToNavTab(feature: string): string | null {
       "planner",
       "companies",
       "interview",
+      "battles",
       "ai",
       "analytics",
       "reviews",

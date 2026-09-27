@@ -99,6 +99,10 @@ export const LazyContestDetailPage = lazyNamed(
   () => import("./contests/ContestDetailPage"),
   "ContestDetailPage"
 );
+export const LazyAdminTournamentPanel = lazyNamed(
+  () => import("./tournaments/AdminTournamentPanel"),
+  "AdminTournamentPanel"
+);
 export const LazyLearningAdminPage = lazyNamed(
   () => import("./learning/LearningAdminPage"),
   "LearningAdminPage"

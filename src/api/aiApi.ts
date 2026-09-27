@@ -10,7 +10,8 @@ export type AiFeatureId =
   | "optimize_approach"
   | "compare_approaches"
   | "generate_similar_problem"
-  | "interview_mode";
+  | "interview_mode"
+  | "code_review";
 
 export interface AiUsageSnapshot {
   dateKey: string;
@@ -58,6 +59,40 @@ export interface AiHistoryItem {
   dateKey?: string;
 }
 
+export interface AiCodeReviewPayload {
+  overallAssessment: string;
+  correctness: {
+    status: "correct" | "incorrect" | "partial";
+    summary: string;
+  };
+  timeComplexity: {
+    current: string;
+    expected?: string;
+    explanation: string;
+  };
+  spaceComplexity: {
+    current: string;
+    explanation: string;
+  };
+  codeQuality: {
+    score: number;
+    issues: string[];
+  };
+  edgeCases: string[];
+  optimizationSuggestions: string[];
+  learningFeedback: string;
+  recommendedNextStep: string;
+}
+
+export interface AiCodeReviewResponse {
+  submissionId: string;
+  problemId: string;
+  reviewPayload: AiCodeReviewPayload;
+  provider: string;
+  cached: boolean;
+  createdAt: string;
+}
+
 /**
  * AlgoPath AI — ProblemService `/ai/*`.
  * Quota/usage are server-authoritative; never send quota/apiKey from client.
@@ -100,4 +135,20 @@ export const aiApi = {
     );
     return res.data;
   },
+
+  getCodeReview: async (submissionId: string, refresh = false) => {
+    const res = await problemClient.post<ApiResponse<AiCodeReviewResponse>>(
+      "/ai/review",
+      { submissionId, refresh }
+    );
+    return res.data;
+  },
+
+  getStoredCodeReview: async (submissionId: string) => {
+    const res = await problemClient.get<ApiResponse<AiCodeReviewResponse | null>>(
+      `/ai/review/${submissionId}`
+    );
+    return res.data;
+  },
 };
+

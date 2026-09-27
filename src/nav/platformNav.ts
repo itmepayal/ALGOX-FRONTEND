@@ -13,17 +13,22 @@ import {
   MessagesSquare,
   Route,
   Sparkles,
+  Swords,
   Timer,
   Trophy,
+  Zap,
 } from "lucide-react";
 import type { FeatureId } from "../access/features";
 
 export type PlatformNavId =
   | "home"
   | "problems"
+  | "skills"
   | "favourites"
   | "companies"
   | "interview"
+  | "battles"
+  | "tournaments"
   | "ai"
   | "analytics"
   | "reviews"
@@ -57,6 +62,7 @@ export interface PlatformNavItem {
 export const PLATFORM_NAV_ITEMS: PlatformNavItem[] = [
   { id: "home", label: "Home", icon: Home },
   { id: "problems", label: "Sheets", icon: BookOpen },
+  { id: "skills", label: "Skill Rating", icon: Zap },
   { id: "favourites", label: "My Favourites", icon: Heart },
   {
     id: "companies",
@@ -69,6 +75,17 @@ export const PLATFORM_NAV_ITEMS: PlatformNavItem[] = [
     label: "Interview",
     icon: ClipboardCheck,
     premiumFeature: "premium.mock_interview",
+  },
+  {
+    id: "battles",
+    label: "1v1 Battles",
+    icon: Swords,
+    premiumFeature: "premium.battles",
+  },
+  {
+    id: "tournaments",
+    label: "Tournaments",
+    icon: Trophy,
   },
   { id: "ai", label: "AI", icon: Sparkles, premiumFeature: "premium.ai" },
   {

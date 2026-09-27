@@ -1,0 +1,536 @@
+/* 1v1 DSA Battles — Sheet Design System UI */
+
+:root {
+  --ax-border: var(--border-subtle, rgba(255, 255, 255, 0.08));
+  --ax-border-hover: var(--border-strong, rgba(255, 255, 255, 0.16));
+  --ax-bg-main: var(--bg-main, #0b0f17);
+  --ax-bg-card: var(--bg-card, rgba(255, 255, 255, 0.03));
+  --ax-bg-card-hover: var(--bg-card-hover, rgba(255, 255, 255, 0.06));
+  --ax-bg-active: rgba(99, 102, 241, 0.12);
+  --ax-text-main: var(--text-main, #f3f4f6);
+  --ax-text-muted: var(--text-muted, #9ca3af);
+  --ax-text-secondary: var(--text-secondary, #d1d5db);
+  --ax-accent: var(--primary, #6366f1);
+  --ax-accent-hover: var(--primary-hover, #4f46e5);
+  --ax-success: #22c55e;
+  --ax-warning: #f59e0b;
+  --ax-danger: #ef4444;
+}
+
+/* 1. Page Workspace Container (Matches Sheet max width & padding) */
+.battles-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 24px 28px 48px;
+  background: var(--ax-bg-main);
+  color: var(--ax-text-main);
+  font-family: var(--font-primary, system-ui, -apple-system, sans-serif);
+  box-sizing: border-box;
+}
+
+/* 2. Hero Header Card (Matches Sheet Header) */
+.ax-hero-compact {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 16px 20px;
+  background: var(--ax-bg-card);
+  border: 1px solid var(--ax-border);
+  border-radius: 12px;
+}
+
+.ax-hero-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ax-hero-badge-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ax-hero-kicker {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ax-accent);
+}
+
+.ax-hero-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-size: 1.4rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--ax-text-main);
+}
+
+.ax-hero-icon {
+  color: var(--ax-accent);
+}
+
+.ax-hero-sub {
+  margin: 2px 0 6px;
+  font-size: 0.85rem;
+  color: var(--ax-text-muted);
+}
+
+.ax-hero-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.ax-tag-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--ax-border);
+  color: var(--ax-text-secondary);
+}
+
+.ax-tag-pill.is-status {
+  background: rgba(34, 197, 94, 0.08);
+  border-color: rgba(34, 197, 94, 0.25);
+  color: #4ade80;
+}
+
+.ax-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ax-success);
+}
+
+.ax-hero-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+/* 3. Button System (Matches Sheet Buttons) */
+.ax-btn {
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 8px;
+  border: 1px solid var(--ax-border-hover);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--ax-text-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.ax-btn:hover:not(:disabled) {
+  background: var(--ax-bg-card-hover);
+  color: var(--ax-text-main);
+  border-color: var(--ax-border-hover);
+}
+
+.ax-btn.accent {
+  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+  border-color: rgba(99, 102, 241, 0.5);
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.25);
+}
+
+.ax-btn.accent:hover:not(:disabled) {
+  background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35);
+}
+
+.ax-btn.danger {
+  border-color: rgba(239, 68, 68, 0.35);
+  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.ax-btn.danger:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.2);
+  color: #fef2f2;
+  border-color: rgba(239, 68, 68, 0.5);
+}
+
+.ax-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* 4. Segmented Navigation Tabs (Matches Sheet Tabs) */
+.ax-nav-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--ax-border);
+  border-radius: 10px;
+  overflow-x: auto;
+}
+
+.ax-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ax-text-muted);
+  font-size: 0.83rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.ax-tab-btn:hover {
+  color: var(--ax-text-main);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.ax-tab-btn.active {
+  color: #ffffff;
+  background: rgba(99, 102, 241, 0.16);
+  border-color: rgba(99, 102, 241, 0.35);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+}
+
+.ax-tab-badge {
+  padding: 2px 7px;
+  border-radius: 9999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--ax-text-muted);
+}
+
+.ax-tab-btn.active .ax-tab-badge {
+  background: rgba(99, 102, 241, 0.28);
+  color: #c7d2fe;
+}
+
+/* 5. Empty State Card (Matches Sheet Empty States) */
+.ax-empty-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 36px 24px;
+  background: var(--ax-bg-card);
+  border: 1px solid var(--ax-border);
+  border-radius: 12px;
+  text-align: center;
+  min-height: 220px;
+}
+
+.ax-empty-icon-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: rgba(99, 102, 241, 0.1);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  color: var(--ax-accent);
+  margin-bottom: 12px;
+}
+
+.ax-empty-title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--ax-text-main);
+}
+
+.ax-empty-sub {
+  margin: 6px 0 0;
+  font-size: 0.84rem;
+  color: var(--ax-text-muted);
+  max-width: 400px;
+  line-height: 1.45;
+}
+
+/* 6. Battles Cards & Grid */
+.battles-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+}
+
+.battle-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  background: var(--ax-bg-card);
+  border: 1px solid var(--ax-border);
+  border-radius: 12px;
+  padding: 16px 18px;
+  transition: all 0.2s ease;
+}
+
+.battle-card:hover {
+  border-color: var(--ax-border-hover);
+  background: var(--ax-bg-card-hover);
+}
+
+.battle-card-vs {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid var(--ax-border);
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+.player-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.player-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.82rem;
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.vs-badge {
+  font-weight: 700;
+  font-size: 0.68rem;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(239, 68, 68, 0.15);
+  color: #fca5a5;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.vs-badge.pending {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fcd34d;
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+/* 7. Challenge Modal Design System */
+.challenge-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(8px);
+  padding: 16px;
+}
+
+.challenge-modal-card {
+  width: 100%;
+  max-width: 520px;
+  border-radius: 14px;
+  border: 1px solid var(--ax-border-hover);
+  background: #0f172a;
+  padding: 24px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+  color: var(--ax-text-main);
+}
+
+.challenge-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--ax-border);
+  padding-bottom: 14px;
+  margin-bottom: 18px;
+}
+
+.challenge-modal-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--ax-text-main);
+  margin: 0;
+}
+
+.challenge-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.challenge-section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.challenge-section-num {
+  font-size: 0.68rem;
+  font-weight: 800;
+  color: var(--ax-accent);
+  letter-spacing: 0.05em;
+}
+
+.challenge-section-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ax-text-muted);
+}
+
+.challenge-segmented-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.challenge-segmented-grid.cols-4 {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.challenge-segmented-grid.cols-5 {
+  grid-template-columns: repeat(5, 1fr);
+}
+
+.challenge-option-btn {
+  padding: 9px 0;
+  border-radius: 8px;
+  border: 1px solid var(--ax-border);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--ax-text-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: center;
+}
+
+.challenge-option-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--ax-text-main);
+}
+
+.challenge-option-btn.active {
+  background: rgba(99, 102, 241, 0.16);
+  border-color: rgba(99, 102, 241, 0.4);
+  color: #ffffff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* 8. Battle Lobby & Results Sheet Polish */
+.lobby-container {
+  background: var(--ax-bg-card);
+  border: 1px solid var(--ax-border);
+  border-radius: 14px;
+  padding: 24px;
+  max-width: 860px;
+  margin: 0 auto;
+}
+
+.lobby-player-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.025);
+  border-radius: 12px;
+  border: 1px solid var(--ax-border);
+  text-align: center;
+  transition: all 0.2s ease;
+}
+
+.lobby-player-card.ready {
+  border-color: rgba(34, 197, 94, 0.4);
+  background: rgba(34, 197, 94, 0.08);
+}
+
+.result-banner {
+  text-align: center;
+  padding: 24px 18px;
+  border-radius: 12px;
+  margin-bottom: 20px;
+}
+
+.result-banner.win {
+  background: rgba(34, 197, 94, 0.12);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.result-banner.loss {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.result-banner.draw {
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+/* 9. Responsive Adjustments */
+@media (max-width: 768px) {
+  .battles-container {
+    padding: 16px 16px 32px;
+  }
+
+  .ax-hero-compact {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 14px;
+  }
+
+  .ax-hero-right {
+    width: 100%;
+  }
+
+  .ax-hero-right .ax-btn {
+    width: 100%;
+  }
+
+  .battles-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .challenge-segmented-grid.cols-4,
+  .challenge-segmented-grid.cols-5 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

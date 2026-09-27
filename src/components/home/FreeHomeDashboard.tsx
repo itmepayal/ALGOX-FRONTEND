@@ -38,6 +38,7 @@ import {
   type UserLeaderboardStats,
 } from "../../api/leaderboardApi";
 import type { StudySession } from "../../utils/learningPersistence";
+import { RecommendationsSection } from "../recommendations/RecommendationsSection";
 import { toDateKey } from "../../utils/learningPersistence";
 import {
   buildRoadmap,
@@ -1395,6 +1396,14 @@ export const FreeHomeDashboard: FC<FreeHomeDashboardProps> = ({
             </div>
           </div>
         </div>
+      </section>
+
+      {/* ADAPTIVE RECOMMENDATION SECTION V1 */}
+      <section aria-label="Personalized Recommendations">
+        <RecommendationsSection
+          onSelectProblem={onSelectProblem}
+          onNavigateToTopic={() => onNavigate("problems")}
+        />
       </section>
 
       <PremiumPreparationSection
