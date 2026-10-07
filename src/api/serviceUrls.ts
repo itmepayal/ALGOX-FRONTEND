@@ -1,37 +1,32 @@
-/**
- * Centralized microservice base URLs for the client.
- * Override via Vite env (VITE_*). Defaults target local microservices.
- */
+/** Frontend API URLs all resolve through the public gateway. */
 function env(key: string, fallback: string): string {
   const v = (import.meta as any).env?.[key];
   return typeof v === "string" && v.trim() ? v.replace(/\/$/, "") : fallback;
 }
 
+const API_URL = env("VITE_API_URL", "http://localhost:3000");
+
 export const SERVICE_URLS = {
-  auth: env("VITE_AUTH_API_URL", "http://localhost:3001/api/v1"),
-  problem: env("VITE_PROBLEM_API_URL", "http://localhost:3003/api/v1"),
-  submission: env("VITE_SUBMISSION_API_URL", "http://localhost:3004/api/v1"),
-  leaderboard: env("VITE_LEADERBOARD_API_URL", "http://localhost:3005/api/v1"),
-  evaluation: env("VITE_EVALUATION_API_URL", "http://localhost:3006/api/v1"),
-  analytics: env("VITE_ANALYTICS_API_URL", "http://localhost:3007/api/v1"),
-  discussion: env("VITE_DISCUSSION_API_URL", "http://localhost:3008/api/v1"),
-  content: env("VITE_CONTENT_API_URL", "http://localhost:3009/api/v1"),
-  realtime: env("VITE_REALTIME_URL", "http://localhost:3010"),
+  auth: `${API_URL}/api/auth/api/v1`,
+  problem: `${API_URL}/api/problems/api/v1`,
+  submission: `${API_URL}/api/submissions/api/v1`,
+  leaderboard: `${API_URL}/api/leaderboard/api/v1`,
+  evaluation: `${API_URL}/api/evaluation/api/v1`,
+  analytics: `${API_URL}/api/analytics/api/v1`,
+  discussion: `${API_URL}/api/discussion/api/v1`,
+  content: `${API_URL}/api/content/api/v1`,
+  realtime: `${API_URL}/api/realtime`,
 } as const;
 
-// Allow Discussion/Content health overrides when API base includes /api/v1
 export function discussionHealthUrl(): string {
-  return env(
-    "VITE_DISCUSSION_HEALTH_URL",
-    `${SERVICE_URLS.discussion}/health`
-  );
+  return `${SERVICE_URLS.discussion}/health`;
 }
 
 export function contentHealthUrl(): string {
-  return env("VITE_CONTENT_HEALTH_URL", "http://localhost:3009/health");
+  return `${API_URL}/api/content/health`;
 }
 
-/** Absolute health URLs used by System Health / Code Execution. */
+/** Health URLs also go through the public gateway. */
 export const HEALTH_ENDPOINTS = [
   { name: "Auth", url: `${SERVICE_URLS.auth}/health` },
   { name: "Problem", url: `${SERVICE_URLS.problem}/health` },

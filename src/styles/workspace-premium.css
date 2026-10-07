@@ -2008,3 +2008,35 @@
   color: var(--ws-muted);
   background: var(--bg-editor);
 }
+.coding-session-panel {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(15, 23, 42, 0.55);
+  color: #dbeafe;
+  font-size: 12px;
+}
+.coding-session-actions, .coding-session-status, .coding-replay-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.coding-session-panel button, .coding-session-panel select, .coding-session-panel input {
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 6px;
+  background: #111827;
+  color: inherit;
+  padding: 5px 8px;
+  font-size: 12px;
+}
+.coding-session-panel button { cursor: pointer; }
+.coding-session-panel button:disabled { cursor: not-allowed; opacity: .55; }
+.coding-session-status code { overflow-wrap: anywhere; opacity: .75; }
+.coding-replay-controls input[type="range"] { width: 140px; padding: 0; }
+.coding-replay-controls pre {
+  width: 100%; max-height: 180px; overflow: auto; margin: 0; padding: 10px;
+  border-radius: 6px; background: #020617; white-space: pre-wrap;
+}
+.coding-session-error { margin: 0; color: #fca5a5; }

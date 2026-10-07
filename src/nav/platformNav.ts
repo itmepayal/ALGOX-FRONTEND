@@ -16,12 +16,14 @@ import {
   Swords,
   Timer,
   Trophy,
+  UsersRound,
   Zap,
 } from "lucide-react";
 import type { FeatureId } from "../access/features";
 
 export type PlatformNavId =
   | "home"
+  | "social"
   | "problems"
   | "skills"
   | "favourites"
@@ -61,6 +63,7 @@ export interface PlatformNavItem {
  */
 export const PLATFORM_NAV_ITEMS: PlatformNavItem[] = [
   { id: "home", label: "Home", icon: Home },
+  { id: "social", label: "Social", icon: UsersRound },
   { id: "problems", label: "Sheets", icon: BookOpen },
   { id: "skills", label: "Skill Rating", icon: Zap },
   { id: "favourites", label: "My Favourites", icon: Heart },

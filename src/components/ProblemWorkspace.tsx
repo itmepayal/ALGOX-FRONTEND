@@ -44,6 +44,7 @@ import { EditorShortcutBar, shortcutModLabel } from "./EditorShortcutBar";
 import { EditorSettingsPopover } from "./EditorSettingsPopover";
 import { MonacoCodeEditor } from "./MonacoCodeEditor";
 import { AiCodeReviewPanel } from "./AiCodeReviewPanel";
+import { CodingSessionPanel } from "./CodingSessionPanel";
 
 
 import { useEditorSettings } from "../hooks/useEditorSettings";
@@ -380,6 +381,7 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
   const accessLocked = Boolean(problem.accessLocked || (problem.isPremium && !canAccess(user, "premium.problems")));
   const [leftTab, setLeftTab] = useState<LeftTab>("description");
   const [activeEditorTab, setActiveEditorTab] = useState<EditorTab>("code");
+  const [editorCursor, setEditorCursor] = useState({ line: 1, column: 1 });
   const [revealedHints, setRevealedHints] = useState(0);
   const [notes, setNotes] = useState("");
   const [cmsEditorial, setCmsEditorial] = useState("");
@@ -1759,6 +1761,13 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
                 </div>
               </div>
 
+              {userId && !viewingHistory && <CodingSessionPanel
+                problemId={problemId}
+                language={selectedLanguage}
+                code={editorCode}
+                cursor={editorCursor}
+                onRemoteCodeChange={onCodeChange}
+              />}
               <div className="lc-editor-container lc-monaco-container">
                 <MonacoCodeEditor
                   value={editorCode}
@@ -1775,6 +1784,7 @@ export const ProblemWorkspace: FC<ProblemWorkspaceProps> = ({
                   onChange={(next) => {
                     if (!viewingHistory) onCodeChange(next);
                   }}
+                  onCursorChange={setEditorCursor}
                 />
               </div>
               {!viewingHistory && <EditorShortcutBar />}

@@ -22,6 +22,7 @@ import { ActiveStudySessionBar } from "./ActiveStudySessionBar";
 import { FavouritesPage } from "./FavouritesPage";
 import { BrandMark } from "./BrandLogo";
 import { DiscussionsPanel } from "./DiscussionsPanel";
+import { SocialPanel } from "./SocialPanel";
 import { ContestsPanel } from "./ContestsPanel";
 import { BattlesPanel } from "./battles/BattlesPanel";
 import { TournamentPanel } from "./tournaments/TournamentPanel";
@@ -1638,6 +1639,7 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
             activeTab !== "ranks" &&
             activeTab !== "learn" &&
             activeTab !== "discuss" &&
+            activeTab !== "social" &&
             activeTab !== "contests" &&
             activeTab !== "planner" &&
             activeTab !== "sessions" &&
@@ -1675,6 +1677,8 @@ export const Dashboard: FC<DashboardProps> = ({ onOpenAdmin }) => {
                 onNavigate={(tab) => setActiveTab(tab)}
               />
             )}
+
+            {activeTab === "social" && <SocialPanel />}
 
             {activeTab === "problems" && (
               <ProblemsSheet

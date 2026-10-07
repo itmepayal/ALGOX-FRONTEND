@@ -31,6 +31,7 @@ export function connectRealtimeSocket(): Socket | null {
   }
 
   socket = io(REALTIME_URL, {
+    path: "/api/realtime/socket.io",
     autoConnect: true,
     reconnection: true,
     reconnectionAttempts: 10,

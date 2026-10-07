@@ -22,6 +22,7 @@ export interface MonacoCodeEditorProps {
   settings: EditorSettings;
   readOnly?: boolean;
   onChange?: (value: string) => void;
+  onCursorChange?: (cursor: { line: number; column: number }) => void;
   className?: string;
   style?: CSSProperties;
   /** Premium: register signature-aware completions (client-only). */
@@ -44,6 +45,7 @@ export const MonacoCodeEditor: FC<MonacoCodeEditorProps> = ({
   settings,
   readOnly = false,
   onChange,
+  onCursorChange,
   className,
   style,
   enablePremiumCompletions = false,
@@ -51,6 +53,8 @@ export const MonacoCodeEditor: FC<MonacoCodeEditorProps> = ({
 }) => {
   const editorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const onCursorChangeRef = useRef(onCursorChange);
+  onCursorChangeRef.current = onCursorChange;
 
   const monacoLanguage = toMonacoLanguage(language);
   const monacoTheme = toMonacoTheme(settings.theme);
@@ -63,6 +67,9 @@ export const MonacoCodeEditor: FC<MonacoCodeEditorProps> = ({
       registerPremiumCompletions(monaco, monacoLanguage, signatureHints || {});
     }
     ed.updateOptions(buildOptions(settings, readOnly, canFormat));
+    ed.onDidChangeCursorPosition((event) => {
+      onCursorChangeRef.current?.({ line: event.position.lineNumber, column: event.position.column });
+    });
     requestAnimationFrame(() => ed.layout());
   };
 
